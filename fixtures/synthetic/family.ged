@@ -1,0 +1,37 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 SUBM @U1@
+0 @U1@ SUBM
+1 NAME Jane /Fixture/
+0 @I1@ INDI
+1 NAME Ada /Fixture/
+1 SEX F
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Abe /Fixture/
+1 SEX M
+1 FAMS @F1@
+0 @I42@ INDI
+1 NAME Jane /Fixture/
+1 SEX F
+1 BIRT
+2 DATE 1 JAN 1900
+1 FAMC @F1@
+1 FAMS @F2@
+0 @I43@ INDI
+1 NAME Joe /Fixture/
+1 SEX M
+1 FAMS @F2@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+1 CHIL @I42@
+2 _FREL Natural
+0 @F2@ FAM
+1 HUSB @I43@
+1 WIFE @I42@
+1 MARR
+2 DATE 1920
+0 TRLR

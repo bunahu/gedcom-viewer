@@ -1,0 +1,11 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 SUBM @U1@
+0 @U1@ SUBM
+1 NAME Jane /Fixture/
+1 NOTE the first part of a long value, 
+2 CONC the second partand what came after it
+2 CONC , then the end
+0 TRLR

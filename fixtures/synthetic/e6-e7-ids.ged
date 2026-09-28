@@ -1,0 +1,14 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 SUBM @U1@
+0 @U1@ SUBM
+1 NAME Jane /Fixture/
+0 @U1@ SUBM
+1 NAME Jane /Fixture/
+0 @I1@ INDI
+1 NAME Jane /Fixture/
+1 FAMC @F9@
+1 FAMS @VOID@
+0 TRLR

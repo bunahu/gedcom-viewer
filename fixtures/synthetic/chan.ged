@@ -1,0 +1,23 @@
+0 HEAD
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 SUBM @U1@
+0 @U1@ SUBM
+1 NAME Jane /Fixture/
+0 @I1@ INDI
+1 NAME Jane /Fixture/
+1 FAMS @F1@
+1 CHAN
+2 DATE 1 JAN 2020
+3 TIME 10:00:00
+2 NOTE an earlier change
+0 @I2@ INDI
+1 NAME Joe /Fixture/
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+1 CHAN
+2 DATE 2 FEB 2021
+0 TRLR
