@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gedview</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-top">
+    <span class="app-name">gedview</span>
+    <span class="file-name" id="file-name"></span>
+    <nav class="actions">
+      <button class="button" id="open" type="button">Open</button>
+      <button class="button" id="back" type="button" disabled>Back</button>
+      <input class="input goto" id="goto" type="text" inputmode="numeric" placeholder="Line" aria-label="Go to line" disabled>
+      <button class="button" id="indent" type="button" aria-pressed="false">Indent</button>
+      <input class="input indent-width" id="indent-width" type="number" min="1" max="12" aria-label="Indent width" hidden>
+      <button class="button" id="theme" type="button">Theme</button>
+    </nav>
+  </div>
+  <div class="facts" id="facts"></div>
+</header>
+
+<nav class="counts" id="counts" aria-label="Records by type"></nav>
+
+<main class="work">
+  <aside class="side">
+    <nav class="tabs" role="tablist">
+      <button class="tab" type="button" role="tab" data-panel="records" aria-selected="true">Records</button>
+      <button class="tab" type="button" role="tab" data-panel="checks">Checks <span class="tab-count" id="checks-count"></span></button>
+      <button class="tab" type="button" role="tab" data-panel="search">Search</button>
+      <button class="tab" type="button" role="tab" data-panel="tags">Tags</button>
+    </nav>
+
+    <section class="panel" id="panel-records">
+      <div class="panel-head">
+        <input class="input" id="records-filter" type="search" aria-label="Filter records">
+        <button class="chip" id="records-type" type="button" hidden></button>
+      </div>
+      <div class="list" id="records-list"></div>
+    </section>
+
+    <section class="panel" id="panel-checks" hidden>
+      <div class="panel-sum" id="checks-sum"></div>
+      <div class="list" id="checks-list"></div>
+    </section>
+
+    <section class="panel" id="panel-search" hidden>
+      <div class="panel-head">
+        <input class="input" id="search-box" type="search" aria-label="Search">
+        <button class="button" id="search-tag" type="button" aria-pressed="false">Tag</button>
+      </div>
+      <div class="search-nav">
+        <button class="button" id="search-prev" type="button">Previous</button>
+        <span class="search-count" id="search-count"></span>
+        <button class="button" id="search-next" type="button">Next</button>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-tags" hidden>
+      <div class="list" id="tags-list"></div>
+    </section>
+  </aside>
+
+  <div class="split" id="split-left"></div>
+
+  <section class="middle">
+    <div class="grid" id="grid" tabindex="0" aria-label="Lines"></div>
+    <div class="empty" id="empty">
+      <button class="button" id="open-empty" type="button">Open</button>
+      <div class="message" id="message" hidden></div>
+    </div>
+  </section>
+
+  <div class="split" id="split-right"></div>
+
+  <aside class="detail" id="detail"></aside>
+</main>
+
+<div class="drop" id="drop" hidden></div>
+<input id="file-input" type="file" accept=".ged,.gedcom" hidden>
+
+<script src="core.js" charset="utf-8"></script>
+<script src="ui.js" charset="utf-8"></script>
+</body>
+</html>
