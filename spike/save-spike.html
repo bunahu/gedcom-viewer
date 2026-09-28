@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gedview · save spike</title>
+<style>
+  /* the sibling project's light palette (frontend/src/index.css, :root) */
+  :root {
+    --color-bg: #ede5d2; --color-bg-card: #f6efe1; --color-text: #2d2d2d;
+    --color-text-muted: #6e6256; --color-border: #d3c8b3; --color-accent: #c4a45a;
+    --color-accent-hover: #8b7355; --color-success: #2f7d32; --color-danger: #c0392b;
+  }
+  body { background: var(--color-bg); color: var(--color-text); margin: 0; padding: 2rem;
+         font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  p.lead { color: var(--color-text-muted); margin: 0 0 1.5rem; max-width: 46rem; }
+  .step { background: var(--color-bg-card); border: 1px solid var(--color-border);
+          border-radius: .5rem; padding: 1rem 1.25rem; margin: 0 0 .75rem; max-width: 46rem; }
+  button { font: inherit; padding: .4rem .9rem; border-radius: .4rem; cursor: pointer;
+           border: 1px solid var(--color-accent-hover); background: var(--color-accent); color: #2d2d2d; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  pre { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
+        margin: .6rem 0 0; color: var(--color-text-muted); }
+  .ok { color: var(--color-success); } .bad { color: var(--color-danger); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>gedview · save spike</h1>
+<p class="lead">Four clicks that prove Chrome can do, from a page opened off disk, everything gedview's
+Save needs. Use a <b>copy</b> of a small test file in a scratch folder. The file is written back
+<b>unchanged</b>; a backup, a log and a dated copy appear beside it.</p>
+
+<div class="step"><button id="b1">1 · Pick a .ged file</button><pre id="o1"></pre></div>
+<div class="step"><button id="b2" disabled>2 · Pick the folder it is in</button><pre id="o2"></pre></div>
+<div class="step"><button id="b3" disabled>3 · Back up, write in place, log</button><pre id="o3"></pre></div>
+<div class="step"><button id="b4" disabled>4 · Save a dated copy</button><pre id="o4"></pre></div>
+<div class="step"><pre id="env"></pre></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const say = (id, text, cls) => {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = text;
+  $(id).appendChild(line);
+};
+const pass = (id, text) => say(id, 'PASS  ' + text, 'ok');
+const fail = (id, text) => say(id, 'FAIL  ' + text, 'bad');
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes));
+const stampNow = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+};
+const readBytes = async (handle) => new Uint8Array(await (await handle.getFile()).arrayBuffer());
+const writeBytes = async (handle, bytes) => {
+  const w = await handle.createWritable();
+  await w.write(bytes);
+  await w.close();
+};
+
+const state = { file: null, dir: null, bytes: null, hash: null, stem: null };
+
+$('env').textContent = [
+  `protocol ${location.protocol}`,
+  `secure context ${window.isSecureContext}`,
+  `file pickers ${'showOpenFilePicker' in window && 'showDirectoryPicker' in window}`,
+  navigator.userAgent,
+].join('\n');
+
+if (!('showOpenFilePicker' in window)) {
+  fail('o1', 'This browser has no file pickers. Open this page in Chrome.');
+  $('b1').disabled = true;
+}
+
+$('b1').onclick = async () => {
+  $('o1').textContent = '';
+  try {
+    const [h] = await window.showOpenFilePicker({
+      types: [{ description: 'GEDCOM', accept: { 'application/x-gedcom': ['.ged', '.gedcom'] } }],
+    });
+    state.file = h;
+    state.bytes = await readBytes(h);
+    state.hash = await sha256(state.bytes);
+    state.stem = h.name.replace(/\.(ged|gedcom)$/i, '');
+    let lines = 0;
+    for (const b of state.bytes) if (b === 10) lines += 1;
+    pass('o1', `${h.name} · ${state.bytes.length.toLocaleString()} bytes · ${lines.toLocaleString()} line feeds`);
+    say('o1', `sha256 ${state.hash}`);
+    $('b2').disabled = false;
+  } catch (e) { fail('o1', `${e.name}: ${e.message}`); }
+};
+
+$('b2').onclick = async () => {
+  $('o2').textContent = '';
+  try {
+    const d = await window.showDirectoryPicker({ mode: 'readwrite', startIn: state.file });
+    const path = await d.resolve(state.file);
+    if (!path || path.length !== 1) {
+      fail('o2', `"${d.name}" is not the folder that holds ${state.file.name} (resolve gave ${JSON.stringify(path)})`);
+      return;
+    }
+    state.dir = d;
+    pass('o2', `folder "${d.name}" holds ${path[0]}; write access granted`);
+    $('b3').disabled = false;
+    $('b4').disabled = false;
+  } catch (e) { fail('o2', `${e.name}: ${e.message}`); }
+};
+
+$('b3').onclick = async () => {
+  $('o3').textContent = '';
+  try {
+    // a. the file on disk is still the file that was opened
+    const onDisk = await readBytes(state.file);
+    const diskHash = await sha256(onDisk);
+    if (diskHash === state.hash) pass('o3', 'the file on disk is unchanged since it was opened');
+    else { fail('o3', 'the file changed on disk since it was opened; nothing written'); return; }
+
+    // b. the backup first, read back
+    const stamp = stampNow();
+    const hist = await state.dir.getDirectoryHandle('gedview-history', { create: true });
+    const bakName = `${state.stem}.${stamp}.ged.bak`;
+    const bak = await hist.getFileHandle(bakName, { create: true });
+    await writeBytes(bak, onDisk);
+    const bakHash = await sha256(await readBytes(bak));
+    if (bakHash === diskHash) pass('o3', `backup gedview-history/${bakName} holds the same bytes`);
+    else { fail('o3', 'the backup does not match; nothing else written'); return; }
+
+    // c. the file itself, in place, reached THROUGH THE FOLDER so that the one grant covers it
+    const target = await state.dir.getFileHandle(state.file.name);
+    await writeBytes(target, state.bytes);
+    const afterHash = await sha256(await readBytes(target));
+    if (afterHash === state.hash) pass('o3', `${state.file.name} written in place; sha256 as before`);
+    else fail('o3', `${state.file.name} written, but its sha256 is now ${afterHash}`);
+    const seenByFirstHandle = await sha256(await readBytes(state.file));
+    if (seenByFirstHandle === afterHash) pass('o3', 'the handle from step 1 reads the same file');
+    else fail('o3', 'the handle from step 1 reads something else');
+
+    // d. the log: appended, never rewritten
+    const logName = `${state.file.name}.edits.log`;
+    const log = await state.dir.getFileHandle(logName, { create: true });
+    const before = (await log.getFile()).size;
+    const w = await log.createWritable({ keepExistingData: true });
+    await w.seek(before);
+    const block = `=== ${new Date().toISOString()}  spike  ${state.file.name}\nbackup gedview-history/${bakName}\n`;
+    await w.write(new TextEncoder().encode(block));
+    await w.close();
+    const after = (await log.getFile()).size;
+    if (after === before + new TextEncoder().encode(block).length) pass('o3', `${logName} grew from ${before} to ${after} bytes`);
+    else fail('o3', `${logName} is ${after} bytes; expected ${before} + the new block`);
+  } catch (e) { fail('o3', `${e.name}: ${e.message}`); }
+};
+
+$('b4').onclick = async () => {
+  $('o4').textContent = '';
+  try {
+    const name = `${state.stem}.${stampNow()}.ged`;
+    const copy = await state.dir.getFileHandle(name, { create: true });
+    await writeBytes(copy, state.bytes);
+    const copyHash = await sha256(await readBytes(copy));
+    if (copyHash === state.hash) pass('o4', `${name} written beside the original; same bytes`);
+    else fail('o4', `${name} written, but its sha256 differs`);
+  } catch (e) { fail('o4', `${e.name}: ${e.message}`); }
+};
+document.title = 'gedview · save spike · ready';
+</script>
+</body>
+</html>

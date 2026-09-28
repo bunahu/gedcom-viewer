@@ -1,0 +1,6 @@
+local/
+fixtures/corpora/*/
+gedview-history/
+*.edits.log
+*.bak
+.DS_Store
