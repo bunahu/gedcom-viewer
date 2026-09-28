@@ -39,9 +39,12 @@ node --test tests/*.test.js
 | Tests | `node --test tests/*.test.js` | all pass; the only skips are the tests that need the public files, when they are absent |
 | The real files | `node tools/check-real.js local/RAW.ged local/CLEANED.ged` | every number equals section 3 of the brief, for a file it measured; the probe's numbers for any other |
 | The second opinion | `node tools/compare.js fixtures local/RAW.ged local/CLEANED.ged` | no number differs between `core.js` and `tools/baseline_probe.py` |
+| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, then the rest of the page on a fictional file |
 
-Both tools print counts, tags, ids, lengths and hashes only — never a value — so they are safe to
-run over a file that holds living people.
+The tools print counts, tags, ids, line numbers, lengths and hashes only — never a value — so
+they are safe to run over a file that holds living people. The walk drives Google Chrome,
+headless, at the page's own `file://` address (`CHROME=path` picks another). It takes no picture
+of a real file; `--shots DIR` saves pictures of its fictional file only.
 
 **The public test files are not in git** (their licences; see `fixtures/corpora/MANIFEST.md`).
 Copy the five folders from the sibling project's `api/tests/fixtures/gedcom-corpora/` into `fixtures/corpora/`,
@@ -60,7 +63,7 @@ and the sibling project's `ancestry_shapes.ged` and `ancestry_dup_citation.ged` 
 | `ui.js` | the page: the grid, the panels, the right pane, the keys |
 | `tests/` | the tests, and `helpers.js` they share |
 | `fixtures/synthetic/` | small files written for the checks, fictional people only |
-| `tools/` | `baseline_probe.py` (the Python second opinion), `check-real.js`, `compare.js` |
+| `tools/` | `baseline_probe.py` (the Python second opinion), `check-real.js`, `compare.js`; `walk.js`, which walks the page in headless Chrome, driven by `chrome.js` |
 | `spike/` | what the scoping session measured with, and `save-spike.html` (phase 0) |
 
 ## Change the look

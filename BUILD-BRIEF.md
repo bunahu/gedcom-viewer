@@ -102,7 +102,8 @@ records that have no id — `xref.ged` holds 7 INDI (it says 6), `extensions.ged
 ## 4. Verified facts about the platform
 
 Chrome 153 on the owner's Mac, a page opened from disk (`file://`), tested headless with a
-throwaway profile (`spike/capability-check/`).
+throwaway profile (`spike/capability-check/`). By the evening of 2026-09-28 it was Chrome 154,
+where session 1 walked the page.
 
 | Capability | Result | Consequence |
 |---|---|---|
@@ -493,12 +494,15 @@ change-stamp checkbox. Never a file's name, content or handle.
 | `save.js` | names, the save and copy pipelines, the log block — over "handles" passed to it | **no** |
 | `ui.js` | the grid, panels, dialogs, keys; the only file that knows the pickers exist | yes |
 | `tests/*.test.js` | Node's own test runner (`node --test`); nothing to install | — |
+| `tests/helpers.js` | what the tests share: where the fixtures are, and how findings are written down | — |
 | `tests/fake-handles.js` | in-memory stand-ins with the same few methods as the real file and folder handles | — |
 | `fixtures/synthetic/` | small files written for the checks and the edits; committed | — |
 | `fixtures/corpora/` | the public test files, copied from the sibling project; **git-ignored** (section 13) | — |
 | `tools/baseline_probe.py` | the second opinion (exists) | — |
 | `tools/check-real.js` | runs `core.js` over a file given by path and prints the probe's JSON shape — counts only | — |
 | `tools/compare.js` | runs both over a list of files and reports every number that differs | — |
+| `tools/walk.js` | section 15's read-only walk on each file given, then the rest of the page on a fictional file it writes; a real file gets counts, tags, ids and line numbers only, and no picture | drives it, from outside |
+| `tools/chrome.js` | headless Chrome over its DevTools protocol, at the page's `file://` address, for `walk.js` | — |
 | `local/` | **git-ignored**; the place for copies of real files | — |
 | `README.md` | how to open it, how to run the tests, how to change the look | — |
 | `.gitignore` | `local/` · `fixtures/corpora/*/` · `gedview-history/` · `*.edits.log` · `*.bak` · `.DS_Store` | — |
@@ -601,12 +605,12 @@ findings it expects, by code and line number.
 
 | Gate | Command | Passes when |
 |---|---|---|
-| Tests | `node --test tests/` | all pass; the only skips are the corpus tests on a clone without the corpora |
+| Tests | `node --test tests/*.test.js` (Node 24 reads `node --test tests/` as one file named `tests`) | all pass; the only skips are the corpus tests on a clone without the corpora |
 | The real files | `node tools/check-real.js <raw> <cleaned>` | every number equals section 3's table, for a file whose sha256 is the table's; for any other file, the probe's numbers |
 | The second opinion | `node tools/compare.js` over `fixtures/` and the two real files | no number differs |
 | Identity on the real files | part of `check-real.js` | the two sha256 of section 3 |
 | Speed | `check-real.js` prints its timings | the raw export is read, checked and counted in under 1 s |
-| The page (phases 2 and 4) | the walk in section 15 | every step as written |
+| The page (phases 2 and 4) | the walk in section 15; `node tools/walk.js <raw> <cleaned>` walks the read-only walk and the rest of the page | every step as written; in the editing walk, the folder picker and the permission prompts are the owner's clicks |
 
 ---
 
@@ -688,26 +692,26 @@ Replace-all · comparing two files · editing a split value as one text · foldi
 a list of recent files · wrapping long lines in the grid · reading ANSEL as its own characters ·
 moving a line · a stamp for a record's creation (`CREA`, version 7) · anything that talks to the sibling project.
 
-Raised in session 1, for the owner to rule: section 15's walk as a script in `tools/`. It would
-drive headless Chrome over its DevTools protocol at the page's `file://` address, load a file
-through the page's own file input, and print only counts, tags, ids and line numbers for a real
-file. Session 1 walked the page that way from its scratchpad; kept here, it would let a session
-re-run the walks after a change.
+Raised at the close of session 1, for the owner to rule: a `CLAUDE.md` in this folder that points
+every session opened here at section 17. It would be a pointer, not a copy, for sessions opened
+without the build prompt.
 
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
 ---
 
-## 19. Setup and the opening prompt
+## 19. Setup and the opening prompts
 
 | | |
 |---|---|
-| Folder | `~/Desktop/claude/gedcom-viewer/` — open the session **here**, not in `sibling/` |
+| Folder | `~/Desktop/claude/gedcom-viewer/` — open the session **here**, not in `sibling/`; from session 2 on, in the owner's own Claude project for this folder |
 | Model · effort | Opus · one step below the top |
-| First act | `git init`, the `.gitignore` of section 12, a first commit of this brief, `spike/` and `tools/` (per F2) |
+| First act | session 1's: `git init`, the `.gitignore` of section 12, a first commit of this brief, `spike/` and `tools/` (per F2) — done, `42dfee7` |
 | The sibling project | read-only; another session is its one writer |
-| Before the session | phase 0, two minutes |
+| Before session 2 | phase 0, two minutes, if it has not been run |
+
+### Session 1's prompt
 
 ```
 Read BUILD-BRIEF.md in this folder, all of it, before anything else. You are building gedview
@@ -721,4 +725,30 @@ This is session 1: git init and the first commit, then phases 1 and 2. Tell me y
 phase 1 in a few lines, then start. Stop at the end of phase 2 and walk me through the page.
 ```
 
-For session 2, the same first paragraph, then: `This is session 2: phases 3 and 4, then my walk.`
+### Where session 1 left it
+
+Phases 1 and 2 are built and pass every gate: `b6d1cb1` (phase 1), `bb21c71` (phase 2), then
+`tools/walk.js`, kept at the owner's word. Phase 0 had not been run.
+
+| Session 1 found | So |
+|---|---|
+| Node 24 reads `node --test tests/` as one file named `tests` | the tests run as `node --test tests/*.test.js` (section 14) |
+| The Write and Edit tools turn a four-digit Unicode escape (a backslash, `u`, four hex digits) into the raw character. A raw U+2028 or U+2029 ends a JavaScript regular expression, and the file will not parse | write such escapes as `\u{…}` (a regular expression then needs the `u` flag), or build the character with `String.fromCharCode`; after writing, scan for raw U+2028, U+2029, U+0085 and U+FFFD, and run `node --check` |
+| The Claude app's browser pane ran no page tools on a local file outside the session's project folder | `tools/walk.js` walks the page in headless Chrome, at its own `file://` address |
+| In headless Chrome, a press on the scrollbar needs a hover before it and a held button while it drags; on macOS a synthetic ⌘A goes as the `selectAll` command; a list shown a moment ago is laid out at the next frame | all three are handled in `tools/chrome.js` and `tools/walk.js` |
+| No script can click the folder picker or a permission prompt (section 4) | `tools/walk.js` has no editing walk yet; those steps of the editing walk are the owner's |
+
+### Session 2's prompt
+
+```
+Read BUILD-BRIEF.md in this folder, all of it, before anything else. You are building gedview
+from that brief, and section 17 is how I work.
+
+Phase 0: [PASS, all four lines / FAILED at step N — paste the line / not run]
+F1, change stamps: V1
+F2, commits: C1
+
+This is session 2: phases 3 and 4, then my walk. Phases 1 and 2 are built; section 19 says
+where session 1 left them. Tell me your plan for phase 3 in a few lines, then start. Stop at
+the end of phase 4 and walk me through editing and saving.
+```
