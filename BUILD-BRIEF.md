@@ -688,6 +688,12 @@ Replace-all · comparing two files · editing a split value as one text · foldi
 a list of recent files · wrapping long lines in the grid · reading ANSEL as its own characters ·
 moving a line · a stamp for a record's creation (`CREA`, version 7) · anything that talks to the sibling project.
 
+Raised in session 1, for the owner to rule: section 15's walk as a script in `tools/`. It would
+drive headless Chrome over its DevTools protocol at the page's `file://` address, load a file
+through the page's own file input, and print only counts, tags, ids and line numbers for a real
+file. Session 1 walked the page that way from its scratchpad; kept here, it would let a session
+re-run the walks after a change.
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
