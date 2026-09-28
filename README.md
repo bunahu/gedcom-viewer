@@ -59,7 +59,7 @@ and the sibling project's `ancestry_shapes.ged` and `ancestry_dup_citation.ged` 
 |---|---|
 | `index.html` | the markup; loads `core.js`, then `ui.js`, as classic scripts |
 | `style.css` | the whole look, its properties first |
-| `core.js` | reading: bytes → encoding → lines → shape → records and pointers → checks → counts → labels; never touches the page, and runs the same under Node |
+| `core.js` | reading: bytes → encoding → lines → shape → records and pointers → checks → counts → labels; editing: the document, the acts, undo, the net change, the change stamps, the bytes of a save; never touches the page, and runs the same under Node |
 | `ui.js` | the page: the grid, the panels, the right pane, the keys |
 | `tests/` | the tests, and `helpers.js` they share |
 | `fixtures/synthetic/` | small files written for the checks, fictional people only |

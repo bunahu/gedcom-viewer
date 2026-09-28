@@ -1,7 +1,8 @@
 /* gedview — core.js
  *
  * The reading half: bytes → encoding → lines → shape → records and pointers → checks → counts →
- * labels. (The editing half — the document, the edits, undo, the stamps — is phase 3.)
+ * labels. The editing half: the document, the edits, undo, the net change, the change stamps and
+ * the bytes of a save (BUILD-BRIEF sections 9 and 10).
  *
  * It never touches the page. The same file runs as a classic script in the page, where it sets
  * window.GedCore, and under Node, where tests and tools require it; so what the tests prove is
@@ -82,6 +83,8 @@
   ];
 
   const CODEC_LABEL = { 'utf-8': 'UTF-8', 'utf-16-le': 'UTF-16 LE', 'utf-16-be': 'UTF-16 BE', ascii: 'ASCII' };
+  // How many lines from the top the header's CHAR and VERS are looked for in.
+  const HEADER_LINES = 80;
 
   // Python's str.strip() and str.rstrip() with no argument, which the probe uses on the header's
   // CHAR and VERS values. JavaScript's trim() is a different set (it strips U+FEFF and keeps
@@ -150,7 +153,7 @@
   function readHeader(bytes, idx, peekCodec) {
     const peek = lineDecoder(bytes, peekCodec);
     let declared = null; let version = null; let underGedc = false; let charLine = -1;
-    const upTo = Math.min(80, idx.n);
+    const upTo = Math.min(HEADER_LINES, idx.n);
     for (let i = 0; i < upTo; i += 1) {
       const text = peek.decode(idx.start[i], idx.end[i]);
       const t = text.replace(/^[ \t]+/, '');
@@ -334,11 +337,37 @@
 
     const head = readHeader(bytes, idx, enc.codec || 'one-byte');
     const decided = decideEncoding(enc, head.declared, head.version);
+    const dec = lineDecoder(bytes, decided.codec);
+    const texts = new Array(n);
+    const bad = new Uint8Array(n);                                   // 1: the line's bytes are not valid (E8)
+    for (let i = 0; i < n; i += 1) {
+      texts[i] = dec.decode(idx.start[i], idx.end[i]);
+      if (!dec.isClean()) bad[i] = 1;
+    }
+    const t2 = now();
+
+    const model = analyse(texts, bad, idx.term, enc, head, decided);
+    model.bytes = bytes;
+    model.size = bytes.length;
+    model.start = idx.start;
+    model.end = idx.end;
+    const tm = model.timings;
+    model.timings = { lines: t1 - t0, checks: t2 - t1 + tm.checks, gather: tm.gather, labels: tm.labels, total: now() - t0 };
+    return model;
+  }
+
+  // A file's lines, checked: 6.3 shape, 6.4 records and pointers, section 7's checks, section 8's
+  // counts and labels. It works from the texts, not the bytes, so that after every edit the
+  // document is checked again by the very code that read it (9.2). `bad` marks the lines whose
+  // bytes could not be read (E8); `term` holds the terminators (N7); `enc`, `head` and `decided`
+  // are 6.1's findings about the file's encoding. The model's bytes and line table are the
+  // caller's to fill in; a document's view has none.
+  function analyse(texts, bad, term, enc, head, decided) {
+    const n = texts.length;
+    const t1 = now();
     const codec = decided.codec;
     const v7 = (head.version || '').startsWith('7');
-    const dec = lineDecoder(bytes, codec);
 
-    const texts = new Array(n);
     const kind = new Uint8Array(n);
     const level = new Float64Array(n).fill(-1);                      // -1: the line did not parse
     const lead = new Uint32Array(n);                                 // spaces and tabs before the level
@@ -362,9 +391,8 @@
     // Per line, in the probe's order: bytes (E8), length, blank (E5), leading space (N5), over
     // 255 (N4), line-break and control characters (N1, N2), and only then the shape (E1, E2).
     for (let i = 0; i < n; i += 1) {
-      const text = dec.decode(idx.start[i], idx.end[i]);
-      texts[i] = text;
-      if (!dec.isClean()) add('E8', i);
+      const text = texts[i];
+      if (bad[i]) add('E8', i);
       if (text.length > longest) { const cp = codePoints(text); if (cp > longest) longest = cp; }
 
       let ws = 0;
@@ -442,19 +470,19 @@
     for (const note of decided.notes) add('N6', head.charLine, note);
     // N7 — more than one kind of terminator. A last line with none is not a kind.
     const termCounts = [0, 0, 0, 0, 0];
-    for (let i = 0; i < n; i += 1) termCounts[idx.term[i]] += 1;
+    for (let i = 0; i < n; i += 1) termCounts[term[i]] += 1;
     const kinds = [TERM.CRLF, TERM.LFCR, TERM.LF, TERM.CR].filter((t) => termCounts[t] > 0);
     if (kinds.length > 1) {
       add('N7', -1, kinds.map((t) => `${TERM_NAMES[t]} ${termCounts[t].toLocaleString('en-US')}`).join(' · '));
     }
 
     const model = {
-      bytes, size: bytes.length, prefix: enc.prefix, unit: enc.unit,
+      bytes: null, size: 0, prefix: enc.prefix, unit: enc.unit,
       codec, how: enc.how, declared: head.declared, version: head.version, v7,
       encodingLabel: CODEC_LABEL[codec] || head.declared || 'one byte per character',
       encodingFlags: decided.flags, encodingNotes: decided.notes,
-      n, start: idx.start, end: idx.end, term: idx.term, termCounts,
-      texts, kind, level, lead, tag, xref, valAt,
+      n, start: null, end: null, term, termCounts,
+      texts, bad, kind, level, lead, tag, xref, valAt,
       levelCounts, tagCounts, topCounts, records, definedAt, pointedBy,
       longest, n1Chars,
       findings: null, recOf: null, labels: null, facts: null, timings: null,
@@ -465,7 +493,7 @@
     const t3 = now();
     model.labels = recordLabels(model);
     const t4 = now();
-    model.timings = { lines: t1 - t0, checks: t2 - t1, gather: t3 - t2, labels: t4 - t3, total: t4 - t0 };
+    model.timings = { checks: t2 - t1, gather: t3 - t2, labels: t4 - t3 };
     return model;
   }
 
@@ -666,21 +694,24 @@
       .sort((a, b) => b[1] - a[1]);
   }
 
-  // Every original line from its own bytes, in `order` (all of them, when no order is given): a
-  // run of consecutive lines is one slice of the original bytes, from the first line's start to
-  // the last line's terminator, and the file's prefix comes first. With no edit this is the file
-  // itself, byte for byte (I1). Phase 3 adds the lines typed in a session.
-  function bytesOf(m, order) {
-    const seq = order || null;
-    const count = seq ? seq.length : m.n;
-    const at = seq ? (k) => seq[k] : (k) => k;
+  // The bytes of a file, line by line (10.2): the file's prefix (a byte-order mark) first; then a
+  // run of consecutive original lines n, n+1, n+2 … as one slice of the original bytes, from the
+  // first line's start to the last line's terminator; and an added line (a number below 0) as
+  // `addedBytes` gives it. With no edit this is the file itself, byte for byte (I1).
+  function joinBytes(m, count, at, addedBytes) {
     const slices = [m.bytes.subarray(0, m.prefix)];
     let total = m.prefix;
     let k = 0;
     while (k < count) {
       const a = at(k);
-      let b = a;
       k += 1;
+      if (a < 0) {
+        const b = addedBytes(a);
+        slices.push(b);
+        total += b.length;
+        continue;
+      }
+      let b = a;
       while (k < count && at(k) === b + 1) { b += 1; k += 1; }
       const s = m.start[a];
       const e = m.end[b] + TERM_UNITS[m.term[b]] * m.unit;
@@ -691,6 +722,12 @@
     let p = 0;
     for (const sl of slices) { out.set(sl, p); p += sl.length; }
     return out;
+  }
+
+  // Original lines only, in `order` (all of them, when no order is given).
+  function bytesOf(m, order) {
+    const seq = order || null;
+    return joinBytes(m, seq ? seq.length : m.n, seq ? (k) => seq[k] : (k) => k, null);
   }
 
   // The counts, in the shape tools/baseline_probe.py prints them, key for key, so the two can be
@@ -727,10 +764,645 @@
     };
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // 9 The document: the file as read, which never changes, and the lines typed over it
+  // ---------------------------------------------------------------------------------------------
+  //
+  // BUILD-BRIEF 9.1. `order` holds one number for each line on screen: n ≥ 0 is original line n,
+  // written from its own bytes (I1); n < 0 is added line -n-1, typed in this session and written
+  // in the file's encoding. Every act is a list of splices on `order` — some numbers taken out at
+  // a place, others put in — and its undo is the same splices run backwards. `savedOrder` is
+  // `order` at open or at the last save in place; what changed is the one against the other (9.4).
+  //
+  // An added line keeps its text, its terminator, its lineage, and — when gedview wrote it for a
+  // change stamp — its part in the stamp. Its lineage is the line it stands for: the original line
+  // an edit was typed over (for an edit of an edit, the first one's lineage), or its own number
+  // when it is new. The net change pairs a line before with a line after by lineage. An edit typed
+  // back to its original — the same text and the same terminator — puts the original's number
+  // back, and the save writes the original's own bytes (9.1).
+
+  const TERM_BYTES = [[], [LF], [CR], [CR, LF], [LF, CR]];            // a terminator's units, by code
+  const utf8 = new TextEncoder();
+  const num = (n) => n.toLocaleString('en-US');
+
+  function openDocument(input) {
+    const m = read(input);
+    const order = new Array(m.n);
+    for (let i = 0; i < m.n; i += 1) order[i] = i;
+    return {
+      m,                                                             // the file as read; never changed
+      added: [],                                                     // the lines typed in this session
+      order,
+      savedOrder: order.slice(),
+      done: [],                                                      // Undo takes the last of these
+      undone: [],                                                    // Redo takes the last of these
+      common: commonTerm(m),
+      view: m,                                                       // the lines as they are now, checked
+    };
+  }
+
+  // The terminator a new line takes: the one most common in the file (9.2); LF in a file with none.
+  function commonTerm(m) {
+    let best = TERM.LF;
+    for (const t of [TERM.CRLF, TERM.CR, TERM.LFCR]) if (m.termCounts[t] > m.termCounts[best]) best = t;
+    return best;
+  }
+
+  function textOf(doc, e) { return e >= 0 ? doc.m.texts[e] : doc.added[-e - 1].text; }
+  function termOf(doc, e) { return e >= 0 ? doc.m.term[e] : doc.added[-e - 1].term; }
+  function lineageOf(doc, e) { return e >= 0 ? e : doc.added[-e - 1].lineage; }
+  function stampOf(doc, e) { return e >= 0 ? null : doc.added[-e - 1].stamp; }
+
+  // A line's level, id and tag as its text gives them: an original line's from the reading, an
+  // added line's read once and kept. Level -1: the line does not parse.
+  function shapeOf(doc, e) {
+    if (e >= 0) return { level: doc.m.level[e], xref: doc.m.xref[e], tag: doc.m.tag[e] };
+    const line = doc.added[-e - 1];
+    if (!line.shape) {
+      const hit = SHAPE.exec(line.text.replace(/^[ \t]+/, ''));
+      line.shape = hit ? { level: Number(hit[1]), xref: hit[2] === undefined ? null : hit[2], tag: hit[3] }
+        : { level: -1, xref: null, tag: null };
+    }
+    return line.shape;
+  }
+
+  function newLine(doc, text, term, lineage, stamp) {
+    const id = -(doc.added.length + 1);
+    doc.added.push({ text, term, lineage: lineage === undefined ? id : lineage, stamp: stamp || null, shape: null });
+    return id;
+  }
+
+  // I11 — what a line may not hold, because it could not be written as typed: CR or LF, which
+  // would end the line there (I2); half of a surrogate pair, which no encoding writes; and, in a
+  // file read as ASCII or one byte per character, anything outside ASCII (9.2).
+  function textRefusal(doc, text) {
+    const oneByte = doc.m.unit === 1 && doc.m.codec !== 'utf-8';
+    for (let k = 0; k < text.length; k += 1) {
+      const c = text.charCodeAt(k);
+      if (c === LF || c === CR) return 'A line cannot hold a line break: CR or LF would end the line there.';
+      if (oneByte && c >= 0x80) {
+        const cp = text.codePointAt(k);
+        return `${String.fromCodePoint(cp)} (U+${cp.toString(16).toUpperCase().padStart(4, '0')}) is not ASCII. ` +
+          `This file is read as ${doc.m.encodingLabel}, and gedview writes only ASCII into it.`;
+      }
+      if (c >= 0xd800 && c <= 0xdfff) {
+        const d = k + 1 < text.length ? text.charCodeAt(k + 1) : 0;
+        if (c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff) { k += 1; continue; }
+        return 'The text holds half of a surrogate pair, which no encoding can write.';
+      }
+    }
+    return null;
+  }
+
+  // An added line's bytes: its text in the file's encoding, then its terminator. textRefusal has
+  // kept out whatever the encoding cannot hold.
+  function lineBytes(doc, text, term) {
+    const codec = doc.m.codec;
+    const tail = TERM_BYTES[term];
+    if (codec === 'utf-8') {
+      const body = utf8.encode(text);
+      const out = new Uint8Array(body.length + tail.length);
+      out.set(body);
+      out.set(tail, body.length);
+      return out;
+    }
+    if (codec === 'utf-16-le' || codec === 'utf-16-be') {
+      const hi = codec === 'utf-16-be' ? 0 : 1;                       // where a unit's high byte goes
+      const units = text.length + tail.length;
+      const out = new Uint8Array(units * 2);
+      for (let k = 0; k < units; k += 1) {
+        const u = k < text.length ? text.charCodeAt(k) : tail[k - text.length];
+        out[2 * k + hi] = u >> 8;
+        out[2 * k + 1 - hi] = u & 0xff;
+      }
+      return out;
+    }
+    const out = new Uint8Array(text.length + tail.length);           // ASCII, one byte per character
+    for (let k = 0; k < text.length; k += 1) out[k] = text.charCodeAt(k);
+    out.set(tail, text.length);
+    return out;
+  }
+
+  // The bytes of a save (10.2): `order` walked, original lines from their own bytes, added lines
+  // encoded. `upTo` stops after that many lines.
+  function saveBytes(doc, upTo) {
+    const order = doc.order;
+    const count = upTo === undefined ? order.length : Math.min(upTo, order.length);
+    return joinBytes(doc.m, count, (k) => order[k], (e) => {
+      const line = doc.added[-e - 1];
+      return lineBytes(doc, line.text, line.term);
+    });
+  }
+
+  // Whether the lines of `order`, written out, read back as these same lines (6.2). A line's text
+  // holds no CR or LF, so every line ends where its terminator starts; what can go wrong is where
+  // two lines meet. A line with no terminator runs into the next; an empty last line with no
+  // terminator is no line at all; and an empty line's terminator can join the one before it: CR
+  // then LF is one CR LF, and LF then CR is one LF CR in a file whose first line ends that way.
+  // The line where it would go wrong, or -1.
+  function joinFault(doc) {
+    const order = doc.order;
+    const n = order.length;
+    if (n === 0) return -1;
+    const first = termOf(doc, order[0]);
+    const lfcr = first === TERM.LFCR || (first === TERM.LF && n > 1 && textOf(doc, order[1]) === '' &&
+      TERM_BYTES[termOf(doc, order[1])][0] === CR);
+    let before = -1;                                                 // the terminator of the line above
+    for (let k = 0; k < n; k += 1) {
+      const e = order[k];
+      const t = termOf(doc, e);
+      if (before === TERM.NONE) return k - 1;
+      if (textOf(doc, e).length === 0) {
+        const unit = TERM_BYTES[t][0];
+        if (t === TERM.NONE) return k;
+        if (before === TERM.CR && unit === LF) return k;
+        if (lfcr && before === TERM.LF && unit === CR) return k;
+      }
+      before = t;
+    }
+    return -1;
+  }
+
+  function faultReason(doc, k) {
+    const at = num(k + 1);
+    if (termOf(doc, doc.order[k]) !== TERM.NONE) {
+      return `The empty line at line ${at} would not read back as a line: its line ending would join the one above it.`;
+    }
+    if (k < doc.order.length - 1) return `Line ${at} has no line ending, and the line after it would run into it.`;
+    return 'An empty last line with no line ending would not be in the file at all.';
+  }
+
+  // How the file would be read, written out as it now is (6.1): its first bytes and its header
+  // decide its encoding, and an edit can change either. Read as read() reads a file, from the
+  // bytes of the lines read() looks at for the header.
+  function headerOf(doc) {
+    const bytes = saveBytes(doc, HEADER_LINES);
+    const enc = detect(bytes);
+    const idx = indexLines(bytes, enc.prefix, enc.unit, enc.codec === 'utf-16-be');
+    const head = readHeader(bytes, idx, enc.codec || 'one-byte');
+    return { enc, head, decided: decideEncoding(enc, head.declared, head.version) };
+  }
+
+  function encodingReason(doc, hdr) {
+    if (hdr.decided.codec === doc.m.codec) {
+      return 'The first line would then begin with a byte-order mark, which is read as the file\'s own, not the line\'s.';
+    }
+    const now = CODEC_LABEL[hdr.decided.codec] || hdr.head.declared || 'one byte per character';
+    return `The file would then be read as ${now}, not ${doc.m.encodingLabel} (6.1), and every other line in it would read differently.`;
+  }
+
+  // The document checked again, whole (section 7 has no incremental checker): the lines as they
+  // now are go through the analyse() that read the file.
+  function recheck(doc, header) {
+    const hdr = header || headerOf(doc);
+    const m = doc.m;
+    const order = doc.order;
+    const n = order.length;
+    const texts = new Array(n);
+    const bad = new Uint8Array(n);
+    const term = new Uint8Array(n);
+    for (let k = 0; k < n; k += 1) {
+      const e = order[k];
+      if (e >= 0) { texts[k] = m.texts[e]; bad[k] = m.bad[e]; term[k] = m.term[e]; }
+      else { const line = doc.added[-e - 1]; texts[k] = line.text; term[k] = line.term; }
+    }
+    doc.view = analyse(texts, bad, term, hdr.enc, hdr.head, hdr.decided);
+  }
+
+  // Take `count` numbers out of `list` at `at` and put `items` in, in place. (A spread of very
+  // many items can overflow the stack, so a long run is put in by hand.)
+  function spliceIn(list, at, count, items) {
+    if (items.length <= 1000) { list.splice(at, count, ...items); return; }
+    const tail = list.slice(at + count);
+    list.length = at;
+    for (const x of items) list.push(x);
+    for (const x of tail) list.push(x);
+  }
+
+  // An act is made as it is planned: each splice at once, kept with what it took out, so that the
+  // act runs backwards exactly.
+  function cut(doc, done, at, count, items) {
+    const removed = doc.order.slice(at, at + count);
+    spliceIn(doc.order, at, count, items);
+    done.push({ at, removed, inserted: items });
+  }
+
+  function unmake(doc, splices) {
+    for (let k = splices.length - 1; k >= 0; k -= 1) {
+      const s = splices[k];
+      spliceIn(doc.order, s.at, s.inserted.length, s.removed);
+    }
+  }
+
+  function remake(doc, splices) {
+    for (const s of splices) spliceIn(doc.order, s.at, s.removed.length, s.inserted);
+  }
+
+  // An act, finished. The file as it now stands must read back as the lines shown, and in the
+  // encoding it was opened in (I11); if not, the act is run backwards and refused, saying why.
+  // Otherwise it is one step of the history, and the whole document is checked again.
+  function finish(doc, label, done) {
+    if (!done.length) return { ok: true, step: null };
+    const k = joinFault(doc);
+    const hdr = k < 0 ? headerOf(doc) : null;
+    let reason = null;
+    if (k >= 0) reason = faultReason(doc, k);
+    else if (hdr.decided.codec !== doc.m.codec || hdr.enc.prefix !== doc.m.prefix) reason = encodingReason(doc, hdr);
+    if (reason) {
+      unmake(doc, done);
+      return { ok: false, reason };
+    }
+    const step = { label, splices: done };
+    doc.done.push(step);
+    doc.undone.length = 0;
+    recheck(doc, hdr);
+    return { ok: true, step };
+  }
+
+  const refuse = (reason) => ({ ok: false, reason });
+  const E8_REASON = 'This line\'s bytes could not be read in the file\'s encoding (E8). It can be deleted, not edited.';
+
+  // 9.2 — a line typed over, whole: level, tag and value. It keeps its terminator. A line whose
+  // bytes could not be read (E8) can be deleted, not edited: its text is not what the file holds.
+  function editLine(doc, pos, text) {
+    const e = doc.order[pos];
+    if (e === undefined) return refuse(`There is no line ${num(pos + 1)}.`);
+    if (e >= 0 && doc.m.bad[e]) return refuse(E8_REASON);
+    if (text === textOf(doc, e)) return { ok: true, step: null };
+    const why = textRefusal(doc, text);
+    if (why) return refuse(why);
+    const term = termOf(doc, e);
+    const lineage = lineageOf(doc, e);
+    const back = lineage >= 0 && text === doc.m.texts[lineage] && term === doc.m.term[lineage];
+    const done = [];
+    cut(doc, done, pos, 1, [back ? lineage : newLine(doc, text, term, lineage)]);
+    return finish(doc, `Edit line ${num(pos + 1)}`, done);
+  }
+
+  // 9.2 — a new line directly under line `pos` (a child), or after line `pos`'s subtree (a sibling
+  // below). The page offers the level; the text is the owner's.
+  function addChild(doc, pos, text) { return addAt(doc, pos + 1, text); }
+  function addSibling(doc, pos, text) { return addAt(doc, subtreeEnd(doc.view, pos), text); }
+
+  function addAt(doc, at, text) {
+    const why = textRefusal(doc, text);
+    if (why) return refuse(why);
+    const done = [];
+    const refused = insert(doc, done, at, [{ text, stamp: null }]);
+    if (refused) return refuse(refused);
+    return finish(doc, `Add line ${num(at + 1)}`, done);
+  }
+
+  // New lines at `at`, each with the terminator most common in the file (9.2). After a last line
+  // with no terminator, that line gains the common one and the new last line has none, so the file
+  // ends as it did. Returns why, when the lines cannot go there.
+  function insert(doc, done, at, lines) {
+    const ids = lines.map((l) => newLine(doc, l.text, doc.common, undefined, l.stamp));
+    const order = doc.order;
+    if (at < order.length || at === 0 || termOf(doc, order[at - 1]) !== TERM.NONE) {
+      cut(doc, done, at, 0, ids);
+      return null;
+    }
+    const last = order[at - 1];
+    if (last >= 0 && doc.m.bad[last]) {
+      return 'The last line has no line ending, and its bytes could not be read (E8): it cannot be written again with one, so no line can follow it.';
+    }
+    const gained = newLine(doc, textOf(doc, last), doc.common, lineageOf(doc, last), stampOf(doc, last));
+    doc.added[-ids[ids.length - 1] - 1].term = TERM.NONE;
+    cut(doc, done, at - 1, 1, [gained, ...ids]);
+    return null;
+  }
+
+  // 9.2 — a line and its subtree.
+  function deleteLine(doc, pos) {
+    if (doc.order[pos] === undefined) return refuse(`There is no line ${num(pos + 1)}.`);
+    const end = subtreeEnd(doc.view, pos);
+    const done = [];
+    cut(doc, done, pos, end - pos, []);
+    return finish(doc, end - pos > 1 ? `Delete lines ${num(pos + 1)}–${num(end)}` : `Delete line ${num(pos + 1)}`, done);
+  }
+
+  // 9.3 — what deleting the record that holds line `pos` takes: the record's own lines, and every
+  // line elsewhere that points at it, each with its subtree. The page shows this and the owner
+  // unticks what should stay. A pointer comes ticked, unless its id is defined again elsewhere
+  // (E6): then it still points at a record. Null for a line before the first record.
+  function recordDeletion(doc, pos) {
+    const v = doc.view;
+    const r = v.recOf[pos];
+    if (r === undefined || r < 0) return null;
+    const from = v.records[r];
+    const to = recordEnd(v, r);
+    const id = v.xref[from];
+    const again = id !== null && v.definedAt.get(id).length > 1;
+    const pointers = [];
+    if (id !== null) {
+      for (const line of v.pointedBy.get(id) || []) {
+        if (line >= from && line < to) continue;                     // inside the record: goes with it
+        pointers.push({ line, end: subtreeEnd(v, line), ticked: !again });
+      }
+    }
+    return { record: r, from, to, id, tag: v.tag[from], pointers };
+  }
+
+  // The record that holds line `pos`, with the pointer lines listed in `ticked` (their line
+  // numbers from recordDeletion; when not given, those it ticks), each with its subtree: all of it
+  // one step, so one Undo brings all of it back.
+  function deleteRecord(doc, pos, ticked) {
+    const plan = recordDeletion(doc, pos);
+    if (!plan) return refuse('This line is in no record.');
+    const chosen = new Set(ticked === undefined ? plan.pointers.filter((p) => p.ticked).map((p) => p.line) : ticked);
+    const ranges = [[plan.from, plan.to]];
+    for (const p of plan.pointers) if (chosen.has(p.line)) ranges.push([p.line, p.end]);
+    ranges.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const [s, e] of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && s < last[1]) last[1] = Math.max(last[1], e);
+      else merged.push([s, e]);
+    }
+    const done = [];
+    for (let k = merged.length - 1; k >= 0; k -= 1) cut(doc, done, merged[k][0], merged[k][1] - merged[k][0], []);
+    return finish(doc, `Delete record ${plan.id === null ? plan.tag : `${plan.id} ${plan.tag}`}`, done);
+  }
+
+  // Undo and Redo, one step each; the history survives a save (9.2).
+  function undo(doc) {
+    const step = doc.done.pop();
+    if (!step) return null;
+    unmake(doc, step.splices);
+    doc.undone.push(step);
+    recheck(doc);
+    return step;
+  }
+
+  function redo(doc) {
+    const step = doc.undone.pop();
+    if (!step) return null;
+    remake(doc, step.splices);
+    doc.done.push(step);
+    recheck(doc);
+    return step;
+  }
+
+  // A save in place is done: the lines as they now are are the file on disk (10.2, step 10).
+  function markSaved(doc) { doc.savedOrder = doc.order.slice(); }
+
+  // Whether the lines differ from the file on disk.
+  function isChanged(doc) {
+    const a = doc.order;
+    const b = doc.savedOrder;
+    if (a.length !== b.length) return true;
+    for (let k = 0; k < a.length; k += 1) if (a[k] !== b[k]) return true;
+    return false;
+  }
+
+  // Which numbers a list holds, and at what place.
+  function placesIn(doc, list) {
+    const orig = new Int32Array(doc.m.n).fill(-1);
+    const added = new Int32Array(doc.added.length).fill(-1);
+    for (let k = 0; k < list.length; k += 1) {
+      const e = list[k];
+      if (e >= 0) orig[e] = k; else added[-e - 1] = k;
+    }
+    return (e) => (e >= 0 ? orig[e] : added[-e - 1]);
+  }
+
+  // 9.4 — what changed: `savedOrder` against `order`, never the history of keystrokes. No act
+  // moves a line, so the numbers the two lists share come in the same order in both, and one walk
+  // over the two finds every difference. Between two lines they share, a line before and a line
+  // after of one lineage are one line changed; the other lines before were removed, the other
+  // lines after added. Each item holds the line's place before (in `savedOrder`) and after (in
+  // `order`), -1 where it has none; a removed line also holds `at`, the place after where it was.
+  function netChange(doc) {
+    const S = doc.savedOrder;
+    const O = doc.order;
+    const inS = placesIn(doc, S);
+    const inO = placesIn(doc, O);
+    const items = [];
+    let i = 0; let j = 0;
+    while (i < S.length || j < O.length) {
+      if (i < S.length && j < O.length && S[i] === O[j]) { i += 1; j += 1; continue; }
+      const i0 = i; const j0 = j;
+      while (i < S.length && inO(S[i]) < 0) i += 1;
+      while (j < O.length && inS(O[j]) < 0) j += 1;
+      if ((i < S.length) !== (j < O.length) || (i < S.length && S[i] !== O[j])) {
+        throw new Error('netChange: the lines as saved and the lines now are out of step');
+      }
+      const byLineage = new Map();
+      for (let a = i0; a < i; a += 1) byLineage.set(lineageOf(doc, S[a]), a);
+      const pairOf = new Map();                                      // place after → place before
+      for (let b = j0; b < j; b += 1) {
+        const a = byLineage.get(lineageOf(doc, O[b]));
+        if (a !== undefined) pairOf.set(b, a);
+      }
+      const paired = new Set(pairOf.values());
+      let a = i0; let b = j0;
+      while (a < i || b < j) {
+        if (a < i && !paired.has(a)) { items.push({ kind: 'removed', before: a, after: -1, at: b }); a += 1; }
+        else if (b < j && !pairOf.has(b)) { items.push({ kind: 'added', before: -1, after: b }); b += 1; }
+        else {
+          if (pairOf.get(b) !== a) throw new Error('netChange: a changed line out of step');
+          items.push({ kind: 'changed', before: a, after: b });
+          a += 1; b += 1;
+        }
+      }
+    }
+    return items;
+  }
+
+  // The record a line of `savedOrder` sat in, as its record line's place there (-1: before the
+  // first record). `memo` carries the last answer, so a run of removed lines is walked once.
+  function savedRecordOf(doc, a, memo) {
+    const S = doc.savedOrder;
+    let r;
+    if (shapeOf(doc, S[a]).level === 0) r = a;
+    else if (memo.a === a - 1) r = memo.r;
+    else { r = a - 1; while (r >= 0 && shapeOf(doc, S[r]).level !== 0) r -= 1; }
+    memo.a = a;
+    memo.r = r;
+    return r;
+  }
+
+  // The net change in runs, for the Changes panel and the log: lines of one kind, each right after
+  // the last, in one record, and all written by a change stamp or none. A run holds its kind; its
+  // first place before and after (and, removed, `at`, the place after where it was); its lines, as
+  // `was` and `now`; its record, as id and tag — in the file as saved for a removed run, as it now
+  // is for the others; and whether a stamp wrote it.
+  function changeRuns(doc, items) {
+    const list = items || netChange(doc);
+    const S = doc.savedOrder;
+    const O = doc.order;
+    const v = doc.view;
+    const memo = { a: -2, r: -1 };
+    const runs = [];
+    for (const it of list) {
+      let record = null;
+      if (it.kind === 'removed') {
+        const r = savedRecordOf(doc, it.before, memo);
+        if (r >= 0) { const s = shapeOf(doc, S[r]); record = { id: s.xref, tag: s.tag, key: `saved ${r}` }; }
+      } else if (v.recOf[it.after] >= 0) {
+        const line = v.records[v.recOf[it.after]];
+        record = { id: v.xref[line], tag: v.tag[line], key: `now ${line}` };
+      }
+      const stamp = it.after >= 0 && stampOf(doc, O[it.after]) !== null;
+      const was = it.before >= 0 ? textOf(doc, S[it.before]) : null;
+      const now = it.after >= 0 ? textOf(doc, O[it.after]) : null;
+      const last = runs[runs.length - 1];
+      const joins = last && last.kind === it.kind && last.stamp === stamp &&
+        (last.record && last.record.key) === (record && record.key) &&
+        (it.before < 0 || it.before === last.before + last.lines.length) &&
+        (it.after < 0 || it.after === last.after + last.lines.length);
+      if (joins) last.lines.push({ was, now });
+      else {
+        runs.push({ kind: it.kind, before: it.before, after: it.after, at: it.kind === 'removed' ? it.at : it.after,
+          record, stamp, lines: [{ was, now }] });
+      }
+    }
+    return runs;
+  }
+
+  // For the grid: each line now, 1 changed or 2 added since the last save; and, where lines were
+  // removed, the place after they were.
+  function lineMarks(doc, items) {
+    const list = items || netChange(doc);
+    const status = new Uint8Array(doc.order.length);
+    const removedAt = new Uint8Array(doc.order.length + 1);
+    for (const it of list) {
+      if (it.kind === 'changed') status[it.after] = 1;
+      else if (it.kind === 'added') status[it.after] = 2;
+      else removedAt[it.at] = 1;
+    }
+    return { status, removedAt };
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // 10.4 The change stamp
+  // ---------------------------------------------------------------------------------------------
+
+  const STAMP_TAGS = new Set(['FAM', 'INDI', 'OBJE', 'NOTE', 'REPO', 'SOUR', 'SUBM']);
+  const STAMP_TAGS_7 = new Set(['FAM', 'INDI', 'OBJE', 'SNOTE', 'REPO', 'SOUR', 'SUBM']);
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const STAMP_NOTE = 'Edited by hand in gedview.';
+  const STAMP_NOTE_MAX = 200;
+
+  // A stamp's date and time, for a save made at `when`: the day without a leading zero, the month
+  // as JAN … DEC, the year in four digits; HH:MM:SS on a 24-hour clock, local — and in a file whose
+  // version starts with 7, UTC with a closing Z, the date being UTC's too.
+  function stampTime(when, v7) {
+    const two = (x) => String(x).padStart(2, '0');
+    const [y, mo, d, h, mi, s] = v7
+      ? [when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate(), when.getUTCHours(), when.getUTCMinutes(), when.getUTCSeconds()]
+      : [when.getFullYear(), when.getMonth(), when.getDate(), when.getHours(), when.getMinutes(), when.getSeconds()];
+    return { date: `${d} ${MONTHS[mo]} ${y}`, time: `${two(h)}:${two(mi)}:${two(s)}${v7 ? 'Z' : ''}` };
+  }
+
+  // A stamp's note: what the owner typed for this save, or, when he typed nothing, the standing
+  // note. One line, 200 characters at most, nothing the file's encoding cannot hold.
+  function stampNote(doc, typed) {
+    const text = String(typed || '').trim() || STAMP_NOTE;
+    if (/[\r\n]/.test(text)) return { reason: 'The note must be one line.' };
+    const length = codePoints(text);
+    if (length > STAMP_NOTE_MAX) return { reason: `The note is ${num(length)} characters; ${STAMP_NOTE_MAX} at most.` };
+    const why = textRefusal(doc, text);
+    return why ? { reason: why } : { text };
+  }
+
+  // The records a save stamps: every record the net change touched — a line changed or added in
+  // it, or a line it lost — other than by a stamp of gedview's own, that is still in the file,
+  // under a tag that may carry a change date (section 2). Record numbers of the view, last first.
+  function stampTargets(doc, items) {
+    const list = items || netChange(doc);
+    const v = doc.view;
+    const S = doc.savedOrder;
+    const O = doc.order;
+    const tags = v.v7 ? STAMP_TAGS_7 : STAMP_TAGS;
+    const placeNow = placesIn(doc, O);
+    const changedTo = new Map();                                     // place before → place after
+    for (const it of list) if (it.kind === 'changed') changedTo.set(it.before, it.after);
+    const memo = { a: -2, r: -1 };
+    const hit = new Set();
+    for (const it of list) {
+      let b;
+      if (it.kind !== 'removed') {
+        if (stampOf(doc, O[it.after]) !== null) continue;            // written by a stamp, not by him
+        b = it.after;
+      } else {
+        const r = savedRecordOf(doc, it.before, memo);
+        if (r < 0) continue;
+        b = placeNow(S[r]);
+        if (b < 0 && changedTo.has(r)) b = changedTo.get(r);
+        if (b < 0) continue;                                         // its record was deleted: no stamp
+      }
+      const rec = v.recOf[b];
+      if (rec >= 0 && tags.has(v.tag[v.records[rec]])) hit.add(rec);
+    }
+    return [...hit].sort((x, y) => y - x);
+  }
+
+  // 10.4 — the stamps of a save made at `when`, as one step of the history. A record with no
+  // `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`, `3 TIME`, `2 NOTE`. A record with one has
+  // its `2 DATE` and `3 TIME` set (either added when missing) and a `2 NOTE` added at the end of
+  // the block; notes already there stay. A note gedview added since the last save in place (a copy
+  // was saved in between) is set anew instead, never added to.
+  function applyStamps(doc, when, typed) {
+    const note = stampNote(doc, typed);
+    if (note.reason) return refuse(note.reason);
+    const v = doc.view;
+    const targets = stampTargets(doc);
+    const { date, time } = stampTime(when, v.v7);
+    const inSaved = placesIn(doc, doc.savedOrder);
+    const done = [];
+    const set = (at, text, role) => {                                // line `at` set to `text`, in its place
+      const e = doc.order[at];
+      if (textOf(doc, e) !== text) cut(doc, done, at, 1, [newLine(doc, text, termOf(doc, e), lineageOf(doc, e), role)]);
+      return null;
+    };
+    for (const r of targets) {
+      const from = v.records[r];
+      const to = recordEnd(v, r);
+      const chan = firstChild(v, from + 1, to, 1, 'CHAN');
+      const ops = [];                                                // [place, act], made last place first
+      if (chan < 0) {
+        ops.push([to, () => insert(doc, done, to, [{ text: '1 CHAN', stamp: 'chan' },
+          { text: `2 DATE ${date}`, stamp: 'date' }, { text: `3 TIME ${time}`, stamp: 'time' },
+          { text: `2 NOTE ${note.text}`, stamp: 'note' }])]);
+      } else {
+        const end = subtreeEnd(v, chan);
+        let fresh = -1;
+        for (let p = chan + 1; p < end && fresh < 0; p += 1) {
+          const e = doc.order[p];
+          if (stampOf(doc, e) === 'note' && inSaved(e) < 0) fresh = p;
+        }
+        if (fresh >= 0) ops.push([fresh, () => set(fresh, `2 NOTE ${note.text}`, 'note')]);
+        else ops.push([end, () => insert(doc, done, end, [{ text: `2 NOTE ${note.text}`, stamp: 'note' }])]);
+        const dt = firstChild(v, chan + 1, end, 2, 'DATE');
+        if (dt < 0) {
+          ops.push([chan + 1, () => insert(doc, done, chan + 1, [{ text: `2 DATE ${date}`, stamp: 'date' },
+            { text: `3 TIME ${time}`, stamp: 'time' }])]);
+        } else {
+          const tm = firstChild(v, dt + 1, subtreeEnd(v, dt), 3, 'TIME');
+          if (tm < 0) ops.push([dt + 1, () => insert(doc, done, dt + 1, [{ text: `3 TIME ${time}`, stamp: 'time' }])]);
+          else ops.push([tm, () => set(tm, `3 TIME ${time}`, 'time')]);
+          ops.push([dt, () => set(dt, `2 DATE ${date}`, 'date')]);
+        }
+      }
+      ops.sort((x, y) => y[0] - x[0]);                               // stable: at one place, in the order above
+      for (const [, act] of ops) {
+        const refused = act();
+        if (refused) { unmake(doc, done); return refuse(refused); }
+      }
+    }
+    return finish(doc, 'Change stamps', done);
+  }
+
   return {
-    TERM, TERM_NAMES, KIND, CHECKS,
+    TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE, STAMP_NOTE_MAX,
     read, detect, bytesOf, summary,
     recordEnd, subtreeEnd, valueOf, isPointerLine, joinedValue,
     search, searchTag, recordCounts, codePoints,
+    openDocument, saveBytes, textOf, termOf,
+    editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
+    markSaved, isChanged, netChange, changeRuns, lineMarks,
+    stampTime, stampNote, stampTargets, applyStamps,
   };
 });

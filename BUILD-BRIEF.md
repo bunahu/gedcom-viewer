@@ -752,3 +752,28 @@ This is session 2: phases 3 and 4, then my walk. Phases 1 and 2 are built; secti
 where session 1 left them. Tell me your plan for phase 3 in a few lines, then start. Stop at
 the end of phase 4 and walk me through editing and saving.
 ```
+
+### Where session 2 is
+
+Phase 0 passed, all eight lines (Chrome 154, 2026-09-28, on `local/spike-test/maximal70.ged`), so
+Save writes in place from the page opened off disk. The owner's picks: F1 V1, F2 C1. He named the
+state session 1 left **v0.1** (a git tag on `30c6dd6`); each phase that passes its gates is tagged
+with the next number — phase 3 v0.2, phase 4 v0.3 — and v1.0 is his walk (phase 5).
+
+Phase 3 is built and passes every gate. What it settled that the sections above left open:
+
+| Settled | Why |
+|---|---|
+| An edit is typed back — the original's number returns — when its text **and its terminator** are the original's | a last line that gained a terminator (9.2) keeps its text and changes its bytes |
+| That last line, gaining a terminator, is a **changed** line, listed like any other | I8, I10: nothing changes unlisted |
+| An act is refused, and undone at once, when the file written out would not read back as the lines shown — an empty line whose terminator joins the one above it (CR then LF), an empty last line with none — or would be read in another encoding (the header's `CHAR` changed to one the bytes are not) | I11. So the lines and checks on the screen are always what a fresh read of the saved bytes gives; `tests/edit.test.js` holds every act to that, at random, over every test file |
+| After every act the document is checked whole, by the same `analyse()` that reads a file | section 7: one checker, not incremental. On the raw export an edit takes 81 ms, a record deleted 71 ms; `check-real.js` holds it to section 16's 0.3 s |
+| A version-7 stamp's date is UTC's, like its time | the two must agree |
+| A stamp on a record with a `1 CHAN` that gedview stamped since the last save in place has that block's `DATE`, `TIME` and gedview's `NOTE` set anew | 10.4's last two rows, read together |
+| A new line's terminator in a file that has none (one line, no ending) is LF; a tie goes LF, CR LF, CR, LF CR, in that order | 9.2 names none |
+
+The owner's four asks of 2026-09-28, for phase 4 — the page: **Open** reads **Open GEDCOM**
+everywhere; the facts line reads GEDCOM version · encoding · exported date by the exporting
+system · size · lines · sha256, and the sha256 says on hover what it is; every line with lines
+under it opens and shuts (section 18's "folding a record shut", now in); and an unsaved edit shows
+in its row, in the right pane, in Changes and in the Save dialog.
