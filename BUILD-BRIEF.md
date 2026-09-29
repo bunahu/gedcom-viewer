@@ -41,6 +41,7 @@ All from the owner, 2026-09-28, in the scoping session.
 | R4 | **Its own folder and its own local git repo**, beside `sibling/`; the name is gedview. | "your recs. gedview is fine." |
 | R5 | **Every assumption put to him stands** (they are the rules of sections 5–10). | "Decided: yes to everything." |
 | R6 | **Indent is a toggle, on/off, in the UI.** | "Indent has a toggle on/off in the UI." |
+| R7 | **The name is GEDCOM Viewer** (2026-09-28, after phase 4): in the top bar, the window's title, the default stamp note and the backup folder. The code keeps its own names. | "Rename gedview to GEDCOM Viewer." |
 
 **How R3 meets the standard** (read in the two PDFs in `sibling/gedcom/`, 5.5.5 and 7.0.18):
 
@@ -349,7 +350,7 @@ extension when that is `.ged` or `.gedcom` (any case); the extension is kept as 
 
 | What | Name | Example, saved at 3:42:00 pm on 2026-09-28 |
 |---|---|---|
-| Backup | `gedview-history/<stem>.<timestamp><ext>.bak` | `gedview-history/RAW.2026-09-28T154200.ged.bak` |
+| Backup | `gedcom-viewer-history/<stem>.<timestamp><ext>.bak` (R7; `gedview-history/` before it) | `gedcom-viewer-history/RAW.2026-09-28T154200.ged.bak` |
 | Copy | `<stem>.<timestamp><ext>`; `-2`, `-3` if taken | `RAW.2026-09-28T154200.ged` |
 | Log | `<file name>.edits.log` | `RAW.ged.edits.log` |
 
@@ -398,7 +399,7 @@ For each changed record whose tag may carry one (section 2), at the moment of th
 |---|---|
 | Date | day without a leading zero, month as `JAN` … `DEC`, four-digit year |
 | Time | `HH:MM:SS`, 24-hour, local; in a file whose version starts with 7, UTC with a closing `Z` |
-| The note | what the owner typed for this save; if he typed nothing, `Edited by hand in gedview.` One line, 200 characters at most. |
+| The note | what the owner typed for this save; if he typed nothing, `Edited by hand in GEDCOM Viewer.` (R7). One line, 200 characters at most. |
 | A deleted record | has nothing to stamp; the log alone records it |
 | `HEAD`, `TRLR`, records under other tags | never stamped; the log alone records the change |
 | A record changed only by an earlier stamp | is not stamped again |
@@ -414,10 +415,10 @@ One block per save:
 
 ```
 === 2026-09-28T15:42:00-04:00  save  RAW.ged
-note     Edited by hand in gedview.
+note     Edited by hand in GEDCOM Viewer.
 before   sha256 <64 hex>  4200000 bytes  123456 lines
 after    sha256 <64 hex>  4200092 bytes  238491 lines
-backup   gedview-history/RAW.2026-09-28T154200.ged.bak
+backup   gedcom-viewer-history/RAW.2026-09-28T154200.ged.bak
 changed  41202 -> 41202  @I42@ INDI
   - 1 NAME Jane /Fixtur/
   + 1 NAME Jane /Fixture/
@@ -438,8 +439,8 @@ a repo (I9).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│ gedview 0.3  RAW.ged ●   Open GEDCOM  Save  Save a copy   Undo Redo   Indent Theme │
-│ GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com Family Trees 2025.08 · 4.2 MB ·… │
+│ GEDCOM Viewer 0.4 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy Back [Go to Line…] │
+│ (a click on the name: GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com… · sha256) │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │ People 2,345   Media 1,234   Families 1,098   Sources 765   _MTTAG 23   Repositories 7   …   │
 ├──────────────────┬─────────────────────────────────────────────────┬────────────────────────┤
@@ -462,7 +463,10 @@ a repo (I9).
 | The right pane | the selected line's whole value, wrapped; the joined value when the line is part of a `CONC`/`CONT` run (read only); its record; for a record line, the lines that point at it; its findings |
 | Checks | grouped by check with counts, errors first; a click jumps to the line |
 | Search | any text in the line as written; a count; next and previous; an id typed whole (`@I42@`) goes to its record first |
-| Go to line | a number |
+| Go to Line… | a number goes to that line; two (`105-117`) show those lines alone, with a Go button while something is typed and × to show every line again (the owner, 2026-09-28: nothing on the screen points the range out) |
+| The file's name | a chip after the name GEDCOM Viewer; a click shows the file's facts under it, and hides them (remembered). Each fact that comes from a header line goes to it when clicked: the version to `GEDC`'s `VERS`, the encoding to `CHAR`, the date to `DATE`, the exporter to `SOUR`. Open GEDCOM leaves the top bar while a file is open: ⌘O, a drop, or Open another GEDCOM… among the facts |
+| Edit | off whenever a file opens: the file is read, and a double-click highlights a word (a click redraws the rows' looks only, so a highlight holds, to copy). On (⌘E): Enter or a double-click types over a line; the right frame offers Edit line · Add inside · Add after · Delete line · Delete record; ⌫ deletes; and each line removed since the last save stays where it was, struck through in red under its line number as saved — a click on it offers Restore, which puts its run of removed lines back as one step |
+| Types | in a file bunched by record type — each type's records in one run — a row between two types (`▾ INDI People 2,345`); a click shuts or opens every record of that type, ⌥-click every type. A file not bunched has none |
 | Leaving with unsaved changes | the browser asks first |
 
 **The look is the sibling project's.** Copy the three palettes from `sibling/frontend/src/index.css` — `:root`
@@ -480,8 +484,9 @@ README lists the properties and what each one moves.
 holds an example value.
 
 **Keys:** arrows, Page Up/Down, Home, End move the selection · ← shuts a block or goes up to the
-line above it, → opens it or goes down into it · Enter edits · Esc drops the edit · ⌫ deletes the
-line and its subtree · ⌘Z undo · ⇧⌘Z redo · ⌘S save · ⇧⌘S save a copy · ⌘F search · ⌘L go to line.
+line above it, → opens it or goes down into it · ⌘E Edit on or off · Enter edits · Esc drops the
+edit · ⌫ deletes the line and its subtree · ⌘Z undo · ⇧⌘Z redo · ⌘S save · ⇧⌘S save a copy · ⌘O
+open another file · ⌘F search · ⌘L go to line.
 
 **Blocks open and shut** (the owner's ask of 2026-09-28): every line with a subtree shows ▾, or ▸
 when shut; a shut line hides its subtree and shows how many lines it holds, in the changed colour
@@ -489,7 +494,8 @@ when one of them is not yet saved. ⌥-click opens or shuts every block at that 
 jumps to a hidden line opens the blocks around it. Display only (I4), and never remembered.
 
 **Remembered between visits** (`localStorage`): indent on/off and width, theme, panel widths, the
-change-stamp checkbox. Never a file's name, content or handle.
+change-stamp checkbox, whether the file's facts show. Never a file's name, content or handle; and
+Edit is off whenever a file opens.
 
 ---
 
@@ -514,7 +520,7 @@ change-stamp checkbox. Never a file's name, content or handle.
 | `tools/chrome.js` | headless Chrome over its DevTools protocol, at the page's `file://` address, for `walk.js` | — |
 | `local/` | **git-ignored**; the place for copies of real files | — |
 | `README.md` | how to open it, how to run the tests, how to change the look | — |
-| `.gitignore` | `local/` · `fixtures/corpora/*/` · `gedview-history/` · `*.edits.log` · `*.bak` · `.DS_Store` | — |
+| `.gitignore` | `local/` · `fixtures/corpora/*/` · `gedcom-viewer-history/` (and `gedview-history/`, its name before R7) · `*.edits.log` · `*.bak` · `.DS_Store` | — |
 
 `core.js` and `save.js` each work both as a classic script in the page and under Node:
 
@@ -649,7 +655,7 @@ clipped in the grid and whole in the right pane · the three themes.
 
 **The editing walk (phase 4), same copy:** one name edited → Changes shows one line → Save →
 the folder is asked for once → the dialog lists the change and the stamp → saved → the folder
-holds the backup in `gedview-history/` and the log → `shasum -a 256` of the backup is
+holds the backup in `gedcom-viewer-history/` and the log → `shasum -a 256` of the backup is
 `<sha256>` → the saved file differs from the backup only in that record → Undo twice (the stamp,
 then the edit), Save with the stamp box unticked → the file's sha256 is `<sha256>` again → a
 record deleted with its pointers, then undone → Save a copy writes the dated name → the file
@@ -813,7 +819,7 @@ On a **copy** of the raw export in a folder of its own, where its backup and log
    right pane says **Was**, Changes says 1, ● follows the name.
 3. **Save**. Chrome asks for the folder — pick the one the copy is in — then asks to let the page
    edit files there: allow. The dialog lists the change and the one stamp. Save.
-4. In Finder: `gedview-history/` holds the backup, and `<name>.ged.edits.log` sits beside the copy.
+4. In Finder: `gedcom-viewer-history/` holds the backup, and `<name>.ged.edits.log` sits beside the copy.
    `shasum -a 256` of the backup is `<sha256>`.
 5. **Undo** twice (the stamp, then the edit), **Save** with Change stamps unticked: `shasum -a 256`
    of the copy is `<sha256>` again.
@@ -825,3 +831,25 @@ On a **copy** of the raw export in a folder of its own, where its backup and log
 9. ⌥-click a ▾ on any `0` line: every record shuts. Go to a line inside one: it opens.
 
 He says it is done, and it is v1.0.
+
+### The owner's second round (2026-09-28, after phase 4): v0.4
+
+Asked, from his first look at v0.3: GEDCOM Viewer as the name (R7); Edit as a mode ("let's pick
+and choose one"); a line removed kept in sight, struck through, and restorable; a row between
+record types, and every record of a type shut at once; Go to Line… taking a range, with Go and ×;
+Open GEDCOM out of the top bar while a file is open; the file's facts behind its name, each going
+to its line; Add child and Add sibling renamed; the name and the file's name to stand out; and a
+double-click that edits, and a highlight that holds. Built as section 11 now says. Settled:
+
+| Settled | Why |
+|---|---|
+| **Edit is a mode**, a button beside Undo; off whenever a file opens | his words for it; a file is read before it is changed, and Edit off frees the double-click to highlight a word |
+| Removed lines show only with Edit on; with it off, the lines are the file as it will be saved, and a red rule marks where lines went | one switch, not two (he offered a Show Deletions button as the other way) |
+| A line typed and removed again before any save is not shown struck: it was never in the file | the struck lines are the net change's (9.4) |
+| Restore puts back the whole run of removed lines a struck line is in, as one step, and is a change like any other | a record's lines come back together; a line alone could land in no record |
+| The row between types appears only when every type is in one run | his condition: "if the GEDCOM is well-formed"; a file of interleaved types would be all rows |
+| Add child → **Add inside**, Add sibling → **Add after** | child and sibling mean people in genealogy; inside and after mean the block |
+| The name: a serif, GEDCOM in the palette's sepia; the file's name: a chip, its facts behind a ▸ | "stylize that title … stand out better" |
+| The main frame redraws only the rows' looks on a click | it redrew every row, so a highlight vanished and a double-click's second click landed on text just replaced |
+| The frames are the top bar, the counts bar, the left bar, the main frame, the right frame | his words; the README uses them |
+

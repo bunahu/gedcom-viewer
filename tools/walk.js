@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gedview — the page, walked: BUILD-BRIEF section 15's read-only walk, and the rest of the page.
+// GEDCOM Viewer — the page, walked: BUILD-BRIEF section 15's read-only walk, and the rest of the page.
 //
 // Headless Chrome opens the page at its own address (file://), and each file goes in through the
 // page's file input, as a person choosing it would. What the page shows is checked against what
@@ -257,6 +257,7 @@ async function timedEdit(page, m) {
   let at = Math.floor(m.n / 2);
   while (at < m.n - 1 && !(m.level[at] > 0)) at += 1;
   await gotoLine(page, at + 1);
+  await page.click("document.getElementById('edit')");                // Edit on
   await page.key('Enter', 'Enter', 13);
   await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
   await page.type(' x');
@@ -267,6 +268,7 @@ async function timedEdit(page, m) {
   check(ms < EDIT_BUDGET_MS, `an edit on line ${fmt(at + 1)}, in the page only: checked again whole and shown changed in ${fmt(ms)} ms (budget ${EDIT_BUDGET_MS} ms)`);
   await page.key('z', 'KeyZ', 90, 4);                                // ⌘Z
   await page.waitFor("!document.querySelector('#grid .row.is-changed') && document.getElementById('dirty').hidden");
+  await page.click("document.getElementById('edit')");                // Edit off
   check(true, '…and undone: nothing is changed, nothing was written');
 }
 
@@ -394,7 +396,7 @@ async function restOfThePage(page, dir, shots) {
     document.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
   })()`);
   await page.waitFor("document.getElementById('file-name').textContent === 'dropped.ged'");
-  const dropped = await page.ev(`({ markGone: document.getElementById('drop').hidden, rows: ${VISIBLE('grid')}.length })`);
+  const dropped = await page.ev(`({ markGone: document.getElementById('drop').hidden, rows: ${VISIBLE('grid')}.filter((r) => !r.classList.contains('is-section')).length })`);
   check(dropped.markGone && dropped.rows === 5, `a dropped file opens (${dropped.rows} lines shown), and the drop mark goes away`);
 
   // a file of more lines than a page can be tall
@@ -410,8 +412,12 @@ async function restOfThePage(page, dir, shots) {
 // Editing on the page, on the fictional file
 // ---------------------------------------------------------------------------------------------
 
-// How many rows the grid has: its whole height in rows.
-const ROWS = "(() => { const g = document.getElementById('grid'); return Math.round(g.scrollHeight / parseFloat(getComputedStyle(g).getPropertyValue('--row-height'))); })()";
+// How many rows the grid has: its whole height in rows, as its last layout measured it (the view
+// and the room below it, set together) — or, when they all fit in the view, the rows drawn.
+const ROWS = `(() => { const g = document.getElementById('grid'); const h = parseFloat(getComputedStyle(g).getPropertyValue('--row-height'));
+  const spare = parseFloat(g.querySelector('.v-spacer').style.height) || 0;
+  const view = parseFloat(g.querySelector('.v-rows').style.height) || 0;
+  return spare > 0 ? Math.round((spare + view) / h) : [...g.querySelectorAll('.v-inner > div')].filter((r) => r.style.display !== 'none').length; })()`;
 const ROW_AFTER_SELECTED = "(() => { const r = document.querySelector('#grid .row.is-sel'); const n = r && r.nextElementSibling; return n ? n.querySelector('.ln').textContent : null; })()";
 const BUTTON = (where, label) => `[...document.querySelectorAll('${where} button')].find((b) => b.textContent === ${JSON.stringify(label)})`;
 const ACTION = (label) => BUTTON('#detail .detail-actions', label);
@@ -424,19 +430,62 @@ async function editingOnThePage(page, dir, shots) {
   console.log(`\n== editing on the page, on the fictional file of ${fmt(m.n)} lines`);
   await page.openFile(file);
 
-  // the bar and the facts line
-  const opens = await page.ev(`[document.getElementById('open').textContent, document.getElementById('open-empty').textContent]`);
-  check(opens.every((o) => o === 'Open GEDCOM'), `the Open buttons read "${opens[0]}"`);
-  const facts = await page.ev("document.getElementById('facts').textContent");
+  // the name, the file's name, its facts behind it; Open GEDCOM gone from the top bar
+  const bar = await page.ev(`({ title: document.querySelector('.app-title').textContent, window: document.title,
+    open: document.getElementById('open').hidden, empty: document.getElementById('open-empty').textContent,
+    facts: document.getElementById('facts').hidden, name: document.getElementById('file-name').textContent })`);
+  check(bar.title === 'GEDCOM Viewer' && bar.window === 'fiction.ged — GEDCOM Viewer',
+    `the name: "${bar.title}" in the top bar, "${bar.window}" in the window's title`);
+  check(bar.open && bar.empty === 'Open GEDCOM', 'with a file open, Open GEDCOM is not in the top bar');
+  await page.click("document.getElementById('file-name')");
+  const facts = await page.ev("[...document.getElementById('facts').children].map((x) => x.textContent)");
   const size = `${(bytes.length / 1e6).toFixed(1)} MB`;
-  check(facts === `GEDCOM 5.5.1 · UTF-8 · exported 28 SEP 2026 by gedview-walk 1.0 · ${size} · ${fmt(m.n)} lines · sha256`,
-    `the facts line, in the owner's order: ${facts}`);
+  check(bar.facts && JSON.stringify(facts) === JSON.stringify(['GEDCOM 5.5.1', 'UTF-8', 'exported 28 SEP 2026', 'by gedview-walk 1.0', size,
+    `${fmt(m.n)} lines`, 'sha256', 'Open another GEDCOM…']), `the facts, hidden until the name is clicked: ${facts.join(' · ')}`);
+  const goes = [];
+  for (const [k, text] of [[0, 'GEDCOM 5.5.1'], [1, 'UTF-8'], [2, 'exported'], [3, 'by']]) {
+    await page.click(`document.querySelectorAll('#facts .fact.is-link')[${k}]`);
+    const s = await page.ev(SELECTED);
+    goes.push(`${text} → line ${s.ln} (${s.tag})`);
+  }
+  check(goes.join(', ') === 'GEDCOM 5.5.1 → line 6 (VERS), UTF-8 → line 7 (CHAR), exported → line 4 (DATE), by → line 2 (SOUR)',
+    `each fact goes to the line it came from: ${goes.join(', ')}`);
   const told = await page.ev("document.querySelector('#facts .sha').title");
   check(/fingerprint of the file's exact bytes/.test(told), 'the sha256 says on hover what it is');
   await page.click("document.querySelector('#facts .sha')");
   await page.waitFor("document.querySelector('#facts .hash')");
   const hex = await page.ev("document.querySelector('#facts .hash').textContent");
   check(hex === crypto.createHash('sha256').update(bytes).digest('hex'), `…and, clicked, shows it: ${hex.slice(0, 12)}…, as shasum gives it`);
+  await page.click("document.getElementById('file-name')");
+  check(await page.ev("document.getElementById('facts').hidden"), 'a second click on the name hides them');
+
+  // sections: a row between record types; one shut; every one shut; opened by a jump
+  const types = [];
+  for (const line of m.records) if (!types.length || types[types.length - 1].tag !== m.tag[line]) types.push({ tag: m.tag[line], from: line });
+  types.forEach((s, k) => { s.to = k + 1 < types.length ? types[k + 1].from : m.n; });
+  const sectionRows = types.length - 1;
+  check((await page.ev(ROWS)) === m.n + sectionRows && (await page.ev("document.querySelectorAll('#grid .row.is-section').length")) > 0,
+    `a row between each two record types: ${sectionRows} of them (${types.map((s) => s.tag).join(' · ')})`);
+  const indi = types.find((s) => s.tag === 'INDI');
+  await gotoLine(page, indi.from);                                   // the row above the section, so it is in view
+  await page.click(`[...document.querySelectorAll('#grid .row.is-section')].find((r) => r.querySelector('.tg').textContent === 'INDI')`);
+  const shutIndi = await page.ev(`({ rows: ${ROWS}, text: [...document.querySelectorAll('#grid .row.is-section')].find((r) => r.querySelector('.tg').textContent === 'INDI').textContent })`);
+  check(shutIndi.rows === m.n + sectionRows - (indi.to - indi.from),
+    `a click on the INDI row shuts every person into it: "${shutIndi.text.trim()}"`);
+  await page.click(`[...document.querySelectorAll('#grid .row.is-section')].find((r) => r.querySelector('.tg').textContent === 'INDI')`);
+  await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
+  await page.click(`[...document.querySelectorAll('#grid .row.is-section')].find((r) => r.querySelector('.tg').textContent === 'INDI')`, undefined, 1);
+  const head = types[0].to - types[0].from;
+  await page.waitFor(`${ROWS} === ${head + sectionRows}`);
+  check(true, `⌥-click shuts every section: ${head + sectionRows} rows — the header's ${head} lines, and one row per type`);
+  await shot('sections');
+  await gotoLine(page, indi.from + 3);
+  check((await page.ev(`${ROWS} === ${head + sectionRows + indi.to - indi.from}`)) && (await page.ev(SELECTED)).ln === indi.from + 3,
+    `Go to line ${fmt(indi.from + 3)} opens the INDI section around it`);
+  await page.key('Home', 'Home', 36);                                // the top, where the SUBM row is
+  await page.click(`[...document.querySelectorAll('#grid .row.is-section')].find((r) => r.querySelector('.tg').textContent === 'SUBM')`, undefined, 1);
+  await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
+  check(true, `⌥-click on a shut one opens every section again: ${fmt(m.n + sectionRows)} rows`);
 
   // blocks: one shut and opened, every record shut and opened, a hidden line revealed
   const i3 = m.definedAt.get('@I3@')[0];
@@ -450,28 +499,63 @@ async function editingOnThePage(page, dir, shots) {
   check((await page.ev(ROW_AFTER_SELECTED)) === fmt(i3 + 2), '→ opens it again');
   const t0 = Date.now();
   await page.click("document.querySelector('#grid .row.is-sel .fold')", undefined, 1);    // ⌥-click
-  await page.waitFor(`${ROWS} === ${m.records.length}`);
-  check(true, `⌥-click shuts every block at level 0: ${fmt(m.records.length)} rows, one per record, in ${fmt(Date.now() - t0)} ms`);
+  await page.waitFor(`${ROWS} === ${m.records.length + sectionRows}`);
+  check(true, `⌥-click shuts every block at level 0: one row per record, ${fmt(m.records.length)}, in ${fmt(Date.now() - t0)} ms`);
   await shot('shut');
   const hidden = m.definedAt.get('@I42@')[0] + 9;                   // 3 PAGE, inside @I42@
   await gotoLine(page, hidden + 1);
   const opened = await page.ev(ROWS);
-  check(opened === m.records.length + core.subtreeEnd(m, hidden - 9) - (hidden - 9) - 1,
+  check(opened === m.records.length + sectionRows + core.subtreeEnd(m, hidden - 9) - (hidden - 9) - 1,
     `Go to line ${fmt(hidden + 1)}, hidden in a shut block, opens the block around it (${fmt(opened)} rows)`);
   await gotoLine(page, i3 + 1);
   await page.click("document.querySelector('#grid .row.is-sel .fold')", undefined, 1);
-  await page.waitFor(`${ROWS} === ${m.n}`);
-  check(true, `⌥-click on a shut one opens every block again: ${fmt(m.n)} rows`);
+  await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
+  check(true, `⌥-click on a shut one opens every block again: ${fmt(m.n)} lines`);
 
-  // an edit: Enter, typed, Enter; marked in its row, in Changes and in the right pane
+  // Go to Line…: a range shows those lines alone; × brings them all back
+  const placeholder = await page.ev("document.getElementById('goto').placeholder");
+  await page.key('l', 'KeyL', 76, 4);
+  await page.type('105-117');
+  const go = await page.ev("!document.getElementById('goto-go').hidden");
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor(`${ROWS} === 13`);
+  const shown = await page.ev(`${VISIBLE('grid')}.map((r) => r.querySelector('.ln').textContent)`);
+  const clear = await page.ev("!document.getElementById('goto-clear').hidden");
+  check(placeholder === 'Go to Line…' && go && clear && shown[0] === '105' && shown[shown.length - 1] === '117',
+    `"${placeholder}" — 105-117 (Go shown while typed) shows lines ${shown[0]}–${shown[shown.length - 1]} alone, and ×`);
+  await page.click("document.getElementById('goto-clear')");
+  await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
+  check(await page.ev("document.getElementById('goto-clear').hidden && document.getElementById('goto').value === ''"), '× shows every line again');
+
+  // Edit off: Enter and a double-click do not edit; the double-click highlights a word, and it holds
   const name = m.definedAt.get('@I42@')[0] + 1;
   await gotoLine(page, name + 1);
   await page.key('Enter', 'Enter', 13);
+  const at = await page.ev(`(() => { const t = [...document.querySelectorAll('#grid .row.is-sel .tx .val')][0]; const b = t.getBoundingClientRect(); return { x: b.left + 12, y: b.top + b.height / 2 }; })()`);
+  for (const count of [1, 2]) {
+    await page.mouse('mousePressed', at.x, at.y, { clickCount: count });
+    await page.mouse('mouseReleased', at.x, at.y, { clickCount: count });
+  }
+  await sleep(100);
+  const readOnly = await page.ev("({ box: !!document.querySelector('#grid input.edit'), word: window.getSelection().toString(), actions: !!document.querySelector('#detail .detail-actions') })");
+  check(!readOnly.box && readOnly.word === 'Person42' && !readOnly.actions,
+    `with Edit off, Enter and a double-click edit nothing; the double-click highlights "${readOnly.word}", and it holds to be copied`);
+
+  // Edit on: a double-click types over the line; kept, it is marked in its row, in Changes and in the right frame
+  await page.click("document.getElementById('edit')");
+  const labels = await page.ev("[...document.querySelectorAll('#detail .detail-actions button')].map((b) => b.textContent)");
+  check(JSON.stringify(labels) === JSON.stringify(['Edit line', 'Add inside', 'Add after', 'Delete line', 'Delete record']),
+    `Edit on: the right frame offers ${labels.join(' · ')}`);
+  for (const count of [1, 2]) {
+    await page.mouse('mousePressed', at.x, at.y, { clickCount: count });
+    await page.mouse('mouseReleased', at.x, at.y, { clickCount: count });
+  }
   await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
   const inBox = await page.ev("document.querySelector('#grid .row.is-sel input.edit').value");
-  check(inBox === m.texts[name], `Enter opens the line for typing, whole: "${inBox}"`);
+  check(inBox === m.texts[name], `a double-click opens the line for typing, whole: "${inBox}"`);
+  await page.ev("(() => { const i = document.querySelector('#grid input.edit'); i.setSelectionRange(i.value.length, i.value.length); })()");
   await page.type(' Jr');
-  let t1 = Date.now();
+  const t1 = Date.now();
   await page.key('Enter', 'Enter', 13);
   await page.waitFor("document.querySelector('#grid .row.is-sel.is-changed')");
   const ms = Date.now() - t1;
@@ -481,7 +565,7 @@ async function editingOnThePage(page, dir, shots) {
     text: document.querySelector('#grid .row.is-sel .tx').textContent })`);
   check(marked.text === `${m.texts[name]} Jr` && ms < EDIT_BUDGET_MS, `Enter keeps it: "${marked.text}", the ${fmt(m.n)} lines checked again in ${fmt(ms)} ms`);
   check(marked.count === '1' && marked.was === m.texts[name] && marked.dirty && marked.save,
-    `it shows: its row marked, Changes ${marked.count}, the right pane's Was "${marked.was}", ● by the name, Save on`);
+    `it shows: its row marked, Changes ${marked.count}, the right frame's Was "${marked.was}", ● by the name, Save on`);
   await shot('edited');
   await page.key('z', 'KeyZ', 90, 4);
   await page.waitFor("!document.querySelector('#grid .row.is-changed')");
@@ -496,8 +580,8 @@ async function editingOnThePage(page, dir, shots) {
   await page.waitFor("!document.querySelector('#grid input.edit')");
   check((await page.ev("document.querySelector('#grid .row.is-sel .tx').textContent")) === `${m.texts[name]} Jr`, 'Esc drops what was typed');
 
-  // a line added under the name
-  await page.click(ACTION('Add child'));
+  // a line added inside the name's block
+  await page.click(ACTION('Add inside'));
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   const offered = await page.ev("document.querySelector('#grid input.edit').value");
   await page.type('NOTE added by the walk');
@@ -506,9 +590,10 @@ async function editingOnThePage(page, dir, shots) {
   const added = await page.ev(`(() => { const r = [...document.querySelectorAll('#grid .row')].find((x) => x.querySelector('.ln') && x.querySelector('.ln').textContent === ${JSON.stringify(fmt(name + 2))});
     return r ? { added: r.classList.contains('is-added'), text: r.querySelector('.tx').textContent } : null; })()`);
   check(offered === '2 ' && added && added.added && added.text === '2 NOTE added by the walk',
-    `Add child offers "${offered}" one level deeper; the new line ${fmt(name + 2)} is marked added`);
+    `Add inside offers "${offered}", one level deeper; the new line ${fmt(name + 2)} is marked added`);
 
-  // a record deleted with the line that points at it, previewed, then undone
+  // a record deleted with the line that points at it, previewed; with Edit on, its lines stay,
+  // struck through; one run restored; the rest undone
   const record = m.definedAt.get('@I42@')[0];
   await gotoLine(page, record + 1);
   await page.click(ACTION('Delete record'));
@@ -521,12 +606,25 @@ async function editingOnThePage(page, dir, shots) {
   await shot('delete-record');
   const before = await page.ev(ROWS);
   await page.click(BUTTON('#dialog', 'Delete'));
-  await page.waitFor(`${ROWS} === ${before - 13}`);
-  const after = await page.ev("document.getElementById('checks-sum').textContent");
-  check(after.startsWith('0 errors'), `deleted — 12 lines and the pointer — one step: ${after}, no pointer left pointing at nothing`);
+  await page.waitFor("document.querySelector('#grid .row.is-removed')");
+  const struck = await page.ev(`({ rows: ${ROWS}, first: (document.querySelector('#grid .row.is-removed') || {}).textContent, errors: document.getElementById('checks-sum').textContent })`);
+  check(struck.rows === before - 1 && struck.first === `${fmt(record + 1)}0 @I42@ INDI` && struck.errors.startsWith('0 errors'),
+    `deleted — 12 lines and the pointer, one step, ${struck.errors.split(' · ')[0]} — and with Edit on the 11 the file holds, and the pointer, stay where they were, struck through; the line added a moment ago was never in the file, and is simply gone`);
+  await shot('removed');
+  await page.click("document.getElementById('edit')");
+  const readRows = await page.ev(ROWS);
+  await page.click("document.getElementById('edit')");
+  check(readRows === before - 13, `with Edit off they are gone from the lines (${fmt(before - readRows)} fewer rows), a red rule where they were`);
+  await page.click("document.querySelector('#grid .row.is-removed')");
+  const offer = await page.ev("[...document.querySelectorAll('#detail .detail-actions button')].map((b) => b.textContent)");
+  await page.click(ACTION(offer[0]));
+  await page.waitFor("document.getElementById('changes-count').textContent === '1'");
+  const back = await page.ev(`(${SELECTED}).id`);
+  check(offer[0] === 'Restore 11 lines' && back === '@I42@', `a struck line clicked offers "${offer[0]}"; restored, @I42@ is back in its place`);
   await page.key('z', 'KeyZ', 90, 4);
-  await page.waitFor(`${ROWS} === ${before}`);
-  check(true, '⌘Z brings all of it back');
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor("document.getElementById('changes-count').textContent === '2'");
+  check(true, '⌘Z takes back the restore, then the delete');
 
   // a line with lines under it asks first; Cancel leaves it
   const birt = m.definedAt.get('@I42@')[0] + 5;
@@ -536,15 +634,15 @@ async function editingOnThePage(page, dir, shots) {
   const asked = await page.ev("document.querySelector('#dialog .dialog-title').textContent");
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(asked === `Delete line ${fmt(birt + 2)}, and the 4 lines under it?` && (await page.ev(ROWS)) === before,
-    `⌫ on a line with lines under it asks first — "${asked}" — and Cancel leaves it`);
+  check(asked === `Delete line ${fmt(birt + 2)}, and the 4 lines under it?`, `⌫ on a line with lines under it asks first — "${asked}" — and Cancel leaves it`);
 
-  // everything undone: the file as it was, nothing to save
+  // everything undone: the file as it was, nothing to save; Edit off
   for (let guard = 0; guard < 20 && !(await page.ev("document.getElementById('undo').disabled")); guard += 1) {
     await page.click("document.getElementById('undo')");
   }
   const clean = await page.ev("({ dirty: !document.getElementById('dirty').hidden, count: document.getElementById('changes-count').textContent })");
   check(!clean.dirty && clean.count === '', 'Undo to the start: nothing is changed');
+  await page.click("document.getElementById('edit')");
 }
 
 // The edges of typing a line, on two of the written files (fictional people): a click elsewhere
@@ -556,8 +654,8 @@ async function editingEdges(page) {
   const family = path.join(ROOT, 'fixtures', 'synthetic', 'family.ged');
   const m = core.read(new Uint8Array(fs.readFileSync(family)));
   const row = (n) => `[...document.querySelectorAll('#grid .row')].find((r) => r.querySelector('.ln') && r.querySelector('.ln').textContent === '${n}')`;
-  const text = (n) => page.ev(`(${row(n)} || {}).textContent`);
   await page.openFile(family);
+  await page.click("document.getElementById('edit')");               // Edit on
 
   await gotoLine(page, 17);
   await page.key('Enter', 'Enter', 13);
@@ -570,18 +668,18 @@ async function editingEdges(page) {
     `a click on line 20 while line 17 is typed in keeps what was typed, and lands: line ${s.ln} is selected`);
 
   await gotoLine(page, 7);
-  await page.click(ACTION('Add child'));
+  await page.click(ACTION('Add inside'));
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   await page.type('NOTE added');
   await page.click(row(20), 60);
   await page.waitFor("!document.querySelector('#grid input.edit')");
   s = await page.ev(SELECTED);
   check((await page.ev(`${row(8)}.querySelector('.tx').textContent`)) === '2 NOTE added' && s.ln === 21 && s.tag === m.tag[19],
-    `…and after an Add child: the new line is 8, and the line clicked, now line ${s.ln} (${s.tag}), is selected`);
+    `…and after an Add inside: the new line is 8, and the line clicked, now line ${s.ln} (${s.tag}), is selected`);
 
   await page.click("document.querySelector('.tab[data-panel=records]')");
   await page.waitFor(LAID_OUT('records-list'));
-  await page.click(ACTION('Add sibling'));
+  await page.click(ACTION('Add after'));
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   const rowsBefore = await page.ev(`${VISIBLE('grid')}.length`);
   await page.click(`${VISIBLE('records-list')}.find((r) => r.firstChild.textContent === '@F2@')`);
@@ -610,22 +708,23 @@ async function editingEdges(page) {
   check(pasted.value === shown18 && /cannot hold a line break/.test(pasted.said), `a paste holding a line break is refused, and said: "${pasted.said}"`);
   await page.key('Escape', 'Escape', 27);
 
-  await page.click("document.getElementById('open')");
+  await page.key('o', 'KeyO', 79, 4);                                // ⌘O
   await page.waitFor("document.getElementById('dialog').open");
   const asked = await page.ev("document.querySelector('#dialog .dialog-title').textContent");
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
   check(asked === 'family.ged has changes that are not saved' && !(await page.ev("document.getElementById('dirty').hidden")),
-    `Open GEDCOM with changes not saved asks first — "${asked}" — and Cancel keeps them`);
+    `⌘O, to open another file, with changes not saved asks first — "${asked}" — and Cancel keeps them`);
   for (let guard = 0; guard < 10 && !(await page.ev("document.getElementById('undo').disabled")); guard += 1) {
     await page.click("document.getElementById('undo')");
   }
 
   await page.openFile(path.join(ROOT, 'fixtures', 'synthetic', 'e8-bad-bytes.ged'));
+  await page.click("document.getElementById('edit')");
   await gotoLine(page, 8);
   await page.key('Enter', 'Enter', 13);
   const e8 = await page.ev(`({ box: !!document.querySelector('#grid input.edit'), said: document.getElementById('notice').textContent,
-    off: ${ACTION('Edit')}.disabled })`);
+    off: ${ACTION('Edit line')}.disabled })`);
   check(!e8.box && e8.off && /\(E8\)/.test(e8.said), `a line whose bytes could not be read is not opened for typing, and Edit is off: "${e8.said}"`);
 }
 
@@ -682,6 +781,7 @@ async function saveInPlace(page, dir) {
     '0 @I1@ INDI\n1 NAME Jane /Fixture/\n1 SEX F\n0 @I2@ INDI\n1 NAME Joe /Fixture/\n0 TRLR\n';
   fs.writeFileSync(file, text);
   await page.openFile(file);
+  await page.click("document.getElementById('edit')");
   await page.ev(STAND_IN_FOLDER);
   await page.ev(`window.__folder.entries.set('small.ged', new window.__File('small.ged', Uint8Array.from(atob(${JSON.stringify(Buffer.from(text).toString('base64'))}), (c) => c.charCodeAt(0))))`);
   await gotoLine(page, 12);
@@ -699,7 +799,7 @@ async function saveInPlace(page, dir) {
   await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
   const said = await page.ev("document.getElementById('notice').textContent");
   const saved = Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8');
-  const backupPath = (said.match(/in (gedview-history\/\S+\.bak)\./) || [])[1];
+  const backupPath = (said.match(/in (gedcom-viewer-history\/\S+\.bak)\./) || [])[1];
   const backup = backupPath ? Buffer.from(await page.ev(IN_FOLDER(backupPath)), 'base64').toString('utf8') : null;
   const log = (Buffer.from(await page.ev(IN_FOLDER('small.ged.edits.log')) || '', 'base64').toString('utf8')).split('\n');
   const lines = saved.split('\n');
@@ -747,6 +847,7 @@ async function copyWithoutPickers(page, dir, shots) {
   await page.goto(`file://${path.join(ROOT, 'index.html')}`);
   check(await page.ev("!('showSaveFilePicker' in window) && !('showDirectoryPicker' in window)"), 'the page, loaded again with no pickers');
   await page.openFile(file);
+  await page.click("document.getElementById('edit')");
   await gotoLine(page, 9);
   await page.key('Enter', 'Enter', 13);
   await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");

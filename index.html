@@ -3,30 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gedview</title>
+<title>GEDCOM Viewer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="bar">
   <div class="bar-top">
-    <span class="app-name">gedview <span class="version" title="gedview's version">0.3</span></span>
-    <span class="file-name" id="file-name"></span>
+    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.4</span></span>
+    <button class="file-name" id="file-name" type="button" aria-expanded="false" hidden></button>
     <span class="dirty" id="dirty" title="Changed since it was opened or last saved" hidden>●</span>
     <nav class="actions">
       <button class="button" id="open" type="button">Open GEDCOM</button>
-      <button class="button" id="save" type="button" title="Save, in place (⌘S)" disabled>Save</button>
-      <button class="button" id="save-copy" type="button" title="Save a dated copy (⇧⌘S)" disabled>Save a copy</button>
+      <button class="button" id="edit" type="button" aria-pressed="false" title="Edit on or off (⌘E)" disabled>Edit</button>
       <button class="button" id="undo" type="button" disabled>Undo</button>
       <button class="button" id="redo" type="button" disabled>Redo</button>
+      <button class="button" id="save" type="button" title="Save, in place (⌘S)" disabled>Save</button>
+      <button class="button" id="save-copy" type="button" title="Save a dated copy (⇧⌘S)" disabled>Save a copy</button>
+      <span class="gap"></span>
       <button class="button" id="back" type="button" disabled>Back</button>
-      <input class="input goto" id="goto" type="text" inputmode="numeric" placeholder="Line" aria-label="Go to line" disabled>
+      <span class="goto-box">
+        <input class="input goto" id="goto" type="text" placeholder="Go to Line…" aria-label="Go to line" autocomplete="off" disabled>
+        <button class="button goto-go" id="goto-go" type="button" hidden>Go</button>
+        <button class="button goto-clear" id="goto-clear" type="button" title="Every line again" hidden>×</button>
+      </span>
       <button class="button" id="indent" type="button" aria-pressed="false">Indent</button>
       <input class="input indent-width" id="indent-width" type="number" min="1" max="12" aria-label="Indent width" hidden>
       <button class="button" id="theme" type="button">Theme</button>
     </nav>
   </div>
-  <div class="facts" id="facts"></div>
+  <div class="facts" id="facts" hidden></div>
 </header>
 
 <nav class="counts" id="counts" aria-label="Records by type"></nav>

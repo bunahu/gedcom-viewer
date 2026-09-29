@@ -1,4 +1,4 @@
-/* gedview — ui.js
+/* GEDCOM Viewer — ui.js
  *
  * The page: the grid, the panels, the right pane, the dialogs, the keys. It is the only file that
  * knows the page and the browser's file pickers exist; what it shows, it asks core.js for, and
@@ -64,9 +64,18 @@
     indentWidth: clampWidth(store.get('indentWidth', 4)),
     theme: THEMES.includes(store.get('theme', 'light')) ? store.get('theme', 'light') : 'light',
     stamps: store.get('stamps', true) !== false,   // F1, V1: on unless unticked
+    showFacts: store.get('facts', false) === true,  // the file's facts, shown under its name
+    editing: false,                   // Edit: off when a file opens
     folds: new Set(),                 // the lines shut, by their number in the document's order
-    vis: new Int32Array(0),           // the lines the grid shows, first to last
-    pending: null,                    // a line being added: where it goes, and its row
+    sections: null,                   // the record types, when the file is bunched by type
+    shutSections: new Set(),          // the sections shut, by tag
+    range: null,                      // Go to Line… with a range: lines a to b alone
+    gotoApplied: '',                  // what Go to Line… last went to
+    rows: new Int32Array(0),          // the main frame's rows (see rebuildRows)
+    rowOf: new Int32Array(0),
+    extras: [],
+    pick: null,                       // a removed line selected (Edit on): its place as saved
+    pending: null,                    // a line being added: where it goes
     edit: null,                       // a line being typed
     marks: null,                      // per line: changed or added; where lines were removed
     runs: [],                         // the net change in runs: the Changes panel
@@ -212,7 +221,8 @@
   // drag of the scrollbar shows rows, never an empty screen.
   // ---------------------------------------------------------------------------------------------
 
-  function Virtual(scroller, paint) {
+  // `paint` draws a row whole; `style`, when given, only its look (Virtual.restyle).
+  function Virtual(scroller, paint, style) {
     const layer = el('div', 'v-rows');
     const inner = el('div', 'v-inner');
     const spacer = el('div', 'v-spacer');
@@ -270,6 +280,10 @@
         layout();
       },
       refresh() { version += 1; draw(); },
+      // Each row's look again, its contents kept (a highlight in them holds).
+      restyle() {
+        for (const r of pool) if (r._i >= 0 && r.style.display !== 'none') (style || paint)(r, r._i);
+      },
       rowHeight: () => h,
       pageRows: () => Math.max(1, Math.floor(scroller.clientHeight / h) - 1),
       // Bring row i into view: to a few rows below the top for a jump, by as little as it takes
@@ -290,9 +304,14 @@
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Blocks that open and shut. A line with lines under it (its subtree, 6.4) shows ▾ open or ▸
-  // shut; a shut line hides its subtree and says how many lines it holds. The grid's rows are the
-  // lines not hidden, `vis`; a line being added sits among them as one more row.
+  // The main frame's rows. Most are lines; the rest are the row of a line being added, a section's
+  // row between two record types, and — with Edit on — a line removed since the last save, shown
+  // struck through where it was. A line with lines under it (its subtree, 6.4) shows ▾ open or ▸
+  // shut; a shut line hides its subtree and says how many lines it holds; a shut section hides
+  // every record of its type. Go to Line… with a range shows those lines alone.
+  //
+  // `rows` holds a line's place (0 up), -1 for the line being added, or -2 down for `extras[k]`
+  // at -2 - k; `rowOf` holds each line's row, -1 when it is hidden.
   // ---------------------------------------------------------------------------------------------
 
   function hasKids(i) {
@@ -307,41 +326,86 @@
     if (shut) state.folds.add(e); else state.folds.delete(e);
   }
 
-  function rebuildVis() {
+  // The file's record types as sections — each type's records in one run — when every type is in
+  // one run, the file being bunched by type; else null, and no section rows.
+  function sectionsOf(m) {
+    const out = [];
+    const seen = new Set();
+    for (const line of m.records) {
+      const tag = m.tag[line];
+      const last = out[out.length - 1];
+      if (last && last.tag === tag) {
+        last.records += 1;
+        continue;
+      }
+      if (seen.has(tag)) return null;
+      seen.add(tag);
+      out.push({ tag, from: line, to: 0, records: 1, index: out.length });
+    }
+    out.forEach((s, k) => { s.to = k + 1 < out.length ? out[k + 1].from : m.n; });
+    return out.length > 1 ? out : null;
+  }
+
+  // The removed lines of the net change, by the place they were: the row of each goes just above
+  // the line now at that place.
+  function removedByPlace() {
+    const map = new Map();
+    for (const run of state.runs) {
+      if (run.kind !== 'removed') continue;
+      const list = map.get(run.at) || [];
+      for (let k = 0; k < run.lines.length; k += 1) list.push({ kind: 'removed', run, k });
+      map.set(run.at, list);
+    }
+    return map;
+  }
+
+  function rebuildRows() {
     const m = state.m;
-    const out = new Int32Array(m.n);
-    let k = 0;
-    for (let i = 0; i < m.n;) {
-      out[k] = i;
-      k += 1;
+    const n = m.n;
+    const rows = [];
+    const rowOf = new Int32Array(n).fill(-1);
+    const extras = [];
+    const extra = (x) => {
+      extras.push(x);
+      rows.push(-1 - extras.length);
+    };
+    const range = state.range;
+    const first = range ? range.a : 0;
+    const end = range ? range.b + 1 : n;
+    const starts = range || !state.sections ? null : new Map(state.sections.map((s) => [s.from, s]));
+    const removed = state.editing ? removedByPlace() : null;
+    const adding = state.pending;
+    for (let i = first; i <= end;) {
+      if (removed && removed.has(i) && (i < end || !range)) for (const x of removed.get(i)) extra(x);
+      if (adding && adding.at === i) rows.push(-1);
+      if (i === end) break;
+      const sec = starts && starts.get(i);
+      if (sec && sec.index > 0) {
+        extra({ kind: 'section', sec });
+        if (state.shutSections.has(sec.tag)) {
+          i = sec.to;
+          continue;
+        }
+      }
+      rowOf[i] = rows.length;
+      rows.push(i);
       i = isShut(i) ? C.subtreeEnd(m, i) : i + 1;
     }
-    state.vis = out.subarray(0, k);
-    if (state.pending) state.pending.row = lowerBound(state.vis, state.pending.at);
+    state.rows = Int32Array.from(rows);
+    state.rowOf = rowOf;
+    state.extras = extras;
   }
 
-  const rowCount = () => state.vis.length + (state.pending ? 1 : 0);
+  const rowCount = () => state.rows.length;
+  const rowOfLine = (i) => state.rowOf[i];
+  const extraOf = (v) => state.extras[-v - 2];
+  const isPicked = (x) => !!state.pick && x.kind === 'removed' && x.run.before === state.pick.before && x.k === state.pick.k;
 
-  // The line a row shows, or -1 for the row of a line being added.
-  function lineAtRow(k) {
-    const p = state.pending;
-    if (p) {
-      if (k === p.row) return -1;
-      if (k > p.row) return state.vis[k - 1];
-    }
-    return state.vis[k];
-  }
-
-  function rowOfLine(i) {
-    let r = lowerBound(state.vis, i);
-    if (state.pending && r >= state.pending.row) r += 1;
-    return r;
-  }
-
-  // The line that shows for line i: itself, or the shut line whose block hides it.
+  // The line shown nearest line i, at it or above it (below it, when nothing above is shown).
   function shownLineOf(i) {
-    const r = lowerBound(state.vis, i);
-    return r < state.vis.length && state.vis[r] === i ? i : state.vis[Math.max(0, r - 1)];
+    for (let j = Math.min(i, state.m.n - 1); j >= 0; j -= 1) if (state.rowOf[j] >= 0) return j;
+    for (let j = i + 1; j < state.m.n; j += 1) if (state.rowOf[j] >= 0) return j;
+    return -1;
   }
 
   // The lines above line i whose subtree holds it, nearest first.
@@ -358,20 +422,41 @@
     return out;
   }
 
-  // A line hidden in a shut block is shown: every block around it opens.
+  // A line that is hidden is shown: a range it is outside of goes, and every section and block
+  // around it opens.
   function reveal(i) {
-    if (!state.folds.size) return;
-    let opened = false;
-    for (const j of ancestors(i)) {
-      if (isShut(j)) {
-        setFold(j, false);
-        opened = true;
+    let changed = false;
+    if (state.range && (i < state.range.a || i > state.range.b)) {
+      state.range = null;
+      $('goto').value = '';
+      state.gotoApplied = '';
+      updateGoto();
+      changed = true;
+    }
+    for (const sec of state.sections || []) {
+      if (sec.index > 0 && i >= sec.from && i < sec.to && state.shutSections.delete(sec.tag)) changed = true;
+    }
+    if (state.folds.size) {
+      for (const j of ancestors(i)) {
+        if (isShut(j)) {
+          setFold(j, false);
+          changed = true;
+        }
       }
     }
-    if (opened) {
-      rebuildVis();
+    if (changed) {
+      rebuildRows();
       grid.setCount(rowCount(), true);
     }
+  }
+
+  // After a block or a section shuts, the selected line, if it is now hidden, is the shown line
+  // nearest it.
+  function keepSelectionShown(inView) {
+    if (state.sel >= 0 && state.rowOf[state.sel] < 0) state.sel = shownLineOf(state.sel);
+    if (inView !== undefined && inView >= 0) grid.show(inView);
+    grid.restyle();
+    renderDetail();
   }
 
   // Open or shut line i's block; with ⌥, every block at its level.
@@ -382,41 +467,69 @@
       const m = state.m;
       const lv = m.level[i];
       for (let j = 0; j < m.n; j += 1) if (m.level[j] === lv && hasKids(j)) setFold(j, shut);
-    } else setFold(i, shut);
-    rebuildVis();
+      state.sel = i;
+    }
+    else setFold(i, shut);
+    rebuildRows();
     grid.setCount(rowCount(), true);
-    state.sel = everyAtLevel ? i : shownLineOf(state.sel);
-    grid.show(rowOfLine(state.sel));
-    grid.refresh();
-    renderDetail();
+    keepSelectionShown(rowOfLine(i));
+  }
+
+  // Open or shut a section — every record of one type; with ⌥, every section.
+  function toggleSection(sec, every) {
+    const shut = !state.shutSections.has(sec.tag);
+    for (const s of every ? state.sections : [sec]) {
+      if (s.index === 0) continue;
+      if (shut) state.shutSections.add(s.tag); else state.shutSections.delete(s.tag);
+    }
+    rebuildRows();
+    grid.setCount(rowCount(), true);
+    const k = state.extras.findIndex((x) => x.kind === 'section' && x.sec.tag === sec.tag);
+    keepSelectionShown(k >= 0 ? state.rows.indexOf(-2 - k) : -1);
   }
 
   // ---------------------------------------------------------------------------------------------
   // The grid
   // ---------------------------------------------------------------------------------------------
 
-  function foldPart(i, lv, kids, shut) {
+  function foldPart(lv, kids, shut) {
     const fd = el('span', 'fd');
     if (state.indent && lv > 0) fd.style.paddingLeft = `${Math.min(lv, MAX_INDENT) * state.indentWidth}ch`;
-    const t = el('span', kids ? `fold ${shut ? 'is-shut' : 'is-open'}` : 'fold', kids ? (shut ? '▸' : '▾') : '');
-    if (kids) t.title = shut ? 'Open (⌥: every block at this level)' : 'Shut (⌥: every block at this level)';
-    fd.appendChild(t);
+    fd.appendChild(el('span', kids ? `fold ${shut ? 'is-shut' : 'is-open'}` : 'fold', kids ? (shut ? '▸' : '▾') : ''));
     return fd;
   }
 
-  function paintRow(row, k) {
-    const i = lineAtRow(k);
-    if (i < 0) { paintAdding(row); return; }
-    const m = state.m;
+  // A row's look: its kind, whether it is selected or found, what is not yet saved.
+  function rowClass(k) {
+    const v = state.rows[k];
+    if (v === -1) return 'row is-added';
+    if (v <= -2) {
+      const x = extraOf(v);
+      if (x.kind === 'section') return `row is-section${state.shutSections.has(x.sec.tag) ? ' is-shut' : ''}`;
+      return `row is-removed${isPicked(x) ? ' is-sel' : ''}`;
+    }
     const mk = state.marks;
     let cls = 'row';
-    if (mk.status[i] === 1) cls += ' is-changed';
-    else if (mk.status[i] === 2) cls += ' is-added';
-    if (i === state.sel) cls += ' is-sel';
-    else if (state.hitFlags && state.hitFlags[i]) cls += ' is-hit';
-    if (mk.removedAt[i]) cls += ' is-removed-above';
-    if (i === m.n - 1 && mk.removedAt[m.n]) cls += ' is-removed-below';
-    row.className = cls;
+    if (mk.status[v] === 1) cls += ' is-changed';
+    else if (mk.status[v] === 2) cls += ' is-added';
+    if (v === state.sel && !state.pick) cls += ' is-sel';
+    else if (state.hitFlags && state.hitFlags[v]) cls += ' is-hit';
+    if (!state.editing) {                                            // with Edit on, removed lines show themselves
+      if (mk.removedAt[v]) cls += ' is-removed-above';
+      if (v === state.m.n - 1 && mk.removedAt[state.m.n]) cls += ' is-removed-below';
+    }
+    return cls;
+  }
+
+  const levelOfText = (t) => { const hit = /^[ \t]*(\d+) /.exec(t); return hit ? Number(hit[1]) : 0; };
+
+  function paintRow(row, k) {
+    row.className = rowClass(k);
+    const v = state.rows[k];
+    if (v === -1) { paintAdding(row); return; }
+    if (v <= -2) { paintExtra(row, extraOf(v)); return; }
+    const i = v;
+    const m = state.m;
     const editing = state.edit && state.edit.kind === 'edit' && state.edit.pos === i;
     if (editing && state.edit.input.parentNode === row) return;     // the box being typed in stays put
     row.textContent = '';
@@ -425,7 +538,7 @@
     row.appendChild(el('span', marks & 1 ? 'mk is-error' : marks & 2 ? 'mk is-note' : 'mk'));
     const kids = hasKids(i);
     const shut = kids && isShut(i);
-    row.appendChild(foldPart(i, m.level[i], kids, shut));
+    row.appendChild(foldPart(m.level[i], kids, shut));
     if (editing) {
       row.appendChild(state.edit.input);
       return;
@@ -435,25 +548,49 @@
     row.appendChild(tx);
     if (shut) {
       const end = C.subtreeEnd(m, i);
-      const inside = mk.sum[end] - mk.sum[i + 1];
-      const hc = el('span', inside ? 'hc is-changed' : 'hc', plural(end - i - 1, 'line', 'lines'));
-      if (inside) hc.title = 'Holds a change not yet saved';
-      row.appendChild(hc);
+      const inside = state.marks.sum[end] - state.marks.sum[i + 1];
+      row.appendChild(el('span', inside ? 'hc is-changed' : 'hc', plural(end - i - 1, 'line', 'lines')));
     }
   }
 
+  function paintExtra(row, x) {
+    row.textContent = '';
+    if (x.kind === 'section') {
+      const sec = x.sec;
+      const shut = state.shutSections.has(sec.tag);
+      row.appendChild(el('span', 'ln'));
+      row.appendChild(el('span', 'mk'));
+      row.appendChild(foldPart(0, true, shut));
+      const tx = el('span', 'tx');
+      tx.appendChild(el('span', 'tg', sec.tag));
+      if (RECORD_NAMES[sec.tag]) tx.appendChild(el('span', 'sec-name', ` ${RECORD_NAMES[sec.tag]}`));
+      if (sec.tag !== 'HEAD' && sec.tag !== 'TRLR') tx.appendChild(el('span', 'sec-count', ` ${fmt(sec.records)}`));
+      if (shut) tx.appendChild(el('span', 'sec-name', ` · ${plural(sec.to - sec.from, 'line', 'lines')}`));
+      row.appendChild(tx);
+      return;
+    }
+    const was = x.run.lines[x.k].was;                                // a removed line: its number as saved, and its words
+    row.appendChild(el('span', 'ln', fmt(x.run.before + x.k + 1)));
+    row.appendChild(el('span', 'mk'));
+    row.appendChild(foldPart(levelOfText(was), false, false));
+    const tx = el('span', 'tx');
+    putText(tx, was.slice(0, ROW_CHARS));
+    row.appendChild(tx);
+  }
+
   function paintAdding(row) {
-    row.className = 'row is-added';
     if (state.edit.input.parentNode === row) return;
     row.textContent = '';
     row.appendChild(el('span', 'ln', '+'));
     row.appendChild(el('span', 'mk'));
-    row.appendChild(foldPart(-1, state.edit.level === null ? 0 : state.edit.level, false, false));
+    row.appendChild(foldPart(state.edit.level === null ? 0 : state.edit.level, false, false));
     row.appendChild(state.edit.input);
   }
 
-  const grid = Virtual($('grid'), paintRow);
+  const grid = Virtual($('grid'), paintRow, (row, k) => { row.className = rowClass(k); });
 
+  // Select line i. The rows' contents are drawn again only where the view moved; the rest keep
+  // theirs, so a highlight made with the mouse holds, to be copied.
   function select(i, how) {
     const m = state.m;
     if (!m || !m.n) return;
@@ -464,14 +601,37 @@
       updateBack();
     }
     state.sel = to;
+    state.pick = null;
     grid.show(rowOfLine(to), how === 'jump' || how === 'step');
-    grid.refresh();
+    grid.restyle();
     renderDetail();
   }
 
-  function selectRow(k) {
-    if (!state.vis.length) return;
-    select(state.vis[Math.max(0, Math.min(state.vis.length - 1, k))]);
+  // Move the selection by `delta` rows, landing on a line (the other rows are passed over).
+  function moveBy(delta) {
+    const rows = state.rows;
+    if (!rows.length) return;
+    const from = state.sel >= 0 && state.rowOf[state.sel] >= 0 ? state.rowOf[state.sel] : 0;
+    const target = Math.max(0, Math.min(rows.length - 1, from + delta));
+    const dir = delta >= 0 ? 1 : -1;
+    let t = target;
+    while (t >= 0 && t < rows.length && rows[t] < 0) t += dir;
+    if (t < 0 || t >= rows.length) {
+      t = target;
+      while (t >= 0 && t < rows.length && rows[t] < 0) t -= dir;
+    }
+    if (t >= 0 && t < rows.length) select(rows[t]);
+  }
+
+  // A removed line (Edit on) selected: the right frame says what it was, and offers it back.
+  function pickRemoved(x) {
+    state.pick = { before: x.run.before, k: x.k };
+    grid.restyle();
+    renderDetail();
+  }
+
+  function pickedRemoved() {
+    return state.pick ? state.extras.find((x) => isPicked(x)) || null : null;
   }
 
   function jumpToId(id) {
@@ -490,25 +650,37 @@
   $('grid').addEventListener('click', (e) => {
     const k = grid.rowOf(e.target);
     if (k < 0) return;
-    const i = lineAtRow(k);
-    if (i < 0 || e.target.closest('input')) return;
-    if (e.target.closest('.fold') && hasKids(i)) {
-      toggleFold(i, e.altKey);
+    const v = state.rows[k];
+    if (v === -1 || e.target.closest('input')) return;
+    if (v <= -2) {
+      const x = extraOf(v);
+      if (x.kind === 'section') toggleSection(x.sec, e.altKey);
+      else pickRemoved(x);
+      return;
+    }
+    if (e.target.closest('.fold') && hasKids(v)) {
+      toggleFold(v, e.altKey);
       return;
     }
     if (e.target.closest('.ptr')) {
-      state.sel = i;                                                 // Back comes back to this line
-      jumpToId(C.valueOf(state.m, i));
+      state.sel = v;                                                 // Back comes back to this line
+      jumpToId(C.valueOf(state.m, v));
       return;
     }
-    select(i);
+    select(v);
   });
 
+  // With Edit on, a double-click types over the line; with Edit off it is the browser's own, and
+  // highlights a word.
   $('grid').addEventListener('dblclick', (e) => {
+    if (!state.editing) return;
     const k = grid.rowOf(e.target);
     if (k < 0 || e.target.closest('input, .fold, .ptr')) return;
-    const i = lineAtRow(k);
-    if (i >= 0) startEdit(i);
+    const v = state.rows[k];
+    if (v >= 0) {
+      window.getSelection().removeAllRanges();
+      startEdit(v);
+    }
   });
 
   // ---------------------------------------------------------------------------------------------
@@ -569,7 +741,7 @@
   document.addEventListener('pointercancel', pressOver, true);
 
   function startEdit(i) {
-    if (!state.doc || i < 0 || i >= state.m.n) return;
+    if (!state.doc || !state.editing || i < 0 || i >= state.m.n) return;
     if (state.edit && !commitEdit(false)) return;
     const cannot = C.editRefusal(state.doc, i);
     if (cannot) {
@@ -585,25 +757,26 @@
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  // A new line under the selected one (a child), or after its subtree at its level (a sibling
-  // below). Its row is offered with the level typed in; an Enter with nothing more adds nothing.
+  // A new line inside the selected line's block — directly under it, one level deeper — or after
+  // its block, at its level. Its row is offered with the level typed in; an Enter with nothing
+  // more adds nothing.
   function startAdd(kind) {
-    if (!state.doc || state.sel < 0 || !state.m.n) return;
+    if (!state.doc || !state.editing || state.sel < 0 || !state.m.n) return;
     if (state.edit && !commitEdit(false)) return;
     const m = state.m;
     const i = state.sel;
     const lv = m.level[i];
-    if (kind === 'child' && isShut(i)) setFold(i, false);
-    const at = kind === 'child' ? i + 1 : C.subtreeEnd(m, i);
-    const level = lv < 0 ? null : kind === 'child' ? lv + 1 : lv;
+    if (kind === 'inside' && isShut(i)) setFold(i, false);
+    const at = kind === 'inside' ? i + 1 : C.subtreeEnd(m, i);
+    const level = lv < 0 ? null : kind === 'inside' ? lv + 1 : lv;
     const prefill = level === null ? '' : `${level} `;
     const input = makeEditor(prefill);
     state.edit = { kind, pos: i, at, input, prefill, level };
-    state.pending = { at, row: 0 };
-    rebuildVis();
+    state.pending = { at };
+    rebuildRows();
     $('grid').classList.add('is-editing');
     grid.setCount(rowCount(), true);
-    grid.show(state.pending.row);
+    grid.show(state.rows.indexOf(-1));
     grid.refresh();
     input.focus();
     input.setSelectionRange(prefill.length, prefill.length);
@@ -633,7 +806,7 @@
     const was = ed.kind === 'edit' ? doc.order[ed.pos] : null;
     let r;
     if (ed.kind === 'edit') r = C.editLine(doc, ed.pos, text);
-    else if (ed.kind === 'child') r = C.addChild(doc, ed.pos, text);
+    else if (ed.kind === 'inside') r = C.addChild(doc, ed.pos, text);
     else r = C.addSibling(doc, ed.pos, text);
     if (!r.ok) {
       notice(r.reason, 'error');
@@ -661,13 +834,13 @@
   }
 
   function refreshGrid(pos) {
-    rebuildVis();
+    rebuildRows();
     grid.setCount(rowCount(), true);
     select(pos);
   }
 
   async function deleteSelected() {
-    if (!state.doc || state.sel < 0 || !state.m.n) return;
+    if (!state.doc || !state.editing || state.sel < 0 || !state.m.n) return;
     if (state.edit && !commitEdit(false)) return;
     const m = state.m;
     const i = state.sel;
@@ -695,7 +868,7 @@
   // 9.3 — a record, and the lines elsewhere that point at it: shown first, each pointer ticked,
   // and the owner unticks what should stay.
   async function deleteRecordAsked() {
-    if (!state.doc || state.sel < 0) return;
+    if (!state.doc || !state.editing || state.sel < 0) return;
     if (state.edit && !commitEdit(false)) return;
     const m = state.m;
     const plan = C.recordDeletion(state.doc, state.sel);
@@ -743,6 +916,17 @@
     afterAct(plan.from);
   }
 
+  // Removed lines put back where they were (Edit on): the whole run a removed line is in.
+  function restoreRemoved(x) {
+    if (!state.doc || !state.editing) return;
+    const r = C.restoreLines(state.doc, x.run.before, x.run.lines.length);
+    if (!r.ok) {
+      notice(r.reason, 'error');
+      return;
+    }
+    afterAct(x.run.at);
+  }
+
   const firstPlace = (step) => Math.min(...step.splices.map((s) => s.at));
 
   function doUndo() {
@@ -762,10 +946,19 @@
     if (step) afterAct(firstPlace(step));
   }
 
-  // After any act, undo or save: the page drawn again from the document as it now is.
+  // After any act, undo or save: the page drawn again from the document as it now is. A range
+  // shown by Go to Line… grows or shrinks with lines added or removed inside it.
   function afterAct(pos) {
+    const grew = state.doc.view.n - state.m.n;
+    const range = state.range;
+    if (range && grew) {
+      if (pos < range.a) range.a = Math.max(0, range.a + grew);
+      if (pos <= range.b) range.b = Math.max(range.a, range.b + grew);
+      range.b = Math.min(range.b, state.doc.view.n - 1);
+    }
     state.m = state.doc.view;
     const m = state.m;
+    state.sections = sectionsOf(m);
     updateMarks();
     $('grid').style.setProperty('--ln-width', `${fmt(m.n).length + 1}ch`);
     state.back = state.back.filter((b) => b < m.n);
@@ -778,7 +971,7 @@
     filterRecords(true);
     renderChanges();
     updateBar();
-    rebuildVis();
+    rebuildRows();
     grid.setCount(rowCount(), true);
     if (m.n) select(Math.max(0, Math.min(m.n - 1, pos)));
     else {
@@ -808,6 +1001,12 @@
   function updateBar() {
     const doc = state.doc;
     const changed = !!doc && C.isChanged(doc);
+    $('open').hidden = !!doc;                                       // with a file open: ⌘O, a drop, or Open another…
+    $('edit').disabled = !doc;
+    $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
+    $('file-name').hidden = !doc;
+    $('file-name').setAttribute('aria-expanded', String(state.showFacts));
+    $('facts').hidden = !doc || !state.showFacts;
     $('dirty').hidden = !changed;
     $('save').disabled = !changed || !PICKERS;
     $('save').title = PICKERS ? 'Save, in place (⌘S)' : 'This browser cannot write a file in place; Save a copy downloads one';
@@ -816,7 +1015,7 @@
     $('redo').disabled = !doc || !doc.undone.length;
     $('undo').title = doc && doc.done.length ? `Undo: ${doc.done[doc.done.length - 1].label} (⌘Z)` : 'Undo (⌘Z)';
     $('redo').title = doc && doc.undone.length ? `Redo: ${doc.undone[doc.undone.length - 1].label} (⇧⌘Z)` : 'Redo (⇧⌘Z)';
-    document.title = doc ? `${changed ? '● ' : ''}${state.fileName} — gedview` : 'gedview';
+    document.title = doc ? `${changed ? '● ' : ''}${state.fileName} — GEDCOM Viewer` : 'GEDCOM Viewer';
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -857,24 +1056,45 @@
     parent.appendChild(b);
   }
 
+  // A removed line, selected with Edit on: what it was, where, and Restore.
+  function renderRemoved(d, x) {
+    const run = x.run;
+    const n = run.lines.length;
+    const acts = el('div', 'detail-actions');
+    actionButton(acts, n > 1 ? `Restore ${fmt(n)} lines` : 'Restore', 'Put back where they were', () => restoreRemoved(x));
+    d.appendChild(acts);
+    d.appendChild(el('div', 'detail-removed-title', `Removed · line ${fmt(run.before + x.k + 1)} as saved`));
+    const box = el('div', 'detail-value detail-removed');
+    putText(box, run.lines[x.k].was);
+    d.appendChild(box);
+    if (run.record) d.appendChild(el('div', 'detail-section', `in ${recordName(run.record.id, run.record.tag)}`));
+  }
+
   function renderDetail() {
     const d = $('detail');
     d.textContent = '';
     const m = state.m;
+    const removed = pickedRemoved();
+    if (removed) {
+      renderRemoved(d, removed);
+      return;
+    }
     const i = state.sel;
     if (!m || i < 0 || i >= m.n) return;
     const t = m.texts[i];
     const parts = partsOf(m, i);
 
-    const acts = el('div', 'detail-actions');
-    const cannot = C.editRefusal(state.doc, i);
-    actionButton(acts, 'Edit', cannot || 'Type over the whole line (Enter, or a double-click)', () => startEdit(state.sel), cannot);
-    actionButton(acts, 'Add child', 'A new line directly under this one, one level deeper', () => startAdd('child'));
-    actionButton(acts, 'Add sibling', 'A new line after this one and the lines under it, at its level', () => startAdd('sibling'));
-    actionButton(acts, 'Delete line', 'This line, and the lines under it (⌫)', () => deleteSelected());
-    actionButton(acts, 'Delete record', 'The record this line is in, and the lines elsewhere that point at it',
-      () => deleteRecordAsked(), m.recOf[i] < 0);
-    d.appendChild(acts);
+    if (state.editing) {                                             // what can be done to it: with Edit on
+      const acts = el('div', 'detail-actions');
+      const cannot = C.editRefusal(state.doc, i);
+      actionButton(acts, 'Edit line', cannot || 'Type over the whole line (Enter, or a double-click)', () => startEdit(state.sel), cannot);
+      actionButton(acts, 'Add inside', 'A new line inside this block: directly under this line, one level deeper', () => startAdd('inside'));
+      actionButton(acts, 'Add after', 'A new line after this block, at this line\'s level', () => startAdd('after'));
+      actionButton(acts, 'Delete line', 'This line, and the lines under it (⌫)', () => deleteSelected());
+      actionButton(acts, 'Delete record', 'The record this line is in, and the lines elsewhere that point at it',
+        () => deleteRecordAsked(), m.recOf[i] < 0);
+      d.appendChild(acts);
+    }
 
     if (m.level[i] >= 0) {
       const hasValue = m.valAt[i] >= 0;
@@ -974,32 +1194,31 @@
   }
 
   // The file's facts, in the owner's order: the GEDCOM version, the encoding, when and by what it
-  // was exported, its size on disk, its lines, and its sha256 on demand.
+  // was exported, its size on disk, its lines, and its sha256 on demand. Shown under the file's
+  // name when the name is clicked. A fact that comes from a line of the header goes to that line.
   function renderFacts() {
     const m = state.m;
     const f = $('facts');
     f.textContent = '';
     if (!m) return;
-    const parts = [];
-    const fact = (text, title) => {
-      const s = el('span', 'fact', text);
-      if (title) s.title = title;
-      parts.push(s);
+    const where = m.facts.lines;
+    const fact = (text, line) => {
+      if (line === undefined || line < 0) return el('span', 'fact', text);
+      const b = el('button', 'fact is-link', text);
+      b.type = 'button';
+      b.addEventListener('click', () => select(line, 'jump'));
+      return b;
     };
-    if (m.version) fact(`GEDCOM ${m.version}`, 'The GEDCOM version its header states (HEAD › GEDC › VERS)');
-    fact(m.encodingLabel, `Its encoding, told by its ${m.how}${m.declared ? `; the header says ${m.declared}` : ''}`);
+    const groups = [];
+    if (m.version) groups.push([fact(`GEDCOM ${m.version}`, where.version)]);
+    groups.push([fact(m.encodingLabel, where.char)]);
     const source = [m.facts.source, m.facts.sourceVersion].filter((x) => x).join(' ');
-    if (m.facts.date || source) {
-      fact(`exported${m.facts.date ? ` ${m.facts.date}` : ''}${source ? ` by ${source}` : ''}`,
-        'When, and by what, the file was made, as its header says (HEAD › DATE; HEAD › SOUR and its VERS)');
-    }
-    fact(sizeOf(state.disk.bytes), 'Its size on disk, as opened or last saved');
-    fact(`${fmt(m.n)} lines`);
-    parts.forEach((p, k) => {
-      if (k) f.appendChild(document.createTextNode(' · '));
-      f.appendChild(p);
-    });
-    f.appendChild(document.createTextNode(' · '));
+    const made = [];
+    if (m.facts.date) made.push(fact(`exported ${m.facts.date}`, where.date));
+    if (source) made.push(fact(`${m.facts.date ? 'by' : 'exported by'} ${source}`, where.source));
+    if (made.length) groups.push(made);
+    groups.push([fact(sizeOf(state.disk.bytes))]);
+    groups.push([fact(`${fmt(m.n)} lines`)]);
     const sha = el('button', 'sha', 'sha256');
     sha.type = 'button';
     sha.title = SHA_TITLE;
@@ -1009,7 +1228,19 @@
       shown.title = SHA_TITLE;
       sha.replaceWith(shown);
     });
-    f.appendChild(sha);
+    groups.push([sha]);
+    groups.forEach((g, k) => {
+      if (k) f.appendChild(document.createTextNode(' · '));
+      g.forEach((x, j) => {
+        if (j) f.appendChild(document.createTextNode(' '));
+        f.appendChild(x);
+      });
+    });
+    const another = el('button', 'fact is-link open-another', 'Open another GEDCOM…');
+    another.type = 'button';
+    another.title = '⌘O, or drop a file on the page';
+    another.addEventListener('click', pickFile);
+    f.appendChild(another);
   }
 
   function renderCounts() {
@@ -1298,7 +1529,7 @@
   const STAMP_HOW = {
     adds: 'gains 1 CHAN · 2 DATE · 3 TIME · 2 NOTE',
     sets: 'its CHAN: DATE and TIME set, a NOTE added',
-    resets: 'the stamp gedview gave it since the last save, set anew',
+    resets: 'the stamp GEDCOM Viewer gave it since the last save, set anew',
   };
 
   // 10.2 step 4: the changes, the change stamps (F1: ticked unless unticked, and remembered), and
@@ -1400,7 +1631,7 @@
     if (state.handle) buttons.push({ label: 'Reload it, and drop my changes', value: 'reload' });
     buttons.push({ label: 'Save a copy', value: 'copy', primary: true });
     const pick = await dialog(`${state.fileName} changed on disk since it was opened`, (body) => {
-      body.appendChild(el('div', null, 'Another program changed it. gedview will not write over it.'));
+      body.appendChild(el('div', null, 'Another program changed it. GEDCOM Viewer will not write over it.'));
     }, buttons);
     if (pick === 'copy') await doSaveCopy();
     if (pick === 'reload') await openFile(await state.handle.getFile(), state.handle);
@@ -1534,7 +1765,12 @@
     state.pending = null;
     state.folds = new Set();
     state.runs = [];
-    state.vis = new Int32Array(0);
+    state.rows = new Int32Array(0);
+    state.rowOf = new Int32Array(0);
+    state.extras = [];
+    state.range = null;
+    state.pick = null;
+    state.editing = false;
     $('file-name').textContent = '';
     $('facts').textContent = '';
     $('counts').textContent = '';
@@ -1545,6 +1781,9 @@
     $('search-count').textContent = '';
     $('detail').textContent = '';
     $('goto').disabled = true;
+    $('goto').value = '';
+    state.gotoApplied = '';
+    updateGoto();
     state.recordRows = [];
     state.checkRows = [];
     state.tagRows = [];
@@ -1595,6 +1834,11 @@
     state.sel = -1;
     state.back = [];
     state.folds = new Set();
+    state.sections = sectionsOf(doc.view);
+    state.shutSections = new Set();
+    state.range = null;
+    state.pick = null;
+    state.editing = false;                                           // a file opens to be read
     state.pending = null;
     state.recordType = null;
     state.collapsed = new Set();
@@ -1608,6 +1852,9 @@
     $('notice').hidden = true;
     $('empty').hidden = true;
     $('goto').disabled = false;
+    $('goto').value = '';
+    state.gotoApplied = '';
+    updateGoto();
     $('file-name').textContent = file.name;
     $('grid').style.setProperty('--ln-width', `${fmt(doc.m.n).length + 1}ch`);
     updateMarks();
@@ -1620,7 +1867,7 @@
     updateSearch();
     updateBack();
     updateBar();
-    rebuildVis();
+    rebuildRows();
     grid.setCount(rowCount());
     select(0);
     $('grid').focus();
@@ -1733,14 +1980,79 @@
   $('undo').addEventListener('click', doUndo);
   $('redo').addEventListener('click', doRedo);
 
+  // Edit: off, the file is read, and a double-click highlights a word; on, lines can be typed over,
+  // added and deleted, and the lines removed since the last save show where they were.
+  function setEditing(on) {
+    if (!state.doc || on === state.editing) return;
+    if (!on && state.edit && !commitEdit(false)) return;
+    state.editing = on;
+    state.pick = null;
+    updateBar();
+    rebuildRows();
+    grid.setCount(rowCount(), true);
+    if (state.sel >= 0) select(state.sel);
+  }
+  $('edit').addEventListener('click', () => setEditing(!state.editing));
+
+  // The file's name shows its facts, and hides them.
+  $('file-name').addEventListener('click', () => {
+    state.showFacts = !state.showFacts;
+    store.set('facts', state.showFacts);
+    updateBar();
+  });
+
+  // Go to Line…: a number goes to that line; two, as 105-117, show those lines alone, until ×.
+  function updateGoto() {
+    const v = $('goto').value.trim();
+    $('goto-go').hidden = !state.m || !v || v === state.gotoApplied;
+    $('goto-clear').hidden = !state.range;
+  }
+
+  function applyGoto() {
+    const m = state.m;
+    if (!m || !m.n) return;
+    const v = $('goto').value.trim();
+    const number = (s) => parseInt(s.replace(/[,._]/g, ''), 10);
+    const clamp = (x) => Math.max(1, Math.min(m.n, x));
+    const two = /^(\d[\d,._]*)\s*(?:-|–|—|\.\.|to)\s*(\d[\d,._]*)$/i.exec(v);
+    const one = /^(\d[\d,._]*)$/.exec(v);
+    if (two) {
+      let a = clamp(number(two[1]));
+      let b = clamp(number(two[2]));
+      if (a > b) [a, b] = [b, a];
+      state.range = { a: a - 1, b: b - 1 };
+      rebuildRows();
+      grid.setCount(rowCount());
+      state.gotoApplied = v;
+      select(a - 1, 'jump');
+    } else if (one || !v) {
+      const had = !!state.range;
+      state.range = null;
+      state.gotoApplied = v;
+      if (had) {
+        rebuildRows();
+        grid.setCount(rowCount(), true);
+      }
+      if (one) select(clamp(number(one[1])) - 1, 'jump');
+      else if (had) select(state.sel);
+    } else return;
+    updateGoto();
+    $('grid').focus();
+  }
+
+  function clearRange() {
+    $('goto').value = '';
+    applyGoto();
+  }
+
   $('goto').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    const n = parseInt($('goto').value.replace(/[\s,._]/g, ''), 10);
-    if (!state.m || !(n >= 1)) return;
-    select(Math.min(n, state.m.n) - 1, 'jump');
-    $('grid').focus();
+    applyGoto();
   });
+  $('goto').addEventListener('input', updateGoto);
+  $('goto-go').addEventListener('click', applyGoto);
+  $('goto-clear').addEventListener('click', clearRange);
 
   for (const tab of document.querySelectorAll('.tab')) {
     tab.addEventListener('click', () => openPanel(tab.dataset.panel));
@@ -1767,11 +2079,17 @@
     } else if (item.f.line >= 0) select(item.f.line, 'jump');
   });
 
+  // A change clicked: its line; for removed lines with Edit on, the first of them, struck through.
   $('changes-list').addEventListener('click', (e) => {
     const k = changesList.rowOf(e.target);
     if (k < 0) return;
     const run = state.runs[k];
     select(run.kind === 'removed' ? run.at : run.after, 'jump');
+    if (run.kind !== 'removed' || !state.editing) return;
+    const x = state.extras.findIndex((y) => y.kind === 'removed' && y.run.before === run.before && y.k === 0);
+    if (x < 0) return;
+    grid.show(state.rows.indexOf(-2 - x), true);
+    pickRemoved(state.extras[x]);
   });
 
   $('tags-list').addEventListener('click', (e) => {
@@ -1838,6 +2156,16 @@
       if (e.shiftKey) doSaveCopy(); else doSave();
       return;
     }
+    if (mod && !e.shiftKey && !e.altKey && key === 'o') {           // ⌘O: open a file
+      e.preventDefault();
+      pickFile();
+      return;
+    }
+    if (mod && !e.shiftKey && !e.altKey && key === 'e') {           // ⌘E: Edit on or off
+      e.preventDefault();
+      setEditing(!state.editing);
+      return;
+    }
     if (mod && !e.shiftKey && !e.altKey && (key === 'f' || key === 'l')) {
       if (!state.m) return;
       e.preventDefault();
@@ -1870,15 +2198,17 @@
     const page = grid.pageRows();
     const moves = { ArrowDown: 1, ArrowUp: -1, PageDown: page, PageUp: -page };
     const i = Math.max(0, state.sel);
-    if (key in moves) {
+    if (key === 'Escape' && state.pick) {
+      select(state.sel);
+    } else if (key in moves) {
       e.preventDefault();
-      selectRow(rowOfLine(i) + moves[key]);
+      moveBy(moves[key]);
     } else if (key === 'Home') {
       e.preventDefault();
-      selectRow(0);
+      moveBy(-state.rows.length);
     } else if (key === 'End') {
       e.preventDefault();
-      selectRow(state.vis.length - 1);
+      moveBy(state.rows.length);
     } else if (key === 'ArrowLeft') {                                // shut the block, or go up to the line above it
       e.preventDefault();
       if (hasKids(i) && !isShut(i)) toggleFold(i, false);

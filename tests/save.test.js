@@ -53,11 +53,11 @@ describe('names (10.1)', () => {
     const copy = await save.saveCopy({ doc, dir, name: NAME, disk, when: AT, note: '', stamps: false, hash });
     assert.equal(copy.copy, 'Fixture_Family.2026-09-28T154200-3.ged');
     assert.deepEqual(dir.at('Fixture_Family.2026-09-28T154200.ged').bytes, new Uint8Array([1]), 'untouched');
-    const history = await dir.getDirectoryHandle('gedview-history', { create: true });
+    const history = await dir.getDirectoryHandle('gedcom-viewer-history', { create: true });
     history.put('Fixture_Family.2026-09-28T154200.ged.bak', [9]);
     core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
     const r = await save.save({ doc, dir, name: NAME, disk, when: AT, note: '', stamps: false, hash });
-    assert.equal(r.backup, 'gedview-history/Fixture_Family.2026-09-28T154200-2.ged.bak');
+    assert.equal(r.backup, 'gedcom-viewer-history/Fixture_Family.2026-09-28T154200-2.ged.bak');
     assert.deepEqual(history.at('Fixture_Family.2026-09-28T154200.ged.bak').bytes, new Uint8Array([9]), 'untouched');
   });
 
@@ -85,7 +85,7 @@ describe('the log block (10.5)', () => {
       'note     Fixed a name.',
       `before   sha256 ${disk.sha256}  465 bytes  37 lines`,
       `after    sha256 ${await hash(after)}  ${after.length} bytes  43 lines`,
-      'backup   gedview-history/Fixture_Family.2026-09-28T154200.ged.bak',
+      'backup   gedcom-viewer-history/Fixture_Family.2026-09-28T154200.ged.bak',
       'changed  17    -> 17     @I42@ INDI',
       '  - 1 NAME Jane /Fixture/',
       '  + 1 NAME Jane /Fixtures/',
@@ -112,7 +112,7 @@ describe('the log block (10.5)', () => {
     assert.ok(r.done, r.say);
     const log = text(dir.at('Fixture_Family.ged.edits.log').bytes).split('\n');
     assert.equal(log[0], `=== ${save.logTime(AT)}  copy  Fixture_Family.ged -> Fixture_Family.2026-09-28T154200.ged`);
-    assert.equal(log[1], 'note     Edited by hand in gedview.');
+    assert.equal(log[1], 'note     Edited by hand in GEDCOM Viewer.');
     assert.ok(!log.some((l) => l.startsWith('backup')));
     assert.deepEqual(log.slice(4, 10), ['changed  8 -> 8  TRLR', '  - 0 TRLR', '  + 0 TRLR', '    line ending: none -> LF',
       'added         9  @N1@ NOTE', '  + 0 @N1@ NOTE after the end']);
@@ -128,8 +128,8 @@ describe('Save, in place (10.2)', () => {
     assert.ok(r.done, r.say);
     assert.deepEqual(dir.journal, [
       'read Fixture_Family.ged',
-      'write gedview-history/Fixture_Family.2026-09-28T154200.ged.bak',
-      'read gedview-history/Fixture_Family.2026-09-28T154200.ged.bak',
+      'write gedcom-viewer-history/Fixture_Family.2026-09-28T154200.ged.bak',
+      'read gedcom-viewer-history/Fixture_Family.2026-09-28T154200.ged.bak',
       'write Fixture_Family.ged',
       'read Fixture_Family.ged',
       'read Fixture_Family.ged.edits.log',
@@ -161,7 +161,7 @@ describe('Save, in place (10.2)', () => {
     assert.equal(r.step, 3);
     assert.equal(r.changedOnDisk, true);
     assert.deepEqual(dir.journal, ['read Fixture_Family.ged']);
-    assert.equal(dir.at('gedview-history'), undefined, 'not even a backup');
+    assert.equal(dir.at('gedcom-viewer-history'), undefined, 'not even a backup');
     assert.equal(core.isChanged(doc), true, 'the edit is still there to save elsewhere');
   });
 
@@ -169,7 +169,7 @@ describe('Save, in place (10.2)', () => {
     it(`a backup that fails (${how}) stops the save, and the file is untouched`, async () => {
       const { dir, doc, disk, bytes } = await setUp();
       core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
-      const history = await dir.getDirectoryHandle('gedview-history', { create: true });
+      const history = await dir.getDirectoryHandle('gedcom-viewer-history', { create: true });
       history.failNew = how;
       const r = await save.save({ doc, dir, name: NAME, disk, when: AT, note: '', stamps: false, hash });
       assert.equal(r.done, false);
@@ -188,7 +188,7 @@ describe('Save, in place (10.2)', () => {
     const r = await save.save({ doc, dir, name: NAME, disk, when: AT, note: '', stamps: false, hash });
     assert.equal(r.step, 8);
     assert.equal(r.loud, true);
-    assert.match(r.say, /in gedview-history\/Fixture_Family\.2026-09-28T154200\.ged\.bak/);
+    assert.match(r.say, /in gedcom-viewer-history\/Fixture_Family\.2026-09-28T154200\.ged\.bak/);
     assert.equal(core.isChanged(doc), true);
   });
 
@@ -228,7 +228,7 @@ describe('Save a copy (10.3)', () => {
     assert.deepEqual(dir.at(NAME).bytes, bytes, 'the original on disk is untouched');
     assert.equal(core.isChanged(doc), true, 'so the document stays unsaved against it');
     assert.match(text(dir.at('Fixture_Family.ged.edits.log').bytes), /copy {2}Fixture_Family\.ged -> Fixture_Family\.2026-09-28T154200\.ged/);
-    assert.equal(dir.at('gedview-history'), undefined, 'a copy makes no backup');
+    assert.equal(dir.at('gedcom-viewer-history'), undefined, 'a copy makes no backup');
   });
 
   it('with no folder, or no pickers: the copy\'s bytes and name, and the log block to offer as a second file', async () => {
@@ -259,8 +259,8 @@ describe("section 15's editing walk, every step but the owner's clicks", () => {
     disk = r.disk;
     assert.deepEqual(r.runs.map((run) => [run.kind, run.stamp]), [['changed', false], ['added', true]]);
 
-    // the folder holds the backup in gedview-history/ and the log; the backup's sha256 is the original
-    assert.deepEqual(dir.names(), ['Fixture_Family.ged', 'Fixture_Family.ged.edits.log', 'gedview-history']);
+    // the folder holds the backup in gedcom-viewer-history/ and the log; the backup's sha256 is the original
+    assert.deepEqual(dir.names(), ['Fixture_Family.ged', 'Fixture_Family.ged.edits.log', 'gedcom-viewer-history']);
     assert.equal(await hash(dir.at(r.backup).bytes), original);
 
     // the saved file differs from the backup only in that record

@@ -1,4 +1,4 @@
-/* gedview — the look.
+/* GEDCOM Viewer — the look.
  *
  * Every colour, size and width is a custom property in the first three blocks below; the rules
  * after them only use them. README.md lists the properties and what each one moves.
@@ -83,10 +83,16 @@
   color-scheme: dark;
 }
 
-/* gedview's own properties. Colours here are drawn from the palette above, so each theme carries
+/* GEDCOM Viewer's own properties. Colours here are drawn from the palette above, so each theme carries
    them; change one here and it changes in all three. */
 :root {
   /* type */
+  --font-title: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-size-title: 20px;
+  --title-color: var(--color-accent-hover);         /* GEDCOM, in the title */
+  --font-size-file: 15px;                           /* the open file's name */
+  --file-bg: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  --file-border: var(--color-accent);
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-grid: ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-size-body: 14px;
@@ -113,6 +119,7 @@
   --mark-note: var(--color-warning);
   --mark-size: 7px;
   --fold-color: var(--color-text-muted);   /* the ▸ ▾ that shut and open a block */
+  --section-bg: color-mix(in srgb, var(--color-text) 7%, transparent);   /* a section's row, between record types */
   --fold-size: 1.25em;
   --hidden-bg: var(--hover-bg);            /* the count of lines a shut block hides */
 
@@ -123,6 +130,7 @@
   --mark-bar: 3px;
   --row-changed: color-mix(in srgb, var(--mark-changed) 14%, transparent);
   --row-added: color-mix(in srgb, var(--mark-added) 14%, transparent);
+  --row-removed: color-mix(in srgb, var(--mark-removed) 10%, transparent);   /* a removed line, with Edit on */
   --edit-bg: var(--color-bg);                       /* the box a line is typed in */
 
   /* the frame */
@@ -194,13 +202,37 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   border-bottom: 1px solid var(--color-border);
 }
 .bar-top { display: flex; align-items: center; gap: var(--gap); min-width: 0; }
-.app-name { font-weight: 700; white-space: nowrap; }
-.version { font-weight: 400; font-size: var(--font-size-small); color: var(--color-text-muted); }
-.file-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-name { white-space: nowrap; }
+.app-title { font-family: var(--font-title); font-size: var(--font-size-title); letter-spacing: 0.01em; }
+.app-title-gedcom { color: var(--title-color); font-weight: 700; letter-spacing: 0.06em; }
+.version { font-size: var(--font-size-small); color: var(--color-text-muted); }
+/* the open file's name: a chip; a click shows its facts under it */
+.file-name {
+  min-width: 0;
+  max-width: 42vw;
+  padding: 3px 12px;
+  border: 1px solid var(--file-border);
+  border-radius: 999px;
+  background: var(--file-bg);
+  font-size: var(--font-size-file);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.file-name::after { content: ' ▸'; color: var(--color-text-muted); font-weight: 400; }
+.file-name[aria-expanded="true"]::after { content: ' ▾'; }
+.file-name:hover { background: var(--pressed-bg); }
+.file-name:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.file-name[hidden] { display: none; }
 .dirty { margin-left: calc(-0.6 * var(--gap)); color: var(--mark-changed); }
 .dirty[hidden] { display: none; }
 .actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.goto { width: 7.5em; }
+.gap { width: var(--gap); }
+.goto-box { display: inline-flex; align-items: center; gap: 4px; }
+.goto { width: 9.5em; }
+.goto-go, .goto-clear { padding: 0.3rem 0.55rem; }
 .indent-width { width: 3.6em; }
 .facts {
   margin-top: 3px;
@@ -211,7 +243,18 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.facts .fact[title] { cursor: help; }
+.facts .fact.is-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.facts .fact.is-link:hover { color: var(--pointer-color); }
+.facts .open-another { margin-left: 2em; color: var(--pointer-color); text-decoration: none; }
 .facts .sha {
   padding: 0;
   border: 0;
@@ -362,6 +405,10 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .row:hover { background: var(--row-hover); }
 .row.is-changed { background: var(--row-changed); box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); }
 .row.is-added { background: var(--row-added); box-shadow: inset var(--mark-bar) 0 0 var(--mark-added); }
+.row.is-section { background: var(--section-bg); color: var(--color-text-muted); cursor: pointer; }
+.row.is-section .sec-count { color: var(--color-text); font-weight: 600; }
+.row.is-removed { background: var(--row-removed); color: var(--mark-removed); }
+.row.is-removed .ln, .row.is-removed .tx { text-decoration: line-through; }
 .row.is-hit { background: var(--row-hit); }
 .row.is-sel { background: var(--row-selected); }
 /* where lines were removed: a rule along the top of the line now below them (or along the bottom
@@ -405,6 +452,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .tx { flex: 0 1 auto; min-width: 0; overflow: hidden; tab-size: var(--tab-size); }
 .hc {
   flex: none;
+  user-select: none;
   margin: 3px 0 3px 1ch;
   padding: 0 0.7ch;
   line-height: calc(var(--row-height) - 6px);
@@ -519,6 +567,8 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .detail-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
 .detail-actions .button { padding: 0.15rem 0.55rem; }
 .detail-was { box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); padding-left: 10px; }
+.detail-removed-title { color: var(--mark-removed); font-weight: 600; }
+.detail-removed { color: var(--mark-removed); text-decoration: line-through; }
 .detail-added { color: var(--mark-added); font-weight: 600; }
 
 /* -- dialogs: Save, Save a copy, deleting, a file changed on disk ------------------------------ */

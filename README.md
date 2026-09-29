@@ -1,4 +1,4 @@
-# gedview
+# GEDCOM Viewer
 
 One web page, opened from disk in Chrome, that opens a GEDCOM file, shows it readably, checks it
 for obviously malformed lines, counts what it holds, and lets clean hand edits be made and saved —
@@ -11,15 +11,27 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.1 | the viewer: phases 1 and 2 (read, check, count, show) |
 | 0.2 | phase 3: `core.js` can edit, undo, find what changed, stamp, and make the bytes of a save |
 | 0.3 | phase 4: editing and saving on the page; Open GEDCOM; the facts line in the owner's order; blocks that open and shut |
+| 0.4 | the owner's second round: the name GEDCOM Viewer; Edit on and off, removed lines shown and restored; a row between record types, each type shut at once; Go to Line… takes a range; the facts behind the file's name, each going to its line; Add inside and Add after |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
-The version shows beside the name in the bar, and each is a git tag (`git tag -n1` lists them).
+The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
+Before 0.4 it was called gedview; the code's own names (`GedCore`, the files' headers' history)
+keep traces of that.
+
+| The frames | What is in them |
+|---|---|
+| the top bar | the name, the file's name (a click shows its facts under it), the buttons, Go to Line… |
+| the counts bar | People 2,345 · Families … — a click lists that type in Records |
+| the left bar | Records · Checks · Changes · Search · Tags |
+| the main frame | the lines |
+| the right frame | the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings |
 
 ## Open it
 
 - **In Chrome:** drag `index.html` onto a Chrome window (or, in Chrome, File → Open File… and pick
   it). Double-clicking the file opens the default browser instead.
-- Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page.
+- Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
+  opened with ⌘O, by dropping it, or with **Open another GEDCOM…** among the file's facts.
 - Other browsers can read, check and edit a file too. Save, in place, needs Chrome; elsewhere Save
   a copy downloads the copy and its log.
 
@@ -28,34 +40,45 @@ The version shows beside the name in the bar, and each is a git tag (`git tag -n
 | ↑ ↓ · Page Up · Page Down · Home · End | move the selected line |
 | ← · → | shut the selected line's block, or go up to the line above it · open it, or go down into it |
 | ⌥-click on ▸ or ▾ | open or shut every block at that level (on a level 0: every record) |
-| Enter · a double-click | type over the selected line; Enter keeps it, Esc drops it, clicking away keeps it |
-| ⌫ | delete the selected line and the lines under it (asks first when there are any) |
+| a click on a type's row (▾ INDI People 2,345) | shut or open every record of that type; with ⌥, every type |
+| ⌘E | Edit on or off |
+| Enter · a double-click | with Edit on: type over the selected line; Enter keeps it, Esc drops it, clicking away keeps it. With Edit off, a double-click highlights a word, to copy |
+| ⌫ | with Edit on: delete the selected line and the lines under it (asks first when there are any) |
 | ⌘Z · ⇧⌘Z | Undo · Redo, one act each |
 | ⌘S · ⇧⌘S | Save, in place · Save a copy |
+| ⌘O | open another file |
 | ⌘F | Search |
-| ⌘L | Go to line |
+| ⌘L | Go to Line… — a line number, or two (105-117) for those lines alone, until × |
 | Esc | leave a box for the lines |
 
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the two
-panel widths, and whether the change stamps are ticked. Never a file's name, content or place.
+panel widths, whether the change stamps are ticked, and whether the file's facts show. Never a
+file's name, content or place. Edit is off whenever a file opens.
 
 ## Edit and save
 
-There is no mode to switch on. Select a line and press Enter (or double-click it): its row becomes
-a box holding the whole line — level, tag and value. The right pane's buttons add a line under the
-selected one (**Add child**, one level deeper), add one after it and the lines under it (**Add
-sibling**, at its level), or delete the line or its whole record. Deleting a record first shows
-what goes: the record, and each line elsewhere that points at it, ticked; untick what should stay.
+**Edit**, in the top bar, turns editing on and off; it is off whenever a file opens, so a file is
+first read. With it on, select a line and press Enter (or double-click it): its row becomes a box
+holding the whole line — level, tag and value. The right frame's buttons add a line inside the
+selected line's block (**Add inside**: directly under it, one level deeper), add one after its
+block (**Add after**, at its level), or delete the line or its whole record. Deleting a record
+first shows what goes: the record, and each line elsewhere that points at it, ticked; untick what
+should stay.
+
+With Edit on, a line removed since the last save stays where it was, struck through in red, under
+its line number as saved; click it, and the right frame offers **Restore**, which puts back it and
+the removed lines beside it. With Edit off the lines are the file as it will be saved, and a red
+rule marks where lines were removed.
 
 Until it is saved, an edit shows:
 
 | Where | Changed line | Added line | Removed lines |
 |---|---|---|---|
-| its row | tinted, a bar at its left edge | tinted another colour, a bar | a red rule where they were |
-| the right pane | **Was**, and the line as last saved | **Added** | — |
+| its row | tinted, a bar at its left edge | tinted another colour, a bar | Edit on: struck through, in red · Edit off: a red rule where they were |
+| the right frame | **Was**, and the line as last saved | **Added** | **Removed**, and **Restore** |
 | Changes | the line, before → after | the line | the lines |
 | a shut block | its count of lines takes the colour when it holds a change | | |
-| the bar | ● after the file's name; Save turns on | | |
+| the top bar | ● after the file's name; Save turns on | | |
 | the Save dialog | every change, and every change stamp, before anything is written | | |
 
 **Save** writes the file in place. The first time, it asks for the folder the file is in (Chrome
@@ -64,7 +87,7 @@ still the one opened, and refuses if another program changed it. Then:
 
 | Written | Where |
 |---|---|
-| a backup of the file as it was, read back and compared | `gedview-history/<name>.<YYYY-MM-DDTHHMMSS>.ged.bak` |
+| a backup of the file as it was, read back and compared | `gedcom-viewer-history/<name>.<YYYY-MM-DDTHHMMSS>.ged.bak` |
 | the file, read back and compared | where it was |
 | a block in the log: when, the note, the file's sha256 before and after, the backup, every change | `<name>.ged.edits.log`, beside the file; it only ever grows |
 
@@ -73,7 +96,11 @@ as it was. **Change stamps**, ticked unless unticked, give each changed record a
 date, time and note of the save (section 10.4 of the brief). The backup and the log hold what the
 file holds, living people included, and belong beside it — never in a repo.
 
-The **sha256** in the facts line is a fingerprint of the file's exact bytes, as it is on disk:
+**The file's facts** — GEDCOM version · encoding · exported, and by what · size · lines · sha256 —
+show under its name when the name is clicked. Each that comes from a line of the header goes to that
+line when clicked.
+
+The **sha256** among them is a fingerprint of the file's exact bytes, as it is on disk:
 change one character and it changes completely; two files with the same sha256 are the same, byte
 for byte. Save checks it before it writes, and a backup must match it. `shasum -a 256 <file>` in
 Terminal gives the same one.
@@ -115,7 +142,7 @@ and the sibling project's `ancestry_shapes.ged` and `ancestry_dup_citation.ged` 
 | `style.css` | the whole look, its properties first |
 | `core.js` | reading: bytes → encoding → lines → shape → records and pointers → checks → counts → labels; editing: the document, the acts, undo, the net change, the change stamps, the bytes of a save; never touches the page, and runs the same under Node |
 | `save.js` | saving: the dated names, Save in place, Save a copy, the log block — over file handles passed to it; never touches the page |
-| `ui.js` | the page: the grid, the panels, the right pane, the dialogs, the keys; the only file that knows the pickers exist |
+| `ui.js` | the page: the main frame, the left bar's panels, the right frame, the dialogs, the keys; the only file that knows the pickers exist |
 | `tests/` | the tests; `helpers.js` they share; `fake-handles.js`, in-memory files and folders for `save.js` |
 | `fixtures/synthetic/` | small files written for the checks, fictional people only |
 | `tools/` | `baseline_probe.py` (the Python second opinion), `check-real.js`, `compare.js`; `walk.js`, which walks the page in headless Chrome, driven by `chrome.js` |
@@ -132,8 +159,8 @@ steps light → sunset → dark.
 | Property | Moves |
 |---|---|
 | `--color-bg` | the page behind everything; the boxes |
-| `--color-bg-card` | the bar, the grid, the right pane, the lists |
-| `--color-bg-sidebar` | the side panel |
+| `--color-bg-card` | the top bar, the main frame, the right frame, the lists |
+| `--color-bg-sidebar` | the left bar |
 | `--color-text` | the text |
 | `--color-text-muted` | quiet text: line numbers, levels, the facts line, counts' names |
 | `--color-border` | lines between parts; box edges; the bars you drag |
@@ -144,15 +171,17 @@ steps light → sunset → dark.
 | `--color-danger` | errors (E1–E9); a line that did not parse |
 | the rest (`--color-nonbio`, `--color-success`, `--color-entity-…`, `--color-affiliation`, `--color-ancestor`, `--color-assertion-mark`) | nothing yet; kept so the palettes stay the sibling project's |
 
-**gedview's own** — drawn from the palette, so each theme carries them.
+**GEDCOM Viewer's own** — drawn from the palette, so each theme carries them.
 
 | Property | Moves |
 |---|---|
-| `--font-body` | the type of everything but the grid (The sibling project's system sans) |
-| `--font-grid` | the grid's monospace, and the right pane's |
+| `--font-title` · `--font-size-title` · `--title-color` | the name in the top bar: its serif, its size, the colour of GEDCOM |
+| `--font-size-file` · `--file-bg` · `--file-border` | the open file's name |
+| `--font-body` | the type of everything but the lines (The sibling project's system sans) |
+| `--font-grid` | the lines' monospace, in the main frame and the right frame |
 | `--font-size-body` · `--font-size-small` · `--font-size-grid` | the three type sizes |
 | `--tag-weight` | how strong a tag is |
-| `--row-height` | the height of every grid row; the page reads it each time it lays the grid out |
+| `--row-height` | the height of every row in the main frame; the page reads it each time it lays the rows out |
 | `--tab-size` | how wide a tab inside a value shows |
 | `--row-selected` · `--row-hit` · `--row-hover` | the selected line; a search's lines; the line under the pointer |
 | `--line-number-color` · `--level-color` · `--id-color` · `--tag-color` · `--value-color` | the parts of a line |
@@ -163,14 +192,15 @@ steps light → sunset → dark.
 | `--mark-error` · `--mark-note` · `--mark-size` | the dot beside a line with a finding |
 | `--fold-color` · `--fold-size` | the ▸ ▾ that shut and open a block |
 | `--hidden-bg` | the count of lines a shut block hides |
+| `--section-bg` | the row between two record types |
 | `--mark-changed` · `--mark-added` · `--mark-removed` | what is not yet saved: a changed line, an added one, the rule where lines were removed; the ● in the bar |
 | `--mark-bar` | the width of the bar at the left of a changed or added row |
-| `--row-changed` · `--row-added` | the tint of a changed row, an added row |
+| `--row-changed` · `--row-added` · `--row-removed` | the tint of a changed row, an added row, a removed one (Edit on) |
 | `--edit-bg` | the box a line is typed in |
-| `--left-width` · `--right-width` | the side panel and the right pane (also dragged, and remembered) |
+| `--left-width` · `--right-width` | the left bar and the right frame (also dragged, and remembered) |
 | `--split-width` · `--split-color` | the bars between them |
 | `--list-row-height` | the rows of Records, Checks, Changes and Tags |
-| `--bar-padding` · `--gap` | space in the bar at the top |
+| `--bar-padding` · `--gap` | space in the top bar |
 | `--radius` · `--input-padding` · `--focus-ring` | boxes and buttons, as the sibling project's |
 | `--pressed-bg` · `--hover-bg` | a pressed button; anything under the pointer |
 | `--drop-bg` | the wash over the page while a file is dragged over it |

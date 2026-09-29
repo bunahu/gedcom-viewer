@@ -206,7 +206,8 @@ describe('what the page reads with', () => {
 
   it("the file's facts: encoding, version, the exporting system and the header's date, as written", () => {
     const m = h.readText('0 HEAD\n1 SOUR Fixture Maker\n2 VERS 2.1\n1 DATE 16 SEP 2026\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n0 TRLR\n');
-    assert.deepEqual(m.facts, { source: 'Fixture Maker', sourceVersion: '2.1', date: '16 SEP 2026' });
+    assert.deepEqual(m.facts, { source: 'Fixture Maker', sourceVersion: '2.1', date: '16 SEP 2026',
+      lines: { version: 5, char: 6, date: 3, source: 1 } }, 'and the line each came from, for the page to go to');
     assert.equal(m.version, '5.5.1', 'the GEDC version, not the exporting system\'s');
     assert.equal(m.encodingLabel, 'UTF-8');
   });

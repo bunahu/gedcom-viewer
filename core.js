@@ -1,4 +1,4 @@
-/* gedview — core.js
+/* GEDCOM Viewer — core.js
  *
  * The reading half: bytes → encoding → lines → shape → records and pointers → checks → counts →
  * labels. The editing half: the document, the edits, undo, the net change, the change stamps and
@@ -555,20 +555,28 @@
   }
 
   // The file's facts from its header: the exporting system and its version (HEAD.SOUR, .VERS),
-  // and the header's date. As written.
+  // and the header's date, as written; and the line each fact comes from (-1 when none), for the
+  // page to go to — the GEDCOM version's (GEDC.VERS) and the encoding's (CHAR) among them.
   function headerFacts(m) {
-    const facts = { source: null, sourceVersion: null, date: null };
+    const facts = { source: null, sourceVersion: null, date: null, lines: { version: -1, char: -1, date: -1, source: -1 } };
     if (!m.records.length || m.tag[m.records[0]] !== 'HEAD') return facts;
     const from = m.records[0] + 1;
     const to = recordEnd(m, 0);
     const sour = firstChild(m, from, to, 1, 'SOUR');
     if (sour >= 0) {
       facts.source = valueOf(m, sour);
+      facts.lines.source = sour;
       const vers = firstChild(m, sour + 1, subtreeEnd(m, sour), 2, 'VERS');
       if (vers >= 0) facts.sourceVersion = valueOf(m, vers);
     }
     const date = firstChild(m, from, to, 1, 'DATE');
-    if (date >= 0) facts.date = valueOf(m, date);
+    if (date >= 0) {
+      facts.date = valueOf(m, date);
+      facts.lines.date = date;
+    }
+    const gedc = firstChild(m, from, to, 1, 'GEDC');
+    if (gedc >= 0) facts.lines.version = firstChild(m, gedc + 1, subtreeEnd(m, gedc), 2, 'VERS');
+    facts.lines.char = firstChild(m, from, to, 1, 'CHAR');
     return facts;
   }
 
@@ -774,7 +782,7 @@
   // a place, others put in — and its undo is the same splices run backwards. `savedOrder` is
   // `order` at open or at the last save in place; what changed is the one against the other (9.4).
   //
-  // An added line keeps its text, its terminator, its lineage, and — when gedview wrote it for a
+  // An added line keeps its text, its terminator, its lineage, and — when the viewer wrote it for a
   // change stamp — its part in the stamp. Its lineage is the line it stands for: the original line
   // an edit was typed over (for an edit of an edit, the first one's lineage), or its own number
   // when it is new. The net change pairs a line before with a line after by lineage. An edit typed
@@ -843,7 +851,7 @@
       if (oneByte && c >= 0x80) {
         const cp = text.codePointAt(k);
         return `${String.fromCodePoint(cp)} (U+${cp.toString(16).toUpperCase().padStart(4, '0')}) is not ASCII. ` +
-          `This file is read as ${doc.m.encodingLabel}, and gedview writes only ASCII into it.`;
+          `This file is read as ${doc.m.encodingLabel}, and GEDCOM Viewer writes only ASCII into it.`;
       }
       if (c >= 0xd800 && c <= 0xdfff) {
         const d = k + 1 < text.length ? text.charCodeAt(k + 1) : 0;
@@ -1287,6 +1295,19 @@
     return { status, removedAt };
   }
 
+  // Lines removed since the last save put back where they were: lines `before` … `before + count -
+  // 1` of the file as saved, every one of them removed, back in their place, as one step. They are
+  // the saved lines themselves, so once back they are no change at all.
+  function restoreLines(doc, before, count) {
+    const items = netChange(doc).filter((it) => it.kind === 'removed' && it.before >= before && it.before < before + count);
+    if (!count || items.length !== count || items.some((it) => it.at !== items[0].at)) {
+      return refuse('Those lines are not all removed, side by side, since the last save.');
+    }
+    const done = [];
+    cut(doc, done, items[0].at, 0, items.map((it) => doc.savedOrder[it.before]));
+    return finish(doc, count > 1 ? `Restore ${num(count)} lines` : 'Restore a line', done);
+  }
+
   // ---------------------------------------------------------------------------------------------
   // 10.4 The change stamp
   // ---------------------------------------------------------------------------------------------
@@ -1294,7 +1315,7 @@
   const STAMP_TAGS = new Set(['FAM', 'INDI', 'OBJE', 'NOTE', 'REPO', 'SOUR', 'SUBM']);
   const STAMP_TAGS_7 = new Set(['FAM', 'INDI', 'OBJE', 'SNOTE', 'REPO', 'SOUR', 'SUBM']);
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-  const STAMP_NOTE = 'Edited by hand in gedview.';
+  const STAMP_NOTE = 'Edited by hand in GEDCOM Viewer.';
   const STAMP_NOTE_MAX = 200;
 
   // A stamp's date and time, for a save made at `when`: the day without a leading zero, the month
@@ -1320,7 +1341,7 @@
   }
 
   // The records a save stamps: every record the net change touched — a line changed or added in
-  // it, or a line it lost — other than by a stamp of gedview's own, that is still in the file,
+  // it, or a line it lost — other than by a stamp of the viewer's own, that is still in the file,
   // under a tag that may carry a change date (section 2). Record numbers of the view, last first.
   function stampTargets(doc, items) {
     const list = items || netChange(doc);
@@ -1353,7 +1374,7 @@
 
   // What the stamps of a save will do, record by record, for the Save dialog to show before the
   // save makes them: 'adds' — a `1 CHAN` block at the record's end; 'sets' — its CHAN's DATE and
-  // TIME set, and a NOTE added; 'resets' — a stamp gedview added since the last save in place,
+  // TIME set, and a NOTE added; 'resets' — a stamp the viewer added since the last save in place,
   // set anew. First record first.
   function stampPlan(doc) {
     const v = doc.view;
@@ -1373,7 +1394,7 @@
   // 10.4 — the stamps of a save made at `when`, as one step of the history. A record with no
   // `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`, `3 TIME`, `2 NOTE`. A record with one has
   // its `2 DATE` and `3 TIME` set (either added when missing) and a `2 NOTE` added at the end of
-  // the block; notes already there stay. A note gedview added since the last save in place (a copy
+  // the block; notes already there stay. A note the viewer added since the last save in place (a copy
   // was saved in between) is set anew instead, never added to.
   function applyStamps(doc, when, typed) {
     const note = stampNote(doc, typed);
@@ -1433,7 +1454,7 @@
     search, searchTag, recordCounts, codePoints,
     openDocument, saveBytes, textOf, termOf,
     editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
-    markSaved, isChanged, netChange, changeRuns, lineMarks,
+    markSaved, isChanged, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, stampTargets, stampPlan, applyStamps,
   };
 });

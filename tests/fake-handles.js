@@ -87,7 +87,7 @@ class FakeDir {
     return d;
   }
 
-  // For the tests: put a file here; find a file by its path ('gedview-history/x.bak'); list names.
+  // For the tests: put a file here; find a file by its path ('gedcom-viewer-history/x.bak'); list names.
   put(name, bytes) {
     const f = new FakeFile(this, name, new Uint8Array(bytes));
     this.entries.set(name, f);

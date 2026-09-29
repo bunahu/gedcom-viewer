@@ -1,4 +1,4 @@
-/* gedview — save.js
+/* GEDCOM Viewer — save.js
  *
  * Saving: the names of BUILD-BRIEF 10.1, Save in place in the order of 10.2, Save a copy (10.3)
  * and the log block (10.5). It works over "handles" passed to it — a folder and the files in it,
@@ -13,7 +13,7 @@
 })(typeof self !== 'undefined' ? self : this, function (core) {
   'use strict';
 
-  const HISTORY = 'gedview-history';
+  const HISTORY = 'gedcom-viewer-history';
   const utf8 = new TextEncoder();
   const two = (n) => String(n).padStart(2, '0');
 
@@ -49,7 +49,7 @@
     const t = timestamp(when);
     const nth = (k) => (k > 1 ? `-${k}` : '');
     return {
-      backup: (k) => `${stem}.${t}${nth(k)}${ext}.bak`,              // in gedview-history/
+      backup: (k) => `${stem}.${t}${nth(k)}${ext}.bak`,              // in gedcom-viewer-history/
       copy: (k) => `${stem}.${t}${nth(k)}${ext}`,
       log: `${fileName}.edits.log`,
       logDownload: `${fileName}.${t}.edits.log`,

@@ -272,6 +272,40 @@ describe("section 14's rows", () => {
   });
 });
 
+describe('removed lines, restored', () => {
+  it('a deleted record, and a pointer line elsewhere, each put back in its place: no change is left', () => {
+    const doc = open('family.ged');
+    ok(core.deleteRecord(doc, 15));                                  // @I42@, and its CHIL and WIFE lines
+    ok(core.editLine(doc, 0, '0 HEAD'));                              // no change, no step
+    ok(core.addChild(doc, 7, '1 NOTE after the delete'));             // under @I1@: every line below moves one down
+    const removed = core.changeRuns(doc).filter((r) => r.kind === 'removed');
+    assert.deepEqual(removed.map((r) => [r.before + 1, r.lines.length, r.record.id]), [[16, 7, '@I42@'], [30, 2, '@F1@'], [34, 1, '@F2@']]);
+    const pointer = removed[1];
+    const r = ok(core.restoreLines(doc, pointer.before, pointer.lines.length));
+    assert.equal(r.step.label, 'Restore 2 lines');
+    assert.equal(doc.view.texts[pointer.at], '1 CHIL @I42@', 'back where it was');
+    assert.deepEqual(h.findingsOf(doc.view).E7, [pointer.at + 1], 'and pointing at nothing, since @I42@ is still gone: E7 says so');
+    const record = core.changeRuns(doc).find((x) => x.kind === 'removed' && x.record.id === '@I42@');
+    ok(core.restoreLines(doc, record.before, record.lines.length));
+    assert.equal(h.findingsOf(doc.view).E7, undefined);
+    const wife = core.changeRuns(doc).find((x) => x.kind === 'removed');
+    ok(core.restoreLines(doc, wife.before, 1));
+    assert.deepEqual(core.netChange(doc).map((it) => it.kind), ['added'], 'only the added line is left to save');
+    sameAsFreshRead(doc);
+    core.undo(doc);
+    assert.equal(core.changeRuns(doc).filter((x) => x.kind === 'removed').length, 1, 'a restore undoes like any act');
+  });
+
+  it('a line that is not removed is not restored', () => {
+    const doc = open('family.ged');
+    assert.equal(core.restoreLines(doc, 3, 1).ok, false);
+    ok(core.deleteLine(doc, 3));
+    assert.equal(core.restoreLines(doc, 3, 2).ok, false, 'one of the two is still there');
+    ok(core.restoreLines(doc, 3, 1));
+    assert.equal(hash(doc), h.sha256(doc.m.bytes));
+  });
+});
+
 describe('change stamps (10.4)', () => {
   const block = (doc, id) => {
     const v = doc.view;
@@ -303,14 +337,14 @@ describe('change stamps (10.4)', () => {
 
   it('the note: typed, or the standing one; one line, 200 characters at most', () => {
     assert.equal(core.stampNote(open('chan.ged'), '   ').text, core.STAMP_NOTE);
-    assert.equal(core.STAMP_NOTE, 'Edited by hand in gedview.');
+    assert.equal(core.STAMP_NOTE, 'Edited by hand in GEDCOM Viewer.');
     assert.match(core.stampNote(open('chan.ged'), 'x'.repeat(201)).reason, /201 characters; 200 at most/);
     assert.equal(core.stampNote(open('chan.ged'), 'x'.repeat(200)).text.length, 200);
     const doc = open('chan.ged');
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
     assert.match(core.applyStamps(doc, AT, 'two\nlines').reason, /one line/);
     ok(core.applyStamps(doc, AT, ''));
-    assert.ok(doc.view.texts.includes('2 NOTE Edited by hand in gedview.'));
+    assert.ok(doc.view.texts.includes('2 NOTE Edited by hand in GEDCOM Viewer.'));
   });
 
   it('version 7: the time is UTC, with a closing Z', () => {
@@ -319,7 +353,7 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 5, '0 @N1@ SNOTE a shared note, edited'));
     ok(core.applyStamps(doc, new Date(Date.UTC(2026, 8, 28, 23, 30, 5)), ''));
     assert.deepEqual(block(doc, '@I1@'), ['0 @I1@ INDI', '1 NAME Jane /Fixtures/', '1 CHAN', '2 DATE 28 SEP 2026',
-      '3 TIME 23:30:05Z', '2 NOTE Edited by hand in gedview.']);
+      '3 TIME 23:30:05Z', '2 NOTE Edited by hand in GEDCOM Viewer.']);
     assert.equal(doc.view.texts.filter((t) => t === '1 CHAN').length, 2, 'the SNOTE record is stamped too');
     assert.deepEqual(core.stampTime(new Date(Date.UTC(2026, 11, 31, 23, 59, 59)), true), { date: '31 DEC 2026', time: '23:59:59Z' });
     assert.deepEqual(core.stampTime(new Date(2026, 0, 5, 7, 8, 9), false), { date: '5 JAN 2026', time: '07:08:09' });
@@ -331,7 +365,7 @@ describe('change stamps (10.4)', () => {
     assert.deepEqual(core.stampTargets(doc).map((r) => doc.view.tag[doc.view.records[r]]), ['FAM']);
     ok(core.applyStamps(doc, AT, ''));
     assert.deepEqual(block(doc, '@F1@'), ['0 @F1@ FAM', '1 WIFE @I1@', '1 CHAN', '2 DATE 28 SEP 2026', '3 TIME 15:42:00',
-      '2 NOTE Edited by hand in gedview.']);
+      '2 NOTE Edited by hand in GEDCOM Viewer.']);
     sameAsFreshRead(doc);
   });
 
@@ -386,7 +420,7 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 5, '1 NAME Jane /Fixtures/'));
     ok(core.applyStamps(doc, AT, ''));
     const out = Buffer.from(core.saveBytes(doc)).toString('utf8');
-    assert.ok(out.endsWith('1 NAME Jane /Fixtures/\n1 CHAN\n2 DATE 28 SEP 2026\n3 TIME 15:42:00\n2 NOTE Edited by hand in gedview.'));
+    assert.ok(out.endsWith('1 NAME Jane /Fixtures/\n1 CHAN\n2 DATE 28 SEP 2026\n3 TIME 15:42:00\n2 NOTE Edited by hand in GEDCOM Viewer.'));
     sameAsFreshRead(doc);
   });
 });

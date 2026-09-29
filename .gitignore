@@ -1,5 +1,6 @@
 local/
 fixtures/corpora/*/
+gedcom-viewer-history/
 gedview-history/
 *.edits.log
 *.bak
