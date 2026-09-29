@@ -249,8 +249,11 @@ do not build an incremental checker.
 NOTE / SNOTE Notes · SUBM Submitters; any other tag under its own name (`_MTTAG`, `_MTCAT`).
 A click opens the record list at that type.
 
-**The file's facts**, one line: name · encoding · lines · size · version · the exporting system and
-its version (`HEAD.SOUR`, `.VERS`) · the header's date · sha256 on demand.
+**The file's facts**, one line, in the order the owner set on 2026-09-28: the GEDCOM version ·
+the encoding · exported, the header's date, by the exporting system and its version (`HEAD.SOUR`,
+`.VERS`) · the size on disk · lines · sha256 on demand, which says on hover what it is.
+`GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com Family Trees 2025.08 · 4.2 MB ·
+123,456 lines · sha256`.
 
 **The record list** is in file order, with a filter box; a click jumps to the record.
 
@@ -435,8 +438,8 @@ a repo (I9).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│ gedview   RAW.ged ●        Open  Save  Save a copy   Undo Redo   Indent  Theme     │
-│ UTF-8 · 123,456 lines · 4.2 MB · 5.5.1 · Ancestry.com Family Trees 2025.08 · 16 Sep 2026     │
+│ gedview 0.3  RAW.ged ●   Open GEDCOM  Save  Save a copy   Undo Redo   Indent Theme │
+│ GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com Family Trees 2025.08 · 4.2 MB ·… │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │ People 2,345   Media 1,234   Families 1,098   Sources 765   _MTTAG 23   Repositories 7   …   │
 ├──────────────────┬─────────────────────────────────────────────────┬────────────────────────┤
@@ -476,8 +479,14 @@ README lists the properties and what each one moves.
 **Words on the screen are few.** No captions, no helper text, no sub-titles. A placeholder never
 holds an example value.
 
-**Keys:** arrows, Page Up/Down, Home, End move the selection · Enter edits · Esc drops the edit ·
-⌘Z undo · ⇧⌘Z redo · ⌘S save · ⇧⌘S save a copy · ⌘F search · ⌘L go to line.
+**Keys:** arrows, Page Up/Down, Home, End move the selection · ← shuts a block or goes up to the
+line above it, → opens it or goes down into it · Enter edits · Esc drops the edit · ⌫ deletes the
+line and its subtree · ⌘Z undo · ⇧⌘Z redo · ⌘S save · ⇧⌘S save a copy · ⌘F search · ⌘L go to line.
+
+**Blocks open and shut** (the owner's ask of 2026-09-28): every line with a subtree shows ▾, or ▸
+when shut; a shut line hides its subtree and shows how many lines it holds, in the changed colour
+when one of them is not yet saved. ⌥-click opens or shuts every block at that level. Whatever
+jumps to a hidden line opens the blocks around it. Display only (I4), and never remembered.
 
 **Remembered between visits** (`localStorage`): indent on/off and width, theme, panel widths, the
 change-stamp checkbox. Never a file's name, content or handle.
@@ -688,9 +697,10 @@ The sibling project's instructions and memory do not load in this folder. These 
 
 ## 18. Not in version 1
 
-Replace-all · comparing two files · editing a split value as one text · folding a record shut ·
-a list of recent files · wrapping long lines in the grid · reading ANSEL as its own characters ·
-moving a line · a stamp for a record's creation (`CREA`, version 7) · anything that talks to the sibling project.
+Replace-all · comparing two files · editing a split value as one text · a list of recent files ·
+wrapping long lines in the grid · reading ANSEL as its own characters · moving a line · a stamp for
+a record's creation (`CREA`, version 7) · anything that talks to the sibling project. (Folding a record shut was
+here; the owner asked for it on 2026-09-28, at every level, and phase 4 built it.)
 
 Raised at the close of session 1, for the owner to rule: a `CLAUDE.md` in this folder that points
 every session opened here at section 17. It would be a pointer, not a copy, for sessions opened
@@ -777,3 +787,41 @@ everywhere; the facts line reads GEDCOM version · encoding · exported date by 
 system · size · lines · sha256, and the sha256 says on hover what it is; every line with lines
 under it opens and shuts (section 18's "folding a record shut", now in); and an unsaved edit shows
 in its row, in the right pane, in Changes and in the Save dialog.
+
+Phase 4 is built and passes every gate, the four asks with it. What it settled:
+
+| Settled | Why |
+|---|---|
+| **Save a copy writes even when nothing changed** — 10.3's step 1 is not taken for a copy | section 15's editing walk writes a copy after an undo has left nothing changed; a dated copy is what was asked for |
+| A backup whose dated name is taken gets `-2`, `-3`, as a copy does | 10.1 says so for copies; no backup may be written over |
+| Save reads the file on disk twice: before the dialog, and again just before the backup | the file can change while the dialog is open (I7) |
+| Clicking away from a line being typed keeps it — once that click has landed, so it still selects what it was pressed on; Esc alone drops it; an add left at its offered level adds nothing | as a spreadsheet does; nothing typed is lost unasked, and no click is eaten |
+| A save or copy that wrote nothing — refused, cancelled, a backup that failed — takes its stamps back | the document is then as it was before the attempt |
+| A file opened through the file box, with no handle, is proved to be in the granted folder by its name and its sha256 | `resolve` needs a handle |
+| With no folder granted, Save a copy asks where (`showSaveFilePicker`), then offers the log block with a second click; with no pickers, it downloads the copy, then the log | 10.3; a picker needs a fresh click |
+| A line that changed only its ending (9.2's last line) shows and logs `line ending: none -> LF`; a run of lines is one log entry, `a-b` | the log must say what changed; the brief's example shows single lines |
+| The version shows beside the name in the bar | the owner named the versions |
+| The walk now also edits in the page (the raw export: 88–113 ms), walks editing on its fictional file and the edges of typing on two written files, saves in place through a folder held in the page's memory, and downloads a copy with the pickers taken away | only the folder picker and its permission prompt are left for a person |
+
+### Phase 5 — the owner's walk
+
+On a **copy** of the raw export in a folder of its own, where its backup and log will go —
+`local/walk/`, which git ignores with the rest of `local/`. Chrome, `index.html` dragged onto it.
+
+1. **Open GEDCOM**, pick the copy. The facts line reads as section 8's example.
+2. Select a `1 NAME` line, press Enter, change one letter, Enter. The row is tinted with a bar, the
+   right pane says **Was**, Changes says 1, ● follows the name.
+3. **Save**. Chrome asks for the folder — pick the one the copy is in — then asks to let the page
+   edit files there: allow. The dialog lists the change and the one stamp. Save.
+4. In Finder: `gedview-history/` holds the backup, and `<name>.ged.edits.log` sits beside the copy.
+   `shasum -a 256` of the backup is `<sha256>`.
+5. **Undo** twice (the stamp, then the edit), **Save** with Change stamps unticked: `shasum -a 256`
+   of the copy is `<sha256>` again.
+6. Select a person's `0 @I…@ INDI` line, **Delete record**: the dialog lists the lines that point
+   at it. Delete, look, **Undo**.
+7. **Save a copy**: the dated name appears beside the copy.
+8. Change the copy from outside (append a line with another program; `touch` alone changes no
+   byte), edit a line in gedview, **Save**: it refuses, and says why.
+9. ⌥-click a ▾ on any `0` line: every record shuts. Go to a line inside one: it opens.
+
+He says it is done, and it is v1.0.

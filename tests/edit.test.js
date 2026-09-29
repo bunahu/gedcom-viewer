@@ -250,7 +250,7 @@ describe("section 14's rows", () => {
     assert.equal(out, `${Buffer.from(bytes).toString('utf8')}\n0 @N1@ NOTE after the end`);
     const items = core.netChange(doc);
     assert.deepEqual(items.map((it) => it.kind), ['changed', 'added'], 'the old last line changed: it gained a line ending');
-    assert.deepEqual(core.changeRuns(doc, items)[0].lines, [{ was: '0 TRLR', now: '0 TRLR' }]);
+    assert.deepEqual(core.changeRuns(doc, items)[0].lines, [{ was: '0 TRLR', now: '0 TRLR', ending: ['none', 'LF'] }]);
     sameAsFreshRead(doc);
     core.undo(doc);
     assert.equal(hash(doc), h.sha256(bytes));
@@ -284,6 +284,8 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@: no CHAN
     ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));            // @I1@: CHAN with DATE, TIME and a NOTE
     ok(core.addChild(doc, 17, '1 NOTE a family note'));              // @F1@: CHAN with a DATE and no TIME
+    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I1@', 'sets'], ['@I2@', 'adds'], ['@F1@', 'sets']],
+      'what the Save dialog shows before the stamps are made');
     const r = ok(core.applyStamps(doc, AT, 'Fixed the surname.'));
     assert.equal(r.step.label, 'Change stamps');
     assert.deepEqual(block(doc, '@I2@'), ['0 @I2@ INDI', '1 NAME Joe /Fixtures/', '1 FAMS @F1@',
@@ -366,6 +368,7 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
     ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));
     ok(core.applyStamps(doc, AT, 'first'));                          // Save a copy
+    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I1@', 'resets'], ['@I2@', 'resets']]);
     ok(core.applyStamps(doc, LATER, 'second'));                      // then Save, in place
     assert.deepEqual(block(doc, '@I2@').slice(3), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07', '2 NOTE second']);
     assert.deepEqual(block(doc, '@I1@').slice(3), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07',

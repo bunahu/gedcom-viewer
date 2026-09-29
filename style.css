@@ -112,6 +112,18 @@
   --mark-error: var(--color-danger);
   --mark-note: var(--color-warning);
   --mark-size: 7px;
+  --fold-color: var(--color-text-muted);   /* the ▸ ▾ that shut and open a block */
+  --fold-size: 1.25em;
+  --hidden-bg: var(--hover-bg);            /* the count of lines a shut block hides */
+
+  /* editing: what is not yet saved */
+  --mark-changed: var(--color-entity-collection);   /* a changed line: the bar at its left, its tint */
+  --mark-added: var(--color-success);               /* an added line */
+  --mark-removed: var(--color-danger);              /* the rule where lines were removed */
+  --mark-bar: 3px;
+  --row-changed: color-mix(in srgb, var(--mark-changed) 14%, transparent);
+  --row-added: color-mix(in srgb, var(--mark-added) 14%, transparent);
+  --edit-bg: var(--color-bg);                       /* the box a line is typed in */
 
   /* the frame */
   --left-width: 290px;                /* the side panel; dragged wider or narrower, remembered */
@@ -127,6 +139,9 @@
   --pressed-bg: color-mix(in srgb, var(--color-accent) 35%, transparent);
   --hover-bg: color-mix(in srgb, var(--color-accent) 18%, transparent);
   --drop-bg: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --dialog-width: 46rem;
+  --shadow: 0 12px 36px color-mix(in srgb, var(--color-text) 24%, transparent);
+  --backdrop: color-mix(in srgb, var(--color-text) 22%, transparent);
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -143,6 +158,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 button, input { font: inherit; color: inherit; }
+input[type="checkbox"] { accent-color: var(--color-accent); }
 
 .button {
   padding: var(--input-padding);
@@ -178,8 +194,11 @@ button, input { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--color-border);
 }
 .bar-top { display: flex; align-items: center; gap: var(--gap); min-width: 0; }
-.app-name { font-weight: 700; }
+.app-name { font-weight: 700; white-space: nowrap; }
+.version { font-weight: 400; font-size: var(--font-size-small); color: var(--color-text-muted); }
 .file-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dirty { margin-left: calc(-0.6 * var(--gap)); color: var(--mark-changed); }
+.dirty[hidden] { display: none; }
 .actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .goto { width: 7.5em; }
 .indent-width { width: 3.6em; }
@@ -192,6 +211,7 @@ button, input { font: inherit; color: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.facts .fact[title] { cursor: help; }
 .facts .sha {
   padding: 0;
   border: 0;
@@ -305,6 +325,10 @@ button, input { font: inherit; color: inherit; }
 .item.is-head.is-note .muted:first-child { color: var(--mark-note); }
 .item.is-sub { padding-left: 22px; }
 .item .mono { font-family: var(--font-grid); }
+.item.is-changed { box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); }
+.item.is-added { box-shadow: inset var(--mark-bar) 0 0 var(--mark-added); }
+.item.is-removed { box-shadow: inset var(--mark-bar) 0 0 var(--mark-removed); }
+.item.is-removed .main { text-decoration: line-through; color: var(--color-text-muted); }
 
 /* -- the grid ---------------------------------------------------------------------------------- */
 
@@ -327,6 +351,7 @@ button, input { font: inherit; color: inherit; }
 .v-spacer { pointer-events: none; }
 
 .row {
+  position: relative;
   height: var(--row-height);
   line-height: var(--row-height);
   display: flex;
@@ -335,8 +360,23 @@ button, input { font: inherit; color: inherit; }
   cursor: default;
 }
 .row:hover { background: var(--row-hover); }
+.row.is-changed { background: var(--row-changed); box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); }
+.row.is-added { background: var(--row-added); box-shadow: inset var(--mark-bar) 0 0 var(--mark-added); }
 .row.is-hit { background: var(--row-hit); }
 .row.is-sel { background: var(--row-selected); }
+/* where lines were removed: a rule along the top of the line now below them (or along the bottom
+   of the last line, when they were at the end) */
+.row.is-removed-above::before,
+.row.is-removed-below::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--mark-removed);
+}
+.row.is-removed-above::before { top: 0; }
+.row.is-removed-below::after { bottom: 0; }
 .ln {
   flex: none;
   width: var(--ln-width, 8ch);
@@ -349,7 +389,46 @@ button, input { font: inherit; color: inherit; }
 .mk::before { content: ''; width: var(--mark-size); height: var(--mark-size); border-radius: 50%; }
 .mk.is-error::before { background: var(--mark-error); }
 .mk.is-note::before { background: var(--mark-note); }
-.tx { flex: 1; min-width: 0; overflow: hidden; tab-size: var(--tab-size); }
+/* the indent, then the ▸ ▾ of a line with lines under it */
+.fd { flex: none; }
+.fold {
+  display: inline-block;
+  width: 2ch;
+  text-align: center;
+  color: var(--fold-color);
+  font-size: var(--fold-size);
+  line-height: 1;
+  user-select: none;
+}
+.fold:not(:empty) { cursor: pointer; }
+.fold:not(:empty):hover { color: var(--color-text); }
+.tx { flex: 0 1 auto; min-width: 0; overflow: hidden; tab-size: var(--tab-size); }
+.hc {
+  flex: none;
+  margin: 3px 0 3px 1ch;
+  padding: 0 0.7ch;
+  line-height: calc(var(--row-height) - 6px);
+  border-radius: var(--radius);
+  background: var(--hidden-bg);
+  color: var(--color-text-muted);
+  font-size: 0.85em;
+}
+.hc.is-changed { color: var(--mark-changed); box-shadow: inset 0 0 0 1px var(--mark-changed); }
+/* a line being typed: its box fills the row */
+.edit {
+  flex: 1;
+  min-width: 0;
+  height: var(--row-height);
+  padding: 0 0.5ch;
+  border: 0;
+  border-radius: 3px;
+  background: var(--edit-bg);
+  color: var(--color-text);
+  font: inherit;
+  tab-size: var(--tab-size);
+}
+.edit:focus { outline: var(--focus-ring); outline-offset: -2px; }
+.grid.is-editing { overflow-y: hidden; }
 
 .lv { color: var(--level-color); }
 .id { color: var(--id-color); }
@@ -379,6 +458,26 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .empty[hidden] { display: none; }
 .empty .button { font-size: 1.1em; padding: 0.5rem 1.4rem; }
 .message { max-width: 34em; text-align: center; color: var(--color-danger); }
+
+/* what an act or a save has to say: at the foot of the grid, until clicked or replaced */
+.notice {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 28px);
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.notice[hidden] { display: none; }
+.notice.is-ok { border-color: var(--mark-added); }
+.notice.is-error { border-color: var(--color-danger); color: var(--color-danger); }
 
 /* -- the right pane ---------------------------------------------------------------------------- */
 
@@ -417,6 +516,62 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .finding .code { flex: none; font-weight: 600; }
 .finding.is-error .code { color: var(--mark-error); }
 .finding.is-note .code { color: var(--mark-note); }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.detail-actions .button { padding: 0.15rem 0.55rem; }
+.detail-was { box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); padding-left: 10px; }
+.detail-added { color: var(--mark-added); font-weight: 600; }
+
+/* -- dialogs: Save, Save a copy, deleting, a file changed on disk ------------------------------ */
+
+.dialog {
+  width: min(var(--dialog-width), calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+}
+.dialog::backdrop { background: var(--backdrop); }
+.dialog-form { display: flex; flex-direction: column; max-height: calc(100vh - 66px); }
+.dialog-title { margin: 0; padding: 14px 18px 8px; font-size: 1.05em; overflow-wrap: anywhere; }
+.dialog-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 0 18px; overflow: auto; }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 14px; }
+.button.is-primary { background: var(--pressed-bg); border-color: var(--color-accent); font-weight: 600; }
+.dialog-sum { color: var(--color-text-muted); }
+.dialog-list {
+  max-height: 42vh;
+  overflow: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  font-size: var(--font-size-small);
+}
+.chg { display: flex; gap: 8px; margin-top: 6px; }
+.chg:first-child { margin-top: 0; }
+.chg-kind { font-weight: 600; }
+.chg.is-changed .chg-kind { color: var(--mark-changed); }
+.chg.is-added .chg-kind { color: var(--mark-added); }
+.chg.is-removed .chg-kind { color: var(--mark-removed); }
+.chg .muted, .dialog-check .muted { color: var(--color-text-muted); }
+.chg-line {
+  padding-left: 1.4em;
+  font-family: var(--font-grid);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: var(--tab-size);
+}
+.chg-sign { display: inline-block; width: 1.4em; margin-left: -1.4em; font-weight: 700; }
+.chg-line.is-was .chg-sign { color: var(--mark-removed); }
+.chg-line.is-now .chg-sign { color: var(--mark-added); }
+.dialog-check { display: flex; align-items: baseline; gap: 8px; }
+.dialog-check .mono { font-family: var(--font-grid); overflow-wrap: anywhere; }
+.dialog-stamps { display: flex; flex-direction: column; gap: 2px; padding-left: 24px; font-size: var(--font-size-small); }
+.dialog-stamps[hidden] { display: none; }
+.dialog-note { display: flex; align-items: center; gap: 8px; }
+.dialog-note .input { flex: 1; }
 
 /* -- dropping a file on the page --------------------------------------------------------------- */
 

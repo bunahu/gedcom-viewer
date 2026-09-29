@@ -1,5 +1,5 @@
 // The page's own files: what it loads, in what order, and that none of them can reach the
-// network (I5). save.js joins the list in phase 4.
+// network (I5).
 'use strict';
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -7,17 +7,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const h = require('./helpers.js');
 
-const PAGE = ['index.html', 'style.css', 'core.js', 'ui.js'];
+const PAGE = ['index.html', 'style.css', 'core.js', 'save.js', 'ui.js'];
 const FORBIDDEN = ['fetch(', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'sendBeacon', 'import(', '@import',
   'url(http', 'http://', 'https://'];
 const read = (name) => fs.readFileSync(path.join(h.ROOT, name), 'utf8');
 
 describe('the page', () => {
-  it('index.html loads style.css, then core.js and ui.js as classic scripts, in that order, and nothing else', () => {
+  it('index.html loads style.css, then core.js, save.js and ui.js as classic scripts, in that order, and nothing else', () => {
     const page = read('index.html');
     assert.deepEqual([...page.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]),
-      ['<script src="core.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
-    assert.deepEqual([...page.matchAll(/\b(?:src|href)="([^"]*)"/g)].map((m) => m[1]), ['style.css', 'core.js', 'ui.js']);
+      ['<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
+    assert.deepEqual([...page.matchAll(/\b(?:src|href)="([^"]*)"/g)].map((m) => m[1]), ['style.css', 'core.js', 'save.js', 'ui.js']);
     assert.ok(!/type="module"/.test(page), 'no modules: a page opened from disk may not import one');
   });
 

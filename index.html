@@ -10,10 +10,15 @@
 
 <header class="bar">
   <div class="bar-top">
-    <span class="app-name">gedview</span>
+    <span class="app-name">gedview <span class="version" title="gedview's version">0.3</span></span>
     <span class="file-name" id="file-name"></span>
+    <span class="dirty" id="dirty" title="Changed since it was opened or last saved" hidden>●</span>
     <nav class="actions">
-      <button class="button" id="open" type="button">Open</button>
+      <button class="button" id="open" type="button">Open GEDCOM</button>
+      <button class="button" id="save" type="button" title="Save, in place (⌘S)" disabled>Save</button>
+      <button class="button" id="save-copy" type="button" title="Save a dated copy (⇧⌘S)" disabled>Save a copy</button>
+      <button class="button" id="undo" type="button" disabled>Undo</button>
+      <button class="button" id="redo" type="button" disabled>Redo</button>
       <button class="button" id="back" type="button" disabled>Back</button>
       <input class="input goto" id="goto" type="text" inputmode="numeric" placeholder="Line" aria-label="Go to line" disabled>
       <button class="button" id="indent" type="button" aria-pressed="false">Indent</button>
@@ -31,6 +36,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab" type="button" role="tab" data-panel="records" aria-selected="true">Records</button>
       <button class="tab" type="button" role="tab" data-panel="checks">Checks <span class="tab-count" id="checks-count"></span></button>
+      <button class="tab" type="button" role="tab" data-panel="changes">Changes <span class="tab-count" id="changes-count"></span></button>
       <button class="tab" type="button" role="tab" data-panel="search">Search</button>
       <button class="tab" type="button" role="tab" data-panel="tags">Tags</button>
     </nav>
@@ -46,6 +52,11 @@
     <section class="panel" id="panel-checks" hidden>
       <div class="panel-sum" id="checks-sum"></div>
       <div class="list" id="checks-list"></div>
+    </section>
+
+    <section class="panel" id="panel-changes" hidden>
+      <div class="panel-sum" id="changes-sum"></div>
+      <div class="list" id="changes-list"></div>
     </section>
 
     <section class="panel" id="panel-search" hidden>
@@ -70,9 +81,10 @@
   <section class="middle">
     <div class="grid" id="grid" tabindex="0" aria-label="Lines"></div>
     <div class="empty" id="empty">
-      <button class="button" id="open-empty" type="button">Open</button>
+      <button class="button" id="open-empty" type="button">Open GEDCOM</button>
       <div class="message" id="message" hidden></div>
     </div>
+    <div class="notice" id="notice" role="status" hidden></div>
   </section>
 
   <div class="split" id="split-right"></div>
@@ -80,10 +92,12 @@
   <aside class="detail" id="detail"></aside>
 </main>
 
+<dialog class="dialog" id="dialog"></dialog>
 <div class="drop" id="drop" hidden></div>
 <input id="file-input" type="file" accept=".ged,.gedcom" hidden>
 
 <script src="core.js" charset="utf-8"></script>
+<script src="save.js" charset="utf-8"></script>
 <script src="ui.js" charset="utf-8"></script>
 </body>
 </html>

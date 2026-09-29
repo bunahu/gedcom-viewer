@@ -84,6 +84,10 @@ async function launch({ width = 1600, height = 1000 } = {}) {
 
     const page = {
       log,
+      // A command to the browser itself, not the tab (downloads, for one).
+      browser: (method, params) => cdp.send(method, params),
+      // A script run before the page's own, at every load from now on.
+      addScript: (source) => S('Page.addScriptToEvaluateOnNewDocument', { source }),
       async ev(expression) {
         const r = await S('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
         if (r.exceptionDetails) throw new Error(`in the page: ${(r.exceptionDetails.exception || {}).description || r.exceptionDetails.text}`);
@@ -116,17 +120,18 @@ async function launch({ width = 1600, height = 1000 } = {}) {
         await S('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left',
           buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1, ...extra });
       },
-      async clickAt(x, y) {
-        await page.mouse('mouseMoved', x, y);
-        await page.mouse('mousePressed', x, y);
-        await page.mouse('mouseReleased', x, y);
+      // `modifiers` as DevTools counts them: 1 ⌥, 2 ⌃, 4 ⌘, 8 ⇧.
+      async clickAt(x, y, modifiers = 0) {
+        await page.mouse('mouseMoved', x, y, { modifiers });
+        await page.mouse('mousePressed', x, y, { modifiers });
+        await page.mouse('mouseReleased', x, y, { modifiers });
       },
       // Click what `expr` names in the page: at its middle, or `dx` pixels in from its left.
-      async click(expr, dx) {
+      async click(expr, dx, modifiers = 0) {
         const at = await page.ev(`(() => { const e = ${expr}; if (!e) return null; e.scrollIntoView({ block: 'nearest' });
           const b = e.getBoundingClientRect(); return { x: b.left + (${dx === undefined ? 'b.width / 2' : dx}), y: b.top + b.height / 2 }; })()`);
         if (!at) throw new Error(`nothing to click: ${expr}`);
-        await page.clickAt(at.x, at.y);
+        await page.clickAt(at.x, at.y, modifiers);
       },
       async key(key, code, vk, modifiers = 0) {
         const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };

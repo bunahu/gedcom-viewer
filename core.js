@@ -1022,12 +1022,19 @@
   const refuse = (reason) => ({ ok: false, reason });
   const E8_REASON = 'This line\'s bytes could not be read in the file\'s encoding (E8). It can be deleted, not edited.';
 
-  // 9.2 — a line typed over, whole: level, tag and value. It keeps its terminator. A line whose
-  // bytes could not be read (E8) can be deleted, not edited: its text is not what the file holds.
-  function editLine(doc, pos, text) {
+  // Why line `pos` cannot be typed over, or null when it can: a line whose bytes could not be read
+  // (E8) can be deleted, not edited, for its text is not what the file holds.
+  function editRefusal(doc, pos) {
     const e = doc.order[pos];
-    if (e === undefined) return refuse(`There is no line ${num(pos + 1)}.`);
-    if (e >= 0 && doc.m.bad[e]) return refuse(E8_REASON);
+    if (e === undefined) return `There is no line ${num(pos + 1)}.`;
+    return e >= 0 && doc.m.bad[e] ? E8_REASON : null;
+  }
+
+  // 9.2 — a line typed over, whole: level, tag and value. It keeps its terminator.
+  function editLine(doc, pos, text) {
+    const cannot = editRefusal(doc, pos);
+    if (cannot) return refuse(cannot);
+    const e = doc.order[pos];
     if (text === textOf(doc, e)) return { ok: true, step: null };
     const why = textRefusal(doc, text);
     if (why) return refuse(why);
@@ -1226,8 +1233,9 @@
   // The net change in runs, for the Changes panel and the log: lines of one kind, each right after
   // the last, in one record, and all written by a change stamp or none. A run holds its kind; its
   // first place before and after (and, removed, `at`, the place after where it was); its lines, as
-  // `was` and `now`; its record, as id and tag — in the file as saved for a removed run, as it now
-  // is for the others; and whether a stamp wrote it.
+  // `was` and `now` (and `ending`, the line endings before and after, when those differ); its
+  // record, as id and tag — in the file as saved for a removed run, as it now is for the others;
+  // and whether a stamp wrote it.
   function changeRuns(doc, items) {
     const list = items || netChange(doc);
     const S = doc.savedOrder;
@@ -1245,17 +1253,21 @@
         record = { id: v.xref[line], tag: v.tag[line], key: `now ${line}` };
       }
       const stamp = it.after >= 0 && stampOf(doc, O[it.after]) !== null;
-      const was = it.before >= 0 ? textOf(doc, S[it.before]) : null;
-      const now = it.after >= 0 ? textOf(doc, O[it.after]) : null;
+      const line = { was: it.before >= 0 ? textOf(doc, S[it.before]) : null, now: it.after >= 0 ? textOf(doc, O[it.after]) : null };
+      if (it.kind === 'changed') {                                   // a line can change in its ending alone (9.2)
+        const tw = termOf(doc, S[it.before]);
+        const tn = termOf(doc, O[it.after]);
+        if (tw !== tn) line.ending = [TERM_NAMES[tw], TERM_NAMES[tn]];
+      }
       const last = runs[runs.length - 1];
       const joins = last && last.kind === it.kind && last.stamp === stamp &&
         (last.record && last.record.key) === (record && record.key) &&
         (it.before < 0 || it.before === last.before + last.lines.length) &&
         (it.after < 0 || it.after === last.after + last.lines.length);
-      if (joins) last.lines.push({ was, now });
+      if (joins) last.lines.push(line);
       else {
         runs.push({ kind: it.kind, before: it.before, after: it.after, at: it.kind === 'removed' ? it.at : it.after,
-          record, stamp, lines: [{ was, now }] });
+          record, stamp, lines: [line] });
       }
     }
     return runs;
@@ -1339,6 +1351,25 @@
     return [...hit].sort((x, y) => y - x);
   }
 
+  // What the stamps of a save will do, record by record, for the Save dialog to show before the
+  // save makes them: 'adds' — a `1 CHAN` block at the record's end; 'sets' — its CHAN's DATE and
+  // TIME set, and a NOTE added; 'resets' — a stamp gedview added since the last save in place,
+  // set anew. First record first.
+  function stampPlan(doc) {
+    const v = doc.view;
+    const inSaved = placesIn(doc, doc.savedOrder);
+    return stampTargets(doc).reverse().map((r) => {
+      const from = v.records[r];
+      const chan = firstChild(v, from + 1, recordEnd(v, r), 1, 'CHAN');
+      let how = chan < 0 ? 'adds' : 'sets';
+      for (let p = chan + 1; chan >= 0 && p < subtreeEnd(v, chan); p += 1) {
+        const e = doc.order[p];
+        if (stampOf(doc, e) === 'note' && inSaved(e) < 0) { how = 'resets'; break; }
+      }
+      return { record: r, line: from, id: v.xref[from], tag: v.tag[from], how };
+    });
+  }
+
   // 10.4 — the stamps of a save made at `when`, as one step of the history. A record with no
   // `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`, `3 TIME`, `2 NOTE`. A record with one has
   // its `2 DATE` and `3 TIME` set (either added when missing) and a `2 NOTE` added at the end of
@@ -1401,8 +1432,8 @@
     recordEnd, subtreeEnd, valueOf, isPointerLine, joinedValue,
     search, searchTag, recordCounts, codePoints,
     openDocument, saveBytes, textOf, termOf,
-    editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
+    editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
     markSaved, isChanged, netChange, changeRuns, lineMarks,
-    stampTime, stampNote, stampTargets, applyStamps,
+    stampTime, stampNote, stampTargets, stampPlan, applyStamps,
   };
 });
