@@ -712,6 +712,10 @@ Raised at the close of session 1, for the owner to rule: a `CLAUDE.md` in this f
 every session opened here at section 17. It would be a pointer, not a copy, for sessions opened
 without the build prompt.
 
+Raised 2026-09-29, for the owner to rule: `index.html` moved away from its four files opens as a
+bare page with nothing working and nothing said. The page could carry a line of its own that
+`ui.js` removes as it starts, so a page opened away from its files says so.
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
@@ -811,26 +815,114 @@ Phase 4 is built and passes every gate, the four asks with it. What it settled:
 
 ### Phase 5 — the owner's walk
 
-On a **copy** of the raw export in a folder of its own, where its backup and log will go —
-`local/walk/`, which git ignores with the rest of `local/`. Chrome, `index.html` dragged onto it.
+Brought to v0.4 on 2026-09-29: Edit is a mode, removed lines are struck and restored, a row sits
+between record types, Go to Line… takes a range, and the change stamps are shown before and after.
+Findings come back by step number.
 
-1. **Open GEDCOM**, pick the copy. The facts line reads as section 8's example.
-2. Select a `1 NAME` line, press Enter, change one letter, Enter. The row is tinted with a bar, the
-   right pane says **Was**, Changes says 1, ● follows the name.
-3. **Save**. Chrome asks for the folder — pick the one the copy is in — then asks to let the page
-   edit files there: allow. The dialog lists the change and the one stamp. Save.
-4. In Finder: `gedcom-viewer-history/` holds the backup, and `<name>.ged.edits.log` sits beside the copy.
-   `shasum -a 256` of the backup is `<sha256>`.
-5. **Undo** twice (the stamp, then the edit), **Save** with Change stamps unticked: `shasum -a 256`
-   of the copy is `<sha256>` again.
-6. Select a person's `0 @I…@ INDI` line, **Delete record**: the dialog lists the lines that point
-   at it. Delete, look, **Undo**.
-7. **Save a copy**: the dated name appears beside the copy.
-8. Change the copy from outside (append a line with another program; `touch` alone changes no
-   byte), edit a line in gedview, **Save**: it refuses, and says why.
-9. ⌥-click a ▾ on any `0` line: every record shuts. Go to a line inside one: it opens.
+On a **copy** of the raw export in a folder of its own, `local/walk/` (git ignores all of `local/`),
+where the backups and the log will go. Open the page with
+`open -a "Google Chrome" ~/Desktop/claude/gedcom-viewer/index.html` — `index.html` stays where it
+is, beside the four files it loads.
 
-He says it is done, and it is v1.0.
+**A. Open and read** — Edit stays off.
+
+| # | Do | Expect |
+|---|---|---|
+| 1 | **Open GEDCOM** → `local/walk/RAW.ged` | opens in under 2 seconds; Open GEDCOM leaves the top bar; the file's name shows as a chip |
+| 2 | Read the counts bar; click **People** | the counts of the measured table (`local/measured.json`), People first; Records lists the people |
+| 3 | Click the file's name | GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com Family Trees 2025.08 · its size · its lines · sha256. **GEDCOM 5.5.1** goes to line 18, **exported…** to line 15; **sha256** shows `<sha256>` and says on hover what it is |
+| 4 | **Checks** | 0 errors. Notes: Line break inside the value 3 · Nothing points at it 9 · Over 255 characters 93 · Mixed line endings, once, for the whole file |
+| 5 | Click a **Line break inside the value** | a `CONC` line in media record `@O780@` or `@O1530@`, the character marked in the value |
+| 6 | **Indent** on, then off | rows set in by level, with a width box beside the button; then flush left |
+| 7 | ▾ on a `0 @I…@ INDI` line, then ▸; ← and → on a selected line; ⌥-click ▾ on a `0` line; Go to Line… a line inside a shut record | the record shuts and opens; ⌥ shuts every record; the record gone into opens |
+| 8 | Click the row **▾ INDI People …** between the types; again; ⌥-click it | every person shuts; opens; ⌥ shuts every type |
+| 9 | Drag the scrollbar to the end and back | no blank screen on the way |
+
+**B. Find and move**
+
+| # | Do | Expect |
+|---|---|---|
+| 10 | **Go to Line…** (⌘L) the last line's number | `0 TRLR` |
+| 11 | Go to Line… `105-117`, **Go** | only those 13 lines; **×** shows every line again |
+| 12 | Click the `@F…@` of a `1 FAMS` line; **Back** | the family; Back returns |
+| 13 | **Search** (⌘F) a word: **Next**, **Previous**. **Tags**: click `_MTTAG` | a count, and each match in turn; the tag's lines |
+| 14 | **Records**: part of a surname in the filter; click a result | that record |
+| 15 | Select a `CONC` line; then a `0 @…@` record line | the right frame's **Joined** holds the whole value; for the record line, the lines that point at it |
+| 16 | Double-click a word | it highlights, and stays highlighted to copy |
+| 17 | The file's name → **Open another GEDCOM…** → `local/CLEANED.ged`; Go to Line… the number of its longest line. Then reopen `local/walk/RAW.ged` | an 83,797-character line (`_META` of `@O1470@`): clipped in the main frame, whole in the right frame |
+
+**C. Edit a line**
+
+| # | Do | Expect |
+|---|---|---|
+| 18 | **Edit** (⌘E) on. Select a person's `1 NAME` line; Enter (or double-click); change one letter; Enter | the row tinted, a bar at its left; the right frame's **Was** holds the old line; **Changes 1**; ● after the file's name; Save turns on |
+| 19 | Start typing over another line; Esc | nothing changes |
+
+**D. Save in place, with the change stamp**
+
+| # | Do | Expect |
+|---|---|---|
+| 20 | **Save** (⌘S). Pick the `walk` folder, and let Chrome edit files there | the dialog lists 1 change and **Change stamps · 1 record**, with a note box (left empty, the note is *Edited by hand in GEDCOM Viewer.*). Save |
+| 21 | Go to that person's record | it ends with `1 CHAN` · `2 DATE` today · `3 TIME` now · `2 NOTE` the note; ● gone; Changes 0 |
+| 22 | `shasum -a 256 ~/Desktop/claude/gedcom-viewer/local/walk/gedcom-viewer-history/*.bak` | one backup, `<sha256>`: the file as it was |
+| 23 | In Finder, select `RAW.ged.edits.log` beside the copy; Space | one `save` block: the time, the note, sha256 before (`<sha256>`) and after, the backup's name, the NAME line before → after, and the four stamp lines |
+
+**E. Back to the original**
+
+| # | Do | Expect |
+|---|---|---|
+| 24 | **Undo** twice (the stamp, then the edit); **Save** with **Change stamps** unticked | the dialog lists the name back and the four stamp lines removed, and no new stamp. Then `shasum -a 256 ~/Desktop/claude/gedcom-viewer/local/walk/RAW.ged` is `<sha256>` |
+
+The box remembers how it was left: tick it again before a save that should stamp.
+
+**F. Delete a record, and bring it back**
+
+| # | Do | Expect |
+|---|---|---|
+| 25 | Select the `0 @I…@ INDI` line of a person in a family; the right frame's **Delete record** | a dialog: the record's lines, and each line elsewhere that points at it (the family's `CHIL`, `HUSB` or `WIFE`), ticked |
+| 26 | **Delete** | the lines stay where they were, struck through in red; Changes lists them. Edit off: a red rule where they were. Edit on again |
+| 27 | Click a struck line → **Restore**. In **Changes**, click the family's removed line → **Restore** | each comes back; Changes 0 |
+| 28 | **Delete record** again; **Undo** once | all of it back in one step; Changes 0 |
+
+**G. Add lines**
+
+| # | Do | Expect |
+|---|---|---|
+| 29 | Select a `0 @I…@ INDI` line → **Add inside**; type `NOTE test` after the offered `1 `; Enter | a new line under it, tinted another colour; the right frame says **Added** |
+| 30 | Enter on that line; take out the space after `1`; Enter | Checks: 1 error, **Not level · tag · value**, at once |
+| 31 | ⌫ on it | gone, and not struck (it was never saved); Changes 0; 0 errors |
+| 32 | Select a `1 NAME` line → **Add after**; Esc | a box after the name's block, at level 1; Esc adds nothing |
+
+**H. Save a copy**
+
+| # | Do | Expect |
+|---|---|---|
+| 33 | **Save a copy** (⇧⌘S) | `RAW.2026-09-29T……ged` beside the copy; the copy itself unchanged; a `copy` block in the log |
+
+**I. What must refuse, and a clean fix**
+
+| # | Do | Expect |
+|---|---|---|
+| 34 | `printf '0 NOTE changed from outside\n' >> ~/Desktop/claude/gedcom-viewer/local/walk/RAW.ged`; in the viewer, edit any line; **Save** | it refuses — the file changed on disk since it was opened — and writes nothing |
+| 35 | With that edit unsaved, reload the tab (⌘R) | Chrome asks first; leave |
+| 36 | Reopen the walk copy | one line more than the file; Checks: 1 error, **No HEAD first / TRLR last**; the counts bar gains Notes 1 |
+| 37 | Edit on; Go to Line… the line after the last; ⌫; **Save** — pick the folder again (a reload forgets it) | the dialog: 1 line removed, **Change stamps · none needed**. Then 0 errors, and the copy's sha256 is `<sha256>` again |
+
+**J. Real use**
+
+| # | Do | Expect |
+|---|---|---|
+| 38 | One fix he would really make, Change stamps ticked; read a long source or media record in the right frame | anything awkward goes on the findings list |
+
+**K. The look, and what is remembered**
+
+| # | Do | Expect |
+|---|---|---|
+| 39 | **Theme**: light → sunset → dark | each reads well |
+| 40 | Close the tab; open the page again | Indent, theme, panel widths and the facts' open or shut as left; Edit off |
+
+`local/walk/` then holds the copy, a dated copy, the backups and the log — all real data, all
+ignored by git; delete the folder when the walk is over. He says it is done, and it is v1.0.
 
 ### The owner's second round (2026-09-28, after phase 4): v0.4
 

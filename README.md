@@ -28,8 +28,10 @@ keep traces of that.
 
 ## Open it
 
-- **In Chrome:** drag `index.html` onto a Chrome window (or, in Chrome, File → Open File… and pick
-  it). Double-clicking the file opens the default browser instead.
+- **In Chrome:** `open -a "Google Chrome" ~/Desktop/claude/gedcom-viewer/index.html` in Terminal,
+  or, in Chrome, File → Open File… and pick it. Double-clicking the file opens the default browser
+  instead. Keep `index.html` in this folder: it loads `style.css`, `core.js`, `save.js` and `ui.js`
+  from beside it, and anywhere else it opens as a bare page.
 - Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
   opened with ⌘O, by dropping it, or with **Open another GEDCOM…** among the file's facts.
 - Other browsers can read, check and edit a file too. Save, in place, needs Chrome; elsewhere Save
