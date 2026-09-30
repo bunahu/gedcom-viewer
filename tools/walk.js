@@ -6,7 +6,7 @@
 // core.js reads from the same file; tools/check-real.js holds core.js to section 3, so the two
 // together are the walk's "reads as section 3".
 //
-//     node tools/walk.js FILE [FILE ...] [--shots DIR]
+//     node tools/walk.js FILE [FILE ...] [--shots DIR] [--only PART]
 //
 // Every FILE gets the read-only walk, and one edit made in the page only — never saved — timed
 // against section 16's 0.3 s and undone. For a real file only counts, tags, ids, line numbers,
@@ -15,8 +15,13 @@
 // editing (the facts line, blocks shut and opened, an edit, undo and redo, a line added, a record
 // deleted with its pointers) are walked on a fictional file written to the system's temp folder
 // and removed after; and, in a browser with its file pickers taken away, Save a copy downloads the
-// copy and its log. --shots DIR saves pictures of the fictional files, and of nothing else. Exit
-// 0 when every step passes.
+// copy and its log. The third round (0.5) is walked on a fictional file of its own: the frames
+// hidden and shown across a reload, the lines scrolled sideways, the copy buttons, a _META drawn
+// as it reads, blocks and sections dragged, Collapse all, a check's meaning, Back over the lines,
+// Bold surnames, a link selected whole, a clipped row's count, and E. --shots DIR saves pictures
+// of the fictional files, and of nothing else. --only PART walks one part alone, or several
+// named with commas: read-only, rest, editing, edges, third, save, copy. Exit 0 when every step
+// passes.
 //
 // Save in place is not walked here: its folder picker and its permission prompts need a person's
 // click. tests/save.test.js walks every other step of section 15's editing walk, over in-memory
@@ -54,7 +59,12 @@ async function gotoLine(page, n) {
   await page.key('l', 'KeyL', 76, 4);                                // ⌘L
   await page.type(String(n));
   await page.key('Enter', 'Enter', 13);
-  await page.waitFor(`(document.querySelector('#grid .row.is-sel .ln') || {}).textContent === ${JSON.stringify(fmt(n))}`);
+  try {
+    await page.waitFor(`(document.querySelector('#grid .row.is-sel .ln') || {}).textContent === ${JSON.stringify(fmt(n))}`);
+  } catch (e) {                                                      // what the page is doing instead: no value of a line
+    const state = await page.ev("({ active: document.activeElement.id || document.activeElement.tagName, goto: document.getElementById('goto').value, selected: (document.querySelector('#grid .row.is-sel .ln') || {}).textContent, dialog: document.getElementById('dialog').open, box: !!document.querySelector('#grid input.edit'), notice: document.getElementById('notice').hidden ? '' : document.getElementById('notice').textContent })").catch((err) => `no answer: ${err.message}`);
+    throw new Error(`Go to Line ${fmt(n)} did not land: ${JSON.stringify(state)}`);
+  }
 }
 
 const GRID_TOP = "document.getElementById('grid').scrollTop";
@@ -70,6 +80,7 @@ async function grabThumb(page, x, top) {
     await page.mouse('mouseMoved', x, top + 4, { button: 'left', buttons: 1 });
     if ((await page.ev(GRID_TOP)) > 0) return true;
     await page.mouse('mouseReleased', x, top + 4);
+    await page.ev("document.getElementById('grid').scrollLeft = 0");
     await page.key('Home', 'Home', 36);
     await page.waitFor(`${GRID_TOP} === 0`);
   }
@@ -102,6 +113,9 @@ async function dragScrollbar(page, shoot) {
     if (shoot) await shoot(k, steps);
   }
   await page.mouse('mouseReleased', x, route[route.length - 1]);
+  // a press that missed the thumb selected text instead, and the grid, which scrolls sideways
+  // since 0.5, may have drifted that way: back to the left edge for the steps after
+  await page.ev("document.getElementById('grid').scrollLeft = 0");
   return { max, held: true, reached: Math.max(...tops), end: tops[tops.length - 1], least: Math.min(...inks), steps: route.length };
 }
 
@@ -146,21 +160,25 @@ async function readOnlyWalk(page, file) {
   const codes = core.CHECKS.map((c) => c.code).filter((code) => fnd.byCode[code].length);
   if (codes.length) {
     await page.waitFor(LAID_OUT('checks-list'));
+    // a head row: its ▸ ▾ (0.5) opens and shuts its lines, its code is in its .muted span; only
+    // head rows are ever printed — a finding's row holds a line of the file
+    const HEAD_CODE = "(r) => r.classList.contains('is-head') ? r.querySelector('.muted').textContent : null";
     for (let guard = 0; guard < 40; guard += 1) {                    // fold every group, so every heading is in view
       const open = await page.ev(`(() => { const rows = ${VISIBLE('checks-list')};
         return rows.findIndex((r, k) => r.classList.contains('is-head') && rows[k + 1] && !rows[k + 1].classList.contains('is-head')); })()`);
       if (open < 0) break;
-      await page.click(`${VISIBLE('checks-list')}[${open}]`);
+      await page.click(`${VISIBLE('checks-list')}[${open}].querySelector('.fold')`);
     }
-    const heads = await page.ev(`${VISIBLE('checks-list')}.map((r) => r.firstChild.textContent + ' ' + r.lastChild.textContent)`);
-    check(JSON.stringify(heads) === JSON.stringify(codes.map((c) => `${c} ${fmt(fnd.byCode[c].length)}`)), `its headings: ${heads.join(' · ')}`);
+    const heads = await page.ev(`${VISIBLE('checks-list')}.filter((r) => r.classList.contains('is-head')).map((r) => r.querySelector('.muted').textContent + ' ' + r.lastChild.textContent)`);
+    const subs = await page.ev(`${VISIBLE('checks-list')}.filter((r) => !r.classList.contains('is-head')).length`);
+    check(subs === 0 && JSON.stringify(heads) === JSON.stringify(codes.map((c) => `${c} ${fmt(fnd.byCode[c].length)}`)), `its headings: ${heads.join(' · ')}`);
 
     // N1 first, as section 15 has it; else the first check whose first finding is on a line
     const code = ['N1', ...codes].find((c) => fnd.byCode[c].length && fnd.byCode[c][0].line >= 0);
     if (code) {
       const target = fnd.byCode[code][0].line;
-      await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head') && r.firstChild.textContent === '${code}')`);
-      await page.click(`(() => { const rows = ${VISIBLE('checks-list')}; return rows[rows.findIndex((r) => r.classList.contains('is-head') && r.firstChild.textContent === '${code}') + 1]; })()`);
+      await page.click(`${VISIBLE('checks-list')}.find((r) => (${HEAD_CODE})(r) === '${code}').querySelector('.fold')`);
+      await page.click(`(() => { const rows = ${VISIBLE('checks-list')}; return rows[rows.findIndex((r) => (${HEAD_CODE})(r) === '${code}') + 1]; })()`);
       const s = await page.ev(SELECTED);
       check(s.ln === target + 1, `a click on the first ${code} lands on its line: line ${fmt(s.ln)}, level ${s.lv}, tag ${s.tag}`);
     } else skip('every finding is for the whole file; none to click to');
@@ -189,7 +207,9 @@ async function readOnlyWalk(page, file) {
   else if (!d.held) check(false, 'the scrollbar: its thumb could not be taken hold of in three tries');
   else {
     check(d.reached >= 0.99 * d.max && d.end === 0, `the scrollbar dragged from 0 to ${fmt(d.reached)} of ${fmt(d.max)} and back to ${d.end}`);
-    check(d.least > 0.01, `without a blank screen: the least ink in any of ${d.steps} steps is ${(100 * d.least).toFixed(1)}%`);
+    // an empty grid measures 0; the raw export's sparsest rows measured 0.9% at one step of a fast
+    // drag (2026-09-30, the same on 0.4.1 and 0.5), so the floor is half of that
+    check(d.least > 0.005, `without a blank screen: the least ink in any of ${d.steps} steps is ${(100 * d.least).toFixed(1)}%`);
   }
 
   // a pointer followed, and Back
@@ -236,15 +256,17 @@ async function readOnlyWalk(page, file) {
   const lastSel = await page.ev(SELECTED);
   check(lastText === shown(m.texts[m.n - 1].slice(0, 2000)), `Go to line ${fmt(m.n)} lands on it: ${lastSel.lv === null ? 'a line that did not parse' : `level ${lastSel.lv}, ${lastSel.tag}`}`);
 
-  // the longest line: clipped in the grid, whole in the right pane
+  // the longest line: the grid scrolls sideways to its end (3.1), shows at most 2,000 characters of
+  // it and then how many more (3.10); the right pane shows the value whole
   let long = 0;
   for (let i = 1; i < m.n; i += 1) if (m.texts[i].length > m.texts[long].length) long = i;
   await gotoLine(page, long + 1);
-  const onScreen = await page.ev(`(() => { const tx = document.querySelector('#grid .row.is-sel .tx'); const v = document.querySelector('#detail .detail-value');
-    return { clipped: tx.scrollWidth > tx.clientWidth, row: tx.textContent.length, pane: v ? v.textContent.length : -1 }; })()`);
+  const onScreen = await page.ev(`(() => { const g = document.getElementById('grid'); const r = document.querySelector('#grid .row.is-sel'); const v = document.querySelector('#detail .detail-value');
+    return { wide: g.scrollWidth > g.clientWidth, row: r.querySelector('.tx').textContent.length, more: (r.querySelector('.more') || {}).textContent || '', pane: v ? v.textContent.length : -1 }; })()`);
   const whole = m.valAt[long] >= 0 ? core.valueOf(m, long) : m.texts[long];
-  check(onScreen.clipped && onScreen.row <= shown(m.texts[long].slice(0, 2000)).length,
-    `the longest line, line ${fmt(long + 1)} (${fmt(core.codePoints(m.texts[long]))} characters), is clipped in the grid: ${fmt(onScreen.row)} shown, cut at the edge`);
+  const clip = core.clip(m.texts[long], 2000);
+  check(onScreen.wide && onScreen.row === shown(m.texts[long].slice(0, clip.end)).length && onScreen.more === (clip.more ? `… ${fmt(clip.more)} more` : ''),
+    `the longest line, line ${fmt(long + 1)} (${fmt(core.codePoints(m.texts[long]))} characters): the grid scrolls sideways to its end, the row showing ${fmt(onScreen.row)}${onScreen.more ? ` and "${onScreen.more}"` : ''}`);
   check(onScreen.pane === shown(whole).length, `…and whole in the right pane: ${fmt(onScreen.pane)} characters`);
 
   await timedEdit(page, m);
@@ -375,7 +397,7 @@ async function restOfThePage(page, dir, shots) {
     if (k === Math.floor(steps / 2)) await shot('drag-middle');
     if (k === steps) await shot('drag-end');
   } : null);
-  check(d.held && d.reached >= 0.99 * d.max && d.end === 0 && d.least > 0.01, d.held
+  check(d.held && d.reached >= 0.99 * d.max && d.end === 0 && d.least > 0.005, d.held
     ? `the scrollbar dragged from 0 to ${fmt(d.reached)} of ${fmt(d.max)} and back, the least ink ${(100 * d.least).toFixed(1)}%`
     : 'the scrollbar: its thumb could not be taken hold of in three tries');
   const themes = [];
@@ -424,6 +446,7 @@ const ACTION = (label) => BUTTON('#detail .detail-actions', label);
 
 async function editingOnThePage(page, dir, shots) {
   const file = path.join(dir, 'fiction.ged');
+  if (!fs.existsSync(file)) fs.writeFileSync(file, fiction());       // walked alone, without restOfThePage
   const bytes = fs.readFileSync(file);
   const m = core.read(new Uint8Array(bytes));
   const shot = (name) => (shots ? page.screenshot(path.join(shots, `fiction-${name}.png`)) : null);
@@ -728,6 +751,331 @@ async function editingEdges(page) {
   check(!e8.box && e8.off && /\(E8\)/.test(e8.said), `a line whose bytes could not be read is not opened for typing, and Edit is off: "${e8.said}"`);
 }
 
+// ---------------------------------------------------------------------------------------------
+// The third round (0.5), on a fictional file of its own
+// ---------------------------------------------------------------------------------------------
+
+// The _META of a Find a Grave record, as batch 20's export has them (fictional people): the same
+// shapes tests/screen.test.js draws, here through the page's own DOMParser.
+const escapeXml = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const META_STORY = [
+  '<p>Jane <strong>Fixture</strong> was born in <em>Fixtureville</em>.<br>She lived there.</p>',
+  '<p><span style="font-size:12pt"><font face="Arial">A span and a font, unwrapped.</font></span></p>',
+  '<table border="1"><tr><th colspan="2">Head</th></tr><tr><td>a</td><td bgcolor="red">b</td></tr></table>',
+  '<p>A link: <a href="https://example.org/grave/1">the record</a>. An image: <img src="https://example.org/photo.jpg"></p>',
+  '<!-- a comment --><style>p { color: red }</style><script>document.title = "loaded"</script><w:WordDocument><w:View>Normal</w:View></w:WordDocument>',
+];
+const META = `<metadataxml><content>${META_STORY.map((l) => `<line>${escapeXml(l)}</line>`).join('')}</content>` +
+  '<transcription>Line one&#10;Line two</transcription>' +               // the line break as a character reference: a GEDCOM line holds none
+  '<personas><persona><pname>Jane Fixture</pname><bdate>1 Jan 1900</bdate><bplace>Fixtureville</bplace><ddate>2 Feb 1950</ddate><dplace>Fixture City</dplace></persona>' +
+  '<persona><pname>Joe Fixture</pname></persona></personas><cemetery>Fixture Cemetery</cemetery><record_source_gid>12345</record_source_gid></metadataxml>';
+
+// Fictional people, bunched by type; a person with two NAME lines; a note holding a web address
+// and a pointer; a line of 2,500 characters; a media record with a _META split over CONC lines.
+function thirdFiction() {
+  const L = ['0 HEAD', '1 SOUR gedview-walk', '2 VERS 1.0', '1 DATE 30 SEP 2026', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 SUBM @U1@',
+    '0 @U1@ SUBM', '1 NAME Walk /Fixture/',
+    '0 @I1@ INDI', '1 NAME Jane /Fixture/', '2 GIVN Jane', '1 NAME Janie /Fixture/', '1 SEX F', '1 BIRT', '2 DATE 1 JAN 1900', '2 PLAC Fixtureville',
+    '1 NOTE See https://example.org/fixture/jane (the register), then www.example.org.', '1 FAMS @F1@',
+    '0 @I2@ INDI', '1 NAME Joe /Fixture/', '1 SEX M', '1 FAMS @F1@',
+    '0 @I3@ INDI', '1 NAME Ada /Fixture/', '1 FAMC @F1@', `1 NOTE ${'x'.repeat(2493)}`,
+    '0 @F1@ FAM', '1 HUSB @I2@', '1 WIFE @I1@', '1 CHIL @I3@',
+    '0 @F2@ FAM', '1 HUSB @I2@',
+    '0 @O1@ OBJE', '1 FILE fixture.jpg', '2 TITL A grave'];
+  const pieces = META.match(/[\s\S]{1,200}/g);
+  L.push(`1 _META ${pieces[0]}`);
+  for (const piece of pieces.slice(1)) L.push(`2 CONC ${piece}`);
+  L.push('0 TRLR');
+  return `${L.join('\n')}\n`;
+}
+
+// A press on `from`, a move to `to`, a release: what a hand does to drag a row. `via` is a point
+// on the way, so the drag starts before the pointer reaches the edge.
+async function dragRow(page, from, to) {
+  await page.mouse('mouseMoved', from.x, from.y);
+  await page.mouse('mousePressed', from.x, from.y);
+  await page.mouse('mouseMoved', from.x, from.y + 8, { button: 'left', buttons: 1 });
+  await page.mouse('mouseMoved', to.x, to.y, { button: 'left', buttons: 1 });
+  await sleep(50);
+  const mid = await page.ev("({ line: !document.querySelector('#grid .drop-line').hidden, dim: document.querySelectorAll('#grid .row.is-dragging').length })");
+  await page.mouse('mouseReleased', to.x, to.y);
+  return mid;
+}
+
+const ROW_RECT = (n) => `(() => { const r = [...document.querySelectorAll('#grid .row')].find((x) => x.querySelector('.ln') && x.querySelector('.ln').textContent === ${JSON.stringify(fmt(n))});
+  if (!r) return null; const b = r.getBoundingClientRect(); return { x: b.left + 160, y: b.top + b.height / 2, top: b.top, bottom: b.bottom }; })()`;
+const SECTION_RECT = (tag) => `(() => { const r = [...document.querySelectorAll('#grid .row.is-section')].find((x) => x.querySelector('.tg').textContent === '${tag}');
+  if (!r) return null; const b = r.getBoundingClientRect(); return { x: b.left + 160, y: b.top + b.height / 2, top: b.top, bottom: b.bottom }; })()`;
+const CHANGES = "[...document.querySelectorAll('#changes-list .v-inner > div')].filter((r) => r.style.display !== 'none').map((r) => r.querySelector('.main').textContent)";
+
+async function thirdRound(page, dir, shots) {
+  const file = path.join(dir, 'third.ged');
+  fs.writeFileSync(file, thirdFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `third-${name}.png`)) : null);
+  console.log(`\n== the third round (0.5), on a fictional file of ${fmt(m.n)} lines`);
+  await page.openFile(file);
+  const line = (text) => m.texts.indexOf(text) + 1;
+
+  // 3.7 — Back over the lines, naming the line it returns to; none in the top bar
+  const famsLine = line('1 FAMS @F1@');
+  const hiddenBefore = await page.ev("document.getElementById('back').hidden && document.getElementById('back').closest('.middle') !== null && !document.querySelector('.bar #back')");
+  await gotoLine(page, famsLine);                                    // a jump: Back now has line 1 to go to
+  await page.click("document.querySelector('#grid .row.is-sel .ptr')");
+  try {
+    await page.waitFor("(document.querySelector('#grid .row.is-sel .id') || {}).textContent === '@F1@'");
+  } catch (e) {                                                      // the fictional file: its state may be printed
+    const why = await page.ev(`(() => { const p = document.querySelector('#grid .row.is-sel .ptr'); const g = document.getElementById('grid'); const b = p ? p.getBoundingClientRect() : null;
+      const under = b ? document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) : null;
+      return { ptr: b && [b.left, b.top, b.width, b.height].map(Math.round), under: under && (under.className || under.tagName), scroll: [g.scrollLeft, g.scrollTop], grid: g.getBoundingClientRect().toJSON(),
+        selected: (document.querySelector('#grid .row.is-sel .ln') || {}).textContent, back: document.getElementById('back').textContent, backHidden: document.getElementById('back').hidden, hasBack: document.querySelector('.middle').className,
+        notice: document.getElementById('notice').hidden ? '' : document.getElementById('notice').textContent, active: document.activeElement.id || document.activeElement.className }; })()`).catch((err) => `no answer: ${err.message}`);
+    throw new Error(`the pointer click did not jump: ${JSON.stringify(why)}`);
+  }
+  const backText = await page.ev("document.getElementById('back').hidden ? null : document.getElementById('back').textContent");
+  await page.click("document.getElementById('back')");
+  const returned = await page.ev(SELECTED);
+  const thenText = await page.ev("document.getElementById('back').textContent");
+  check(hiddenBefore && backText === `← Back to ${fmt(famsLine)}` && returned.ln === famsLine && thenText === '← Back to 1',
+    `Back sits over the lines at the main frame's top left, not in the top bar, only while there is somewhere to go: "${backText}", then back on line ${fmt(returned.ln)}, then "${thenText}"`);
+
+  // 3.5 — Collapse all, Expand all
+  const sectionRows = new Set(m.records.map((i) => m.tag[i])).size - 1;
+  const label1 = await page.ev("document.getElementById('fold-all').textContent");
+  await page.click("document.getElementById('fold-all')");
+  await page.waitFor(`${ROWS} === ${m.records.length + sectionRows}`);
+  const label2 = await page.ev("document.getElementById('fold-all').textContent");
+  await page.click("document.querySelector('#grid .row.is-section')");                 // one type shut by hand
+  await page.click("document.getElementById('fold-all')");
+  await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
+  const label3 = await page.ev("document.getElementById('fold-all').textContent");
+  check(label1 === 'Collapse all' && label2 === 'Expand all' && label3 === 'Collapse all',
+    `${label1} shuts every record to its first line (${fmt(m.records.length + sectionRows)} rows); ${label2} opens every block and every type (${fmt(m.n + sectionRows)} rows)`);
+
+  // 3.8 — Bold surnames: the labels, not the lines; the filter finds a name either way
+  await page.click("document.querySelector('.tab[data-panel=records]')");
+  await page.waitFor(LAID_OUT('records-list'));
+  await page.click("document.getElementById('records-filter')");
+  await page.type('jane fixture');
+  await page.waitFor(`${VISIBLE('records-list')}.length === 2`);
+  const found = await page.ev(`${VISIBLE('records-list')}.map((r) => r.firstChild.textContent)`);
+  await page.click("document.getElementById('surnames')");
+  await gotoLine(page, line('1 NAME Jane /Fixture/'));
+  const bold = await page.ev(`({ pressed: document.getElementById('surnames').getAttribute('aria-pressed'),
+    list: ${VISIBLE('records-list')}.map((r) => [...r.querySelectorAll('.surname')].map((x) => x.textContent).join('|')),
+    listText: ${VISIBLE('records-list')}[0].querySelector('.main').textContent,
+    row: document.querySelector('#grid .row.is-sel .tx').textContent,
+    detail: (document.querySelector('#detail .surname') || {}).textContent, value: document.querySelector('#detail .detail-value').textContent })`);
+  await page.click("document.getElementById('surnames')");
+  check(JSON.stringify(found) === '["@I1@","@F1@"]' && bold.pressed === 'true' && bold.list[0] === 'Fixture' && bold.listText.startsWith('Jane Fixture')
+    && bold.row === '1 NAME Jane /Fixture/' && bold.detail === 'Fixture' && bold.value === 'Jane /Fixture/',
+    `"jane fixture" finds ${found.join(' and ')} with the toggle off; on, Records reads "${bold.listText}" with Fixture in bold, and the line stays "${bold.row}"`);
+  await page.click("document.getElementById('records-filter')");
+  await page.clearBox();
+  await page.key('Escape', 'Escape', 27);
+
+  // 3.6 — a check's title shows what it means; the ▸ ▾ at its left opens and shuts its lines
+  await page.click("document.querySelector('.tab[data-panel=checks]')");
+  await page.waitFor(LAID_OUT('checks-list'));
+  const headN4 = `${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head') && r.querySelector('.muted').textContent === 'N4')`;
+  const rowsBefore = await page.ev(`${VISIBLE('checks-list')}.length`);
+  await page.click(`${headN4}.querySelector('.main')`);
+  const help = await page.ev("(() => { const h = document.querySelector('#detail .help'); return h ? { code: h.querySelector('.help-code').textContent, text: h.querySelector('.help-text').textContent, rows: " + `${VISIBLE('checks-list')}.length` + " } : null; })()");
+  await page.click(`${headN4}.querySelector('.fold')`);
+  const rowsAfter = await page.ev(`${VISIBLE('checks-list')}.length`);
+  check(help && help.code === 'N4' && help.text.startsWith('GEDCOM 5.5 allows a line of at most 255 characters') && help.rows === rowsBefore && rowsAfter === rowsBefore - 1,
+    `a click on "Over 255 characters" shows in the right frame what N4 means ("${help ? help.text.slice(0, 48) : ''}…") and opens nothing; its ▾ shuts its ${rowsBefore - rowsAfter} line`);
+  await page.click(`${headN4}.querySelector('.fold')`);
+
+  // 3.10 — a clipped row says how many characters are not shown; 3.1 — the grid scrolls sideways,
+  // and the line number stays at the left edge
+  const longLine = m.texts.findIndex((t) => t.length > 2000) + 1;
+  await gotoLine(page, longLine);
+  const clipped = await page.ev(`(() => { const r = document.querySelector('#grid .row.is-sel'); const g = document.getElementById('grid');
+    return { tail: (r.querySelector('.more') || {}).textContent, shown: r.querySelector('.tx').textContent.length, pane: document.querySelector('#detail .detail-value').textContent.length,
+      wide: g.scrollWidth > g.clientWidth, help: !document.querySelector('#detail .help') }; })()`);
+  await page.ev("document.getElementById('grid').scrollLeft = 300");
+  await sleep(50);
+  const scrolled = await page.ev(`(() => { const r = document.querySelector('#grid .row.is-sel'); const g = document.getElementById('grid').getBoundingClientRect();
+    return { left: g.left, fx: r.querySelector('.fx').getBoundingClientRect().left, tx: r.querySelector('.tx').getBoundingClientRect().left, at: document.getElementById('grid').scrollLeft }; })()`);
+  await page.ev("document.getElementById('grid').scrollLeft = 0");
+  check(clipped.tail === '… 500 more' && clipped.shown === 2000 && clipped.pane === 2493 && clipped.help,
+    `line ${fmt(longLine)}, 2,500 characters: the row shows 2,000 and ends "${clipped.tail}"; the right frame shows the value whole (${fmt(clipped.pane)}); a line selected puts the check's meaning away`);
+  check(clipped.wide && scrolled.at === 300 && Math.abs(scrolled.fx - scrolled.left) < 1 && scrolled.tx < scrolled.left,
+    `the main frame scrolls sideways (${scrolled.at} px): the line number stays at the left edge, the text goes under it`);
+  await shot('sideways');
+
+  // 3.1 — the side frames hidden and shown, and remembered across a reload
+  await page.click("document.getElementById('hide-left')");
+  await page.click("document.getElementById('hide-right')");
+  const hidden = await page.ev("({ cls: document.getElementById('work').className, side: getComputedStyle(document.getElementById('side')).display, detail: getComputedStyle(document.getElementById('detail')).display, tab: document.getElementById('hide-left').textContent + document.getElementById('hide-right').textContent })");
+  await shot('frames-hidden');
+  await page.goto(`file://${path.join(ROOT, 'index.html')}`);
+  const remembered = await page.ev("document.getElementById('work').className");
+  await page.click("document.getElementById('hide-left')");
+  await page.ev("document.getElementById('split-right').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))");
+  const shown = await page.ev("({ cls: document.getElementById('work').className, tab: document.getElementById('hide-left').textContent + document.getElementById('hide-right').textContent })");
+  check(hidden.cls === 'work left-hidden right-hidden' && hidden.side === 'none' && hidden.detail === 'none' && hidden.tab === '›‹',
+    `‹ and › hide the left bar and the right frame (${hidden.cls}), and flip (${hidden.tab})`);
+  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tab === '‹›',
+    `hidden or shown is remembered across a reload (${remembered}); the tab, and a double-click on the bar, bring them back (${shown.cls || 'both shown'})`);
+  await page.openFile(file);
+
+  // 3.2 — a copy button on every box of text: the value, Joined, and each part of a _META
+  await page.ev("navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }");
+  await gotoLine(page, line('1 NAME Jane /Fixture/'));
+  await page.click("document.querySelector('#detail .detail-value .copy')");
+  await page.waitFor("window.__copied !== undefined");
+  const copied = await page.ev("({ text: window.__copied, done: document.querySelector('#detail .detail-value .copy').classList.contains('is-done') })");
+  await page.ev("navigator.clipboard.writeText = () => Promise.reject(new Error('refused'))");
+  await page.click("document.querySelector('#detail .detail-value .copy')");
+  await page.waitFor("!document.getElementById('notice').hidden");
+  const refused = await page.ev("({ said: document.getElementById('notice').textContent, selected: window.getSelection().toString() })");
+  check(copied.text === 'Jane /Fixture/' && copied.done, `the value's copy button copies "${copied.text}" and shows a check mark`);
+  check(/clipboard refused/.test(refused.said) && refused.selected.trim() === 'Jane /Fixture/', `with the clipboard refused, the text is selected and a notice says so: "${refused.said}"`);
+  await page.click("document.getElementById('notice')");
+  await page.ev("navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }");
+
+  // 3.3 — the _META drawn as it reads, above Joined; nothing loads
+  const metaLine = m.texts.findIndex((t) => t.startsWith('1 _META')) + 1;
+  await gotoLine(page, metaLine + 2);                                // one of its CONC lines
+  const drawn = await page.ev(`(() => { const d = document.getElementById('detail');
+    const titles = [...d.querySelectorAll('.detail-title')].map((t) => t.textContent);
+    const story = d.querySelector('.meta-story');
+    return { titles, strong: story && story.querySelector('strong') ? story.querySelector('strong').textContent : null,
+      gone: story ? [...story.querySelectorAll('*')].map((e) => e.nodeName.toLowerCase()).filter((n) => n.includes(':') || ['a', 'img', 'script', 'style', 'span', 'font'].includes(n)).join(',') : 'no story',
+      colspan: story ? (story.querySelector('th') || {}).getAttribute('colspan') : null, red: story ? story.innerHTML.includes('red') : null,
+      text: story ? story.innerText : '', persons: d.querySelectorAll('.persons tr').length - 1,
+      person: d.querySelector('.persons tr:nth-child(2)') ? [...d.querySelectorAll('.persons tr:nth-child(2) td')].map((x) => x.textContent).join(' · ') : '',
+      transcription: (d.querySelector('.meta-text') || {}).textContent, copies: d.querySelectorAll('.copy').length, title: document.title }; })()`);
+  await page.click("document.querySelector('#detail .meta-story .copy')");
+  await page.waitFor("typeof window.__copied === 'string' && window.__copied.includes('Fixtureville')");
+  const storyCopied = await page.ev('window.__copied');
+  check(JSON.stringify(drawn.titles) === JSON.stringify(['Story', 'Transcription', 'Persons', 'Cemetery', 'Record id', 'Joined', 'Pointed at by 0'].slice(0, 6)) || drawn.titles.slice(0, 6).join('|') === 'Story|Transcription|Persons|Cemetery|Record id|Joined',
+    `a CONC line of the _META: the right frame draws Story · Transcription · Persons · Cemetery · Record id above Joined (${drawn.titles.join(' · ')})`);
+  check(drawn.strong === 'Fixture' && drawn.gone === '' && drawn.colspan === '2' && drawn.red === false && drawn.text.includes('the record (https://example.org/grave/1)') && drawn.text.includes('[image]'),
+    `the story keeps its bold, its table (colspan ${drawn.colspan}) and its text; the link is text with its address, the image is [image]; no link, image, script, style, span, font or Word element survives`);
+  check(drawn.persons === 2 && drawn.person === 'Jane Fixture · 1 Jan 1900 · Fixtureville · 2 Feb 1950 · Fixture City' && drawn.transcription === 'Line one\nLine two' && drawn.copies >= 6,
+    `the persons as a table (${drawn.person}); the transcription with its line break; a copy button on each of the ${drawn.copies} boxes`);
+  check(drawn.title === 'third.ged — GEDCOM Viewer' && storyCopied.includes('She lived there.'), 'the script inside the story never ran, and the story copies as text');
+  await shot('meta');
+
+  // 3.9 — a double-click selects a web address whole; with ⌥, a pointer whole, and nothing jumps
+  const noteLine = line('1 NOTE See https://example.org/fixture/jane (the register), then www.example.org.');
+  await gotoLine(page, noteLine);
+  const urlAt = await page.ev(`(() => { const v = document.querySelector('#grid .row.is-sel .val'); const t = v.firstChild; const r = document.createRange();
+    r.setStart(t, 10); r.setEnd(t, 11); const b = r.getBoundingClientRect(); return { x: b.left + 1, y: b.top + b.height / 2 }; })()`);
+  for (const count of [1, 2]) {
+    await page.mouse('mousePressed', urlAt.x, urlAt.y, { clickCount: count });
+    await page.mouse('mouseReleased', urlAt.x, urlAt.y, { clickCount: count });
+  }
+  await sleep(60);
+  const url = await page.ev('window.getSelection().toString()');
+  await gotoLine(page, famsLine);
+  const ptrAt = await page.ev("(() => { const b = document.querySelector('#grid .row.is-sel .ptr').getBoundingClientRect(); return { x: b.left + 8, y: b.top + b.height / 2 }; })()");
+  for (const count of [1, 2]) {
+    await page.mouse('mousePressed', ptrAt.x, ptrAt.y, { clickCount: count, modifiers: 1 });
+    await page.mouse('mouseReleased', ptrAt.x, ptrAt.y, { clickCount: count, modifiers: 1 });
+  }
+  await sleep(60);
+  const ptr = await page.ev(`({ text: window.getSelection().toString(), line: (${SELECTED}).ln })`);
+  check(url === 'https://example.org/fixture/jane', `a double-click on an address selects it whole: "${url}"`);
+  check(ptr.text === '@F1@' && ptr.line === famsLine, `⌥ and a double-click on a pointer select it whole ("${ptr.text}"), and nothing jumps (still line ${fmt(ptr.line)})`);
+
+  // 3.4a — a block dragged among its siblings; a section dragged past another; Esc; own place
+  await page.click("document.getElementById('edit')");
+  const birt = line('1 BIRT');
+  const nameLine = line('1 NAME Jane /Fixture/');
+  await gotoLine(page, nameLine);
+  const fromRect = await page.ev(ROW_RECT(birt));
+  const toRect = await page.ev(ROW_RECT(nameLine));
+  const mid = await dragRow(page, fromRect, { x: toRect.x, y: toRect.top + 2 });
+  await page.waitFor("document.getElementById('changes-count').textContent === '1'");
+  const moved = await page.ev(`({ rows: [...document.querySelectorAll('#grid .row')].filter((r) => r.querySelector('.ln') && ['${fmt(nameLine)}', '${fmt(nameLine + 1)}', '${fmt(nameLine + 2)}'].includes(r.querySelector('.ln').textContent)).map((r) => r.querySelector('.tx').textContent + (r.classList.contains('is-moved') ? ' [moved]' : '')),
+    changes: ${CHANGES}, detail: (document.querySelector('#detail .detail-moved') || {}).textContent, sum: document.getElementById('changes-sum').textContent,
+    rule: document.querySelectorAll('#grid .row.is-moved-above').length, dirty: !document.getElementById('dirty').hidden })`);
+  check(mid.line && mid.dim === 3, `a press on 1 BIRT moved a few pixels takes hold of its block: its 3 lines dim and a gold line shows at the NAME's edge`);
+  check(JSON.stringify(moved.rows) === JSON.stringify(['1 BIRT [moved]', '2 DATE 1 JAN 1900 [moved]', '2 PLAC Fixtureville [moved]']) && moved.changes[0] === 'moved: BIRT · 3 lines' && moved.detail === `Moved · line ${fmt(birt)} as saved` && moved.rule === 1 && moved.dirty,
+    `released, the block stands before the NAME, marked moved; Changes reads "${moved.changes[0]}" (${moved.sum}); the right frame says "${moved.detail}"; a rule marks where it was taken from`);
+  await shot('moved');
+  await page.key('Z', 'KeyZ', 90, 12);                               // ⇧⌘Z: nothing to redo yet — a no-op
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor("document.getElementById('changes-count').textContent === ''");
+  check(true, '⌘Z undoes the move in one step');
+
+  // two NAME lines: the second dragged first; the Save dialog says the first is read as preferred
+  const name2 = line('1 NAME Janie /Fixture/');
+  await gotoLine(page, name2);
+  const r2 = await page.ev(ROW_RECT(name2));
+  const r1 = await page.ev(ROW_RECT(nameLine));
+  await dragRow(page, r2, { x: r1.x, y: r1.top + 2 });
+  await page.waitFor("document.getElementById('changes-count').textContent === '1'");
+  await page.key('S', 'KeyS', 83, 12);                               // ⇧⌘S: the Save a copy dialog, to read, then Cancel
+  await page.waitFor("document.getElementById('dialog').open");
+  const dialogSays = await page.ev("({ lines: [...document.querySelectorAll('#dialog .chg, #dialog .chg-line')].map((x) => x.textContent), stamps: (document.querySelector('#dialog .dialog-check span') || {}).textContent })");
+  await page.click(BUTTON('#dialog', 'Cancel'));
+  await page.waitFor("!document.getElementById('dialog').open");
+  check(dialogSays.lines[0].startsWith('moved') && dialogSays.lines[1] === 'NAME · 1 line · among its 2 NAME lines the first is read as preferred' && dialogSays.stamps === 'Change stamps · 1 record',
+    `the second NAME dragged first: the Save dialog says "${dialogSays.lines[1]}", and the record is stamped (${dialogSays.stamps})`);
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor("document.getElementById('changes-count').textContent === ''");
+
+  // a section dragged: FAM before INDI, by its type row; no stamp
+  await page.key('Home', 'Home', 36);
+  const famRow = await page.ev(SECTION_RECT('FAM'));
+  const indiRow = await page.ev(SECTION_RECT('INDI'));
+  const secMid = await dragRow(page, famRow, { x: indiRow.x, y: indiRow.top + 2 });
+  await page.waitFor("document.getElementById('changes-count').textContent === '1'");
+  const section = await page.ev(`({ order: [...document.querySelectorAll('#grid .row.is-section')].map((r) => r.querySelector('.tg').textContent), changes: ${CHANGES}, first: (${SELECTED}).id })`);
+  await page.key('S', 'KeyS', 83, 12);
+  await page.waitFor("document.getElementById('dialog').open");
+  const secDialog = await page.ev("(document.querySelector('#dialog .dialog-check span') || {}).textContent");
+  await page.click(BUTTON('#dialog', 'Cancel'));
+  await page.waitFor("!document.getElementById('dialog').open");
+  check(secMid.line && secMid.dim >= 1 && JSON.stringify(section.order.slice(0, 4)) === '["SUBM","FAM","INDI","OBJE"]' && section.changes[0] === 'moved: section FAM · 2 records · 6 lines' && secDialog === 'Change stamps · none needed',
+    `the FAM row dragged to the INDI row's edge: the 2 families now stand before the people (${section.order.join(' · ')}); Changes reads "${section.changes[0]}"; ${secDialog}`);
+  await shot('section-moved');
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor("document.getElementById('changes-count').textContent === ''");
+
+  // a record lands only among its own type; Esc lets go; a release over its own place moves nothing
+  const i1 = line('0 @I1@ INDI');
+  await gotoLine(page, i1);
+  const i1Rect = await page.ev(ROW_RECT(i1));
+  const f2Rect = await page.ev(ROW_RECT(line('0 @F2@ FAM')));
+  await page.mouse('mouseMoved', i1Rect.x, i1Rect.y);
+  await page.mouse('mousePressed', i1Rect.x, i1Rect.y);
+  await page.mouse('mouseMoved', i1Rect.x, i1Rect.y + 8, { button: 'left', buttons: 1 });
+  await page.mouse('mouseMoved', f2Rect.x, f2Rect.y, { button: 'left', buttons: 1 });
+  await sleep(50);
+  const overFam = await page.ev("(() => { const l = document.querySelector('#grid .drop-line'); const b = l.getBoundingClientRect(); return { line: !l.hidden, y: b.top }; })()");
+  await page.key('Escape', 'Escape', 27);
+  await page.mouse('mouseReleased', f2Rect.x, f2Rect.y);
+  const afterEsc = await page.ev(`({ changes: document.getElementById('changes-count').textContent, dim: document.querySelectorAll('#grid .row.is-dragging').length, order: [...document.querySelectorAll('#grid .row.is-section')].map((r) => r.querySelector('.tg').textContent).join(',') })`);
+  const famTop = await page.ev(SECTION_RECT('FAM'));
+  check(overFam.line && Math.abs(overFam.y - famTop.top) < 2, `a person dragged down to the families: the gold line stays at the last edge among the people (the FAM row's top), never inside another type`);
+  check(afterEsc.changes === '' && afterEsc.dim === 0, 'Esc lets go: nothing moves, nothing dims');
+  const own = await dragRow(page, i1Rect, { x: i1Rect.x, y: i1Rect.y + 6 });
+  check(!own.line && (await page.ev("document.getElementById('changes-count').textContent")) === '' && (await page.ev(`(${SELECTED}).id`)) === '@I1@',
+    'released where it already is — no gold line — it moves nothing');
+  await page.click("document.getElementById('edit')");
+
+  // 3.11 — E turns Edit on and off; not while a box is typed in. Last, and the box left by a
+  // click: see `press` in tools/chrome.js for what a synthetic key can do to headless Chrome.
+  await page.press('e', 'KeyE', 69, 'e');                            // a real press: the key with its character
+  const on = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
+  await page.press('e', 'KeyE', 69, 'e');
+  const off = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
+  await page.click("document.getElementById('goto')");
+  await page.clearBox();
+  await page.press('e', 'KeyE', 69, 'e');
+  const inBox = await page.ev("({ pressed: document.getElementById('edit').getAttribute('aria-pressed'), typed: document.getElementById('goto').value })");
+  await page.clearBox();
+  await page.click("document.querySelector('#grid .row')");
+  check(on === 'true' && off === 'false' && inBox.pressed === 'false' && inBox.typed === 'e',
+    `E turns Edit on (${on}), E again off (${off}); in a box it types (Edit ${inBox.pressed}, the box holds "${inBox.typed}"); ⌘E is not taken`);
+}
+
 // Save in place through the page (10.2), with the folder picker stood in for by a folder held in
 // the page's memory: the picker and its permission prompt are a person's clicks, and they are the
 // owner's in phase 5; every step after them is walked here. Then the file is changed from outside,
@@ -774,6 +1122,17 @@ const STAND_IN_FOLDER = `(() => {
 const IN_FOLDER = (p) => `(() => { let e = window.__folder; for (const n of ${JSON.stringify(p)}.split('/')) e = e && e.entries.get(n);
   return e && e.kind === 'file' ? btoa(Array.from(e.bytes, (b) => String.fromCharCode(b)).join('')) : null; })()`;
 
+// Enter on the selected line, and the box to type it in: what the page is doing instead, if not.
+async function openEditBox(page) {
+  await page.key('Enter', 'Enter', 13);
+  try {
+    await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+  } catch (e) {
+    const why = await page.ev("({ active: document.activeElement.id || document.activeElement.className || document.activeElement.tagName, box: !!document.querySelector('#grid input.edit'), editing: document.getElementById('edit').getAttribute('aria-pressed'), selected: (document.querySelector('#grid .row.is-sel .ln') || {}).textContent, notice: document.getElementById('notice').hidden ? '' : document.getElementById('notice').textContent, dialog: document.getElementById('dialog').open, hasFocus: document.hasFocus() })").catch((err) => `no answer: ${err.message}`);
+    throw new Error(`Enter did not open the line for typing: ${JSON.stringify(why)}`);
+  }
+}
+
 async function saveInPlace(page, dir) {
   console.log('\n== Save, in place, the folder picker stood in for');
   const file = path.join(dir, 'small.ged');
@@ -785,8 +1144,7 @@ async function saveInPlace(page, dir) {
   await page.ev(STAND_IN_FOLDER);
   await page.ev(`window.__folder.entries.set('small.ged', new window.__File('small.ged', Uint8Array.from(atob(${JSON.stringify(Buffer.from(text).toString('base64'))}), (c) => c.charCodeAt(0))))`);
   await gotoLine(page, 12);
-  await page.key('Enter', 'Enter', 13);
-  await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+  await openEditBox(page);
   await page.clearBox();
   await page.type('1 NAME Joe /Fixtures/');
   await page.key('Enter', 'Enter', 13);
@@ -813,8 +1171,7 @@ async function saveInPlace(page, dir) {
   check(facts.includes(`${Buffer.byteLength(saved)} B · 17 lines`), `the facts line is the file as saved: ${facts}`);
 
   await gotoLine(page, 9);
-  await page.key('Enter', 'Enter', 13);
-  await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+  await openEditBox(page);
   await page.type(' x');
   await page.key('Enter', 'Enter', 13);
   await page.waitFor("!document.getElementById('dirty').hidden");
@@ -849,8 +1206,7 @@ async function copyWithoutPickers(page, dir, shots) {
   await page.openFile(file);
   await page.click("document.getElementById('edit')");
   await gotoLine(page, 9);
-  await page.key('Enter', 'Enter', 13);
-  await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+  await openEditBox(page);
   await page.clearBox();
   await page.type('1 NAME Jane /Fixtures/');
   await page.key('Enter', 'Enter', 13);
@@ -902,29 +1258,48 @@ async function waitForFile(dir, pattern, timeout = 10000) {
   const args = process.argv.slice(2);
   const at = args.indexOf('--shots');
   const shots = at >= 0 ? path.resolve(args.splice(at, 2)[1] || '') : null;
+  const onlyAt = args.indexOf('--only');
+  const only = onlyAt >= 0 ? args.splice(onlyAt, 2)[1].split(',') : null;
+  const part = (name) => !only || only.includes(name);
   const files = args;
-  if (!files.length) {
-    console.error('usage: node tools/walk.js FILE [FILE ...] [--shots DIR]');
+  if (!files.length && part('read-only')) {
+    console.error('usage: node tools/walk.js FILE [FILE ...] [--shots DIR] [--only PART]');
     process.exit(2);
   }
   if (shots) fs.mkdirSync(shots, { recursive: true });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gedview-walk-'));
-  const { page, close } = await launch();
+  // Each part in a Chrome of its own, so that no part inherits another's state — a synthetic key
+  // can leave a tab unable to take the next one (see `press` in tools/chrome.js) — and the console
+  // and the requests of all of them are read together at the end.
+  const log = { errors: [], requests: [] };
+  async function inChrome(fn) {
+    const { page, close } = await launch();
+    try {
+      await page.goto(`file://${path.join(ROOT, 'index.html')}`);
+      await fn(page);
+    } catch (e) {
+      if (page.log.errors.length) console.error(`the page said: ${page.log.errors.join(' | ')}`);
+      throw e;
+    } finally {
+      log.errors.push(...page.log.errors);
+      log.requests.push(...page.log.requests);
+      await close();
+    }
+  }
   try {
-    await page.goto(`file://${path.join(ROOT, 'index.html')}`);
-    for (const file of files) await readOnlyWalk(page, file);
-    await restOfThePage(page, dir, shots);
-    await editingOnThePage(page, dir, shots);
-    await editingEdges(page);
-    await saveInPlace(page, dir);
-    await copyWithoutPickers(page, dir, shots);
+    if (part('read-only')) await inChrome(async (page) => { for (const file of files) await readOnlyWalk(page, file); });
+    if (part('rest')) await inChrome((page) => restOfThePage(page, dir, shots));
+    if (part('editing')) await inChrome((page) => editingOnThePage(page, dir, shots));
+    if (part('edges')) await inChrome((page) => editingEdges(page));
+    if (part('third')) await inChrome((page) => thirdRound(page, dir, shots));
+    if (part('save')) await inChrome((page) => saveInPlace(page, dir));
+    if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
     console.log('\n== the whole walk');
-    check(page.log.errors.length === 0, `no error in the console${page.log.errors.length ? `: ${page.log.errors.join(' | ')}` : ''}`);
+    check(log.errors.length === 0, `no error in the console${log.errors.length ? `: ${log.errors.join(' | ')}` : ''}`);
     // file:// is the page and its files; blob: is a download the page made of its own bytes
-    const off = page.log.requests.filter((u) => !u.startsWith('file://') && !u.startsWith('blob:file://'));
-    check(off.length === 0, `nothing left the machine: ${page.log.requests.length} requests, each file:// or a download of the page's own bytes${off.length ? ` — but ${off.join(' ')}` : ''}`);
+    const off = log.requests.filter((u) => !u.startsWith('file://') && !u.startsWith('blob:file://'));
+    check(off.length === 0, `nothing left the machine: ${log.requests.length} requests, each file:// or a download of the page's own bytes${off.length ? ` — but ${off.join(' ')}` : ''}`);
   } finally {
-    await close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
   if (shots) console.log(`\npictures of the fictional file: ${shots}`);

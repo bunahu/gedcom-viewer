@@ -10,25 +10,26 @@
 
 <header class="bar">
   <div class="bar-top">
-    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.4.1</span></span>
+    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.5</span></span>
     <button class="file-name" id="file-name" type="button" aria-expanded="false" hidden></button>
     <span class="dirty" id="dirty" title="Changed since it was opened or last saved" hidden>●</span>
     <nav class="actions">
       <button class="button" id="open" type="button">Open GEDCOM</button>
-      <button class="button" id="edit" type="button" aria-pressed="false" title="Edit on or off (⌘E)" disabled>Edit</button>
+      <button class="button" id="edit" type="button" aria-pressed="false" title="Edit on or off (E)" disabled>Edit</button>
       <button class="button" id="undo" type="button" disabled>Undo</button>
       <button class="button" id="redo" type="button" disabled>Redo</button>
       <button class="button" id="save" type="button" title="Save, in place (⌘S)" disabled>Save</button>
       <button class="button" id="save-copy" type="button" title="Save a dated copy (⇧⌘S)" disabled>Save a copy</button>
       <span class="gap"></span>
-      <button class="button" id="back" type="button" disabled>Back</button>
       <span class="goto-box">
         <input class="input goto" id="goto" type="text" placeholder="Go to Line…" aria-label="Go to line" autocomplete="off" disabled>
         <button class="button goto-go" id="goto-go" type="button" hidden>Go</button>
         <button class="button goto-clear" id="goto-clear" type="button" title="Every line again" hidden>×</button>
       </span>
+      <button class="button" id="fold-all" type="button" title="Shut every record to its first line, or open every block and every type" hidden>Collapse all</button>
       <button class="button" id="indent" type="button" aria-pressed="false">Indent</button>
       <input class="input indent-width" id="indent-width" type="number" min="1" max="12" aria-label="Indent width" hidden>
+      <button class="button" id="surnames" type="button" aria-pressed="false" title="Surnames in bold, without their slashes, wherever a record is named; a line as written is never changed">Bold surnames</button>
       <button class="button" id="theme" type="button">Theme</button>
     </nav>
   </div>
@@ -37,8 +38,8 @@
 
 <nav class="counts" id="counts" aria-label="Records by type"></nav>
 
-<main class="work">
-  <aside class="side">
+<main class="work" id="work">
+  <aside class="side" id="side">
     <nav class="tabs" role="tablist">
       <button class="tab" type="button" role="tab" data-panel="records" aria-selected="true">Records</button>
       <button class="tab" type="button" role="tab" data-panel="checks">Checks <span class="tab-count" id="checks-count"></span></button>
@@ -82,10 +83,11 @@
     </section>
   </aside>
 
-  <div class="split" id="split-left"></div>
+  <div class="split" id="split-left" title="Drag to widen or narrow; double-click to hide or show"><button class="split-tab" id="hide-left" type="button" aria-label="Hide or show the left bar">‹</button></div>
 
   <section class="middle">
     <div class="grid" id="grid" tabindex="0" aria-label="Lines"></div>
+    <button class="button back" id="back" type="button" hidden>← Back</button>
     <div class="empty" id="empty">
       <button class="button" id="open-empty" type="button">Open GEDCOM</button>
       <div class="message" id="message" hidden></div>
@@ -93,7 +95,7 @@
     <div class="notice" id="notice" role="status" hidden></div>
   </section>
 
-  <div class="split" id="split-right"></div>
+  <div class="split" id="split-right" title="Drag to widen or narrow; double-click to hide or show"><button class="split-tab" id="hide-right" type="button" aria-label="Hide or show the right frame">›</button></div>
 
   <aside class="detail" id="detail"></aside>
 </main>
@@ -101,6 +103,10 @@
 <dialog class="dialog" id="dialog"></dialog>
 <div class="drop" id="drop" hidden></div>
 <input id="file-input" type="file" accept=".ged,.gedcom" hidden>
+
+<!-- the copy button's two icons: two overlapping squares, then a check mark -->
+<template id="icon-copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></template>
+<template id="icon-check"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></template>
 
 <script src="core.js" charset="utf-8"></script>
 <script src="save.js" charset="utf-8"></script>

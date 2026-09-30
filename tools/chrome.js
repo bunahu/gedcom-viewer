@@ -51,9 +51,15 @@ async function launch({ width = 1600, height = 1000 } = {}) {
     '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-background-networking',
     '--disable-component-update', '--disable-sync', '--use-mock-keychain', '--password-store=basic',
     `--window-size=${width},${height}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Stopped for good before the next one starts: asked to stop, then killed if it lingers, and
+  // gone either way, so two walks never share the machine.
   const close = async () => {
-    proc.kill('SIGTERM');
-    await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); });
+    if (proc.exitCode === null && !proc.killed) proc.kill('SIGTERM');
+    await new Promise((r) => { if (proc.exitCode !== null) r(); proc.once('exit', r); setTimeout(r, 3000); });
+    if (proc.exitCode === null) {
+      proc.kill('SIGKILL');
+      await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); });
+    }
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   };
   try {
@@ -70,20 +76,25 @@ async function launch({ width = 1600, height = 1000 } = {}) {
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     const S = (method, params) => cdp.send(method, params, sessionId);
-    const log = { errors: [], requests: [] };
+    const log = { errors: [], requests: [], events: [] };
     cdp.on((msg) => {
       if (msg.sessionId !== sessionId) return;
       const p = msg.params || {};
+      if (msg.method && msg.method.startsWith('Page.')) log.events.push(`${Date.now() % 100000} ${msg.method}`);
       if (msg.method === 'Runtime.exceptionThrown') log.errors.push(`exception: ${(p.exceptionDetails.exception || {}).description || p.exceptionDetails.text}`);
       if (msg.method === 'Runtime.consoleAPICalled' && (p.type === 'error' || p.type === 'warning')) log.errors.push(`console.${p.type}: ${p.args.map((a) => a.value || a.description).join(' ')}`);
       if (msg.method === 'Log.entryAdded' && p.entry.level === 'error') log.errors.push(`log: ${p.entry.text} ${p.entry.url || ''}`);
       if (msg.method === 'Network.requestWillBeSent') log.requests.push(p.request.url);
+      if (msg.method === 'Page.javascriptDialogOpening') log.errors.push(`dialog (${p.type}): ${p.message}`);
     });
     for (const domain of ['Page', 'Runtime', 'Network', 'Log']) await S(`${domain}.enable`);
     await S('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
 
     const page = {
       log,
+      // A command to the tab itself, and the tab's events, for a tool that needs more than the helpers below.
+      send: S,
+      on: (fn) => cdp.on((msg) => { if (msg.sessionId === sessionId) fn(msg); }),
       // A command to the browser itself, not the tab (downloads, for one).
       browser: (method, params) => cdp.send(method, params),
       // A script run before the page's own, at every load from now on.
@@ -101,8 +112,15 @@ async function launch({ width = 1600, height = 1000 } = {}) {
           await sleep(10);
         }
       },
+      // Navigate, and wait for the new document's load event (polling readyState could answer from
+      // the old document, or miss the new one while it loads its scripts).
       async goto(url) {
+        const loaded = new Promise((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error(`${url}: not loaded in 30 s`)), 30000);
+          cdp.on((msg) => { if (msg.sessionId === sessionId && msg.method === 'Page.loadEventFired') { clearTimeout(t); resolve(); } });
+        });
         await S('Page.navigate', { url });
+        await loaded;
         await page.waitFor("document.readyState === 'complete'");
       },
       // A file into the page's own file input, as a person choosing it would. Returns how long
@@ -126,10 +144,31 @@ async function launch({ width = 1600, height = 1000 } = {}) {
         await page.mouse('mousePressed', x, y, { modifiers });
         await page.mouse('mouseReleased', x, y, { modifiers });
       },
-      // Click what `expr` names in the page: at its middle, or `dx` pixels in from its left.
+      // Click what `expr` names in the page: at the middle of the part of it that can be seen —
+      // inside its scrolling frame and the window; a row of the grid is as wide as the longest
+      // line (0.5), so its own middle may be far off the screen — or `dx` pixels in from its left.
       async click(expr, dx, modifiers = 0) {
-        const at = await page.ev(`(() => { const e = ${expr}; if (!e) return null; e.scrollIntoView({ block: 'nearest' });
-          const b = e.getBoundingClientRect(); return { x: b.left + (${dx === undefined ? 'b.width / 2' : dx}), y: b.top + b.height / 2 }; })()`);
+        const at = await page.ev(`(async () => { const e = ${expr}; if (!e) return null; e.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // a layout still pending settles first
+          let host = e.parentElement;
+          while (host && ['visible', 'clip'].includes(getComputedStyle(host).overflowX)) host = host.parentElement;
+          const point = () => {
+            const b = e.getBoundingClientRect(); const h = host ? host.getBoundingClientRect() : { left: 0, right: innerWidth, top: 0, bottom: innerHeight };
+            const left = Math.max(b.left, h.left, 0); const right = Math.min(b.right, h.right, innerWidth);
+            const top = Math.max(b.top, h.top, 0); const bottom = Math.min(b.bottom, h.bottom, innerHeight);
+            return { x: ${dx === undefined ? '(left + right) / 2' : 'b.left + dx'.replace('dx', String(dx))}, y: (top + bottom) / 2, b, h };
+          };
+          let p = point();
+          const hits = () => { const under = document.elementFromPoint(p.x, p.y); return under && (e.contains(under) || under.contains(e)); };
+          if (!hits() && host && host.scrollLeft > 0) {                // under a part that sticks to the left edge: bring it out
+            host.scrollLeft = Math.max(0, host.scrollLeft - p.h.width / 2);
+            p = point();
+          }
+          if (!hits()) {                                               // the page moved under the point: measure once more
+            await new Promise((r) => setTimeout(r, 50));
+            p = point();
+          }
+          return { x: p.x, y: p.y }; })()`);
         if (!at) throw new Error(`nothing to click: ${expr}`);
         await page.clickAt(at.x, at.y, modifiers);
       },
@@ -139,12 +178,23 @@ async function launch({ width = 1600, height = 1000 } = {}) {
         await S('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
       },
       async type(text) { await S('Input.insertText', { text }); },
-      // Empty the focused box. (On macOS a synthetic ⌘A is not an edit; it goes as the command.)
+      // A key pressed with the character it produces, as a real press in a text box does. Found in
+      // Chrome 154, headless, on 2026-09-30, with the page at 0.4.1 as well as 0.5: a raw key-down
+      // of a printable key sent into a text box with no character leaves the tab unable to finish
+      // its next navigation; and after a key-down whose default the page prevented (E, or ⌘E
+      // before it), a synthetic Escape sent into a text box that was typed in leaves the renderer
+      // dispatching key events named Unidentified without end. So a key that types goes this way,
+      // and a box that was typed in is left by a click on the lines, not by Escape, once such a
+      // key has been sent. A real keyboard does neither.
+      async press(key, code, vk, text) {
+        const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk };
+        await S('Input.dispatchKeyEvent', { type: 'keyDown', text, unmodifiedText: text, ...base });
+        await S('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+      },
+      // Empty the focused box: its value set to nothing, and the page told as a keystroke would tell
+      // it (an input event). A synthetic ⌘A and Backspace did this before; see `press`.
       async clearBox() {
-        await S('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 4, commands: ['selectAll'] });
-        await S('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 4 });
-        await S('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8, commands: ['deleteBackward'] });
-        await S('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+        await page.ev("(() => { const b = document.activeElement; if (!b || !('value' in b)) return false; b.value = ''; b.dispatchEvent(new Event('input', { bubbles: true })); return true; })()");
       },
       async screenshot(file) {
         const r = await S('Page.captureScreenshot', { format: 'png' });

@@ -13,6 +13,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.3 | phase 4: editing and saving on the page; Open GEDCOM; the facts line in the owner's order; blocks that open and shut |
 | 0.4 | the owner's second round: the name GEDCOM Viewer; Edit on and off, removed lines shown and restored; a row between record types, each type shut at once; Go to Line… takes a range; the facts behind the file's name, each going to its line; Add inside and Add after |
 | 0.4.1 | the brief and the README only: the owner's walk brought to 0.4, the page opened by command, and his third round written — to build as 0.5 |
+| 0.5 | the owner's third round: the side frames hidden by their tabs and the lines scrolled sideways; a copy button on every box of text; a `_META` drawn as it reads; blocks, records and sections dragged among their siblings; Collapse all / Expand all; what each check means; Back over the lines; Bold surnames; a link selected whole; a clipped row's count; E for Edit |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -23,9 +24,9 @@ keep traces of that.
 |---|---|
 | the top bar | the name, the file's name (a click shows its facts under it), the buttons, Go to Line… |
 | the counts bar | People 2,345 · Families … — a click lists that type in Records |
-| the left bar | Records · Checks · Changes · Search · Tags |
-| the main frame | the lines |
-| the right frame | the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings |
+| the left bar | Records · Checks · Changes · Search · Tags; the ‹ on its bar hides it |
+| the main frame | the lines; **← Back to …** over them, while there is somewhere to go back to |
+| the right frame | the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings; a `_META` drawn as it reads; what a check means; the › on its bar hides it |
 
 ## Open it
 
@@ -44,19 +45,36 @@ keep traces of that.
 | ← · → | shut the selected line's block, or go up to the line above it · open it, or go down into it |
 | ⌥-click on ▸ or ▾ | open or shut every block at that level (on a level 0: every record) |
 | a click on a type's row (▾ INDI People 2,345) | shut or open every record of that type; with ⌥, every type |
-| ⌘E | Edit on or off — the Edit button does the same. Where an extension takes ⌘E, as the Claude extension does, use the button (from 0.5 the key is E) |
-| Enter · a double-click | with Edit on: type over the selected line; Enter keeps it, Esc drops it, clicking away keeps it. With Edit off, a double-click highlights a word, to copy |
+| E | Edit on or off — the Edit button does the same. (It was ⌘E, which the Claude extension in Chrome takes for its own panel; a bare letter always reaches the page.) |
+| Enter · a double-click | with Edit on: type over the selected line; Enter keeps it, Esc drops it, clicking away keeps it. With Edit off, a double-click highlights a word, to copy — a web address whole |
+| ⌥ and a double-click on a pointer | selects the pointer whole, `@` to `@`, and nothing jumps; ⌥ and a drag selects across it. A plain click still jumps |
+| a press on a row, moved | with Edit on: drags the line's block — a record by its `0` line, every record of a type by its type row — among its siblings; a gold line shows where it would land; release to move, Esc to let go |
 | ⌫ | with Edit on: delete the selected line and the lines under it (asks first when there are any) |
 | ⌘Z · ⇧⌘Z | Undo · Redo, one act each |
 | ⌘S · ⇧⌘S | Save, in place · Save a copy |
 | ⌘O | open another file |
 | ⌘F | Search |
 | ⌘L | Go to Line… — a line number, or two (105-117) for those lines alone, until × |
-| Esc | leave a box for the lines |
+| Esc | leave a box for the lines; let go of a drag |
+| a two-finger swipe, or ⇧ and the wheel, over the lines | scrolls them sideways, to the end of the longest line; the line numbers stay put |
+
+**Collapse all** shuts every record to its first line (the type rows stay open); it then reads
+**Expand all**, which opens every block and every type. **Bold surnames** shows the part of a
+name between slashes in bold, without the slashes, wherever a record is named — Records, the
+right frame, the dialogs — and never in a line as written. The **‹** and **›** tabs on the bars
+beside the lines hide the left bar and the right frame, and bring them back; a double-click on
+a bar does the same. In **Checks**, a click on a check's title says in the right frame what it
+means and what is usually done; the ▸ ▾ at its left opens and shuts its lines. Every box of
+text in the right frame has a **copy** button at its top right. A row longer than 2,000
+characters ends with **… 81,797 more**, the count not shown; the right frame shows it whole.
+A `_META` (Ancestry's Find a Grave block) is drawn as it reads, above Joined: its story in web
+formatting, its transcription, its persons as a table, the cemetery and the record id — read
+only, with nothing loaded from anywhere.
 
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the two
-panel widths, whether the change stamps are ticked, and whether the file's facts show. Never a
-file's name, content or place. Edit is off whenever a file opens.
+panel widths and whether each side frame is hidden, Bold surnames, whether the change stamps
+are ticked, and whether the file's facts show. Never a file's name, content or place. Edit is
+off whenever a file opens.
 
 ## Edit and save
 
@@ -73,13 +91,24 @@ its line number as saved; click it, and the right frame offers **Restore**, whic
 the removed lines beside it. With Edit off the lines are the file as it will be saved, and a red
 rule marks where lines were removed.
 
+**Moving.** With Edit on, press on a row and move a few pixels: the line's block — the line and
+everything under it — follows; a `0` line takes its whole record, and a type row (▾ SOUR Sources
+842) every record of that type. What would move dims, and a gold line shows where it would land:
+only at a sibling's edge, so no line's level or parent changes — a fact among its person's facts,
+a record among records, a type among types. `HEAD` stays first, `TRLR` last, the submitter record
+directly after `HEAD` below version 7, and a `CONC` or `CONT` line never leaves its line. Release
+to move; Esc, or a release where no gold line shows, moves nothing. One Undo brings it back. Two
+lines of one tag under one parent — two `1 NAME` — may be reordered: the first is the one the
+standard reads as preferred, and the Save dialog says so. A moved line is written from its own
+bytes, so a moved block changes the file's sha256 and not its size.
+
 Until it is saved, an edit shows:
 
-| Where | Changed line | Added line | Removed lines |
-|---|---|---|---|
-| its row | tinted, a bar at its left edge | tinted another colour, a bar | Edit on: struck through, in red · Edit off: a red rule where they were |
-| the right frame | **Was**, and the line as last saved | **Added** | **Removed**, and **Restore** |
-| Changes | the line, before → after | the line | the lines |
+| Where | Changed line | Added line | Removed lines | Moved lines |
+|---|---|---|---|---|
+| its row | tinted, a bar at its left edge | tinted another colour, a bar | Edit on: struck through, in red · Edit off: a red rule where they were | tinted a third colour, a bar; Edit on: a rule where they were taken from |
+| the right frame | **Was**, and the line as last saved | **Added** | **Removed**, and **Restore** | **Moved**, and the line's number as saved |
+| Changes | the line, before → after | the line | the lines | what moved — a block by its tag, a record, a type and its count — and how many lines; never their text |
 | a shut block | its count of lines takes the colour when it holds a change | | |
 | the top bar | ● after the file's name; Save turns on | | |
 | the Save dialog | every change, and every change stamp, before anything is written | | |
@@ -123,7 +152,7 @@ node --test tests/*.test.js
 | Tests | `node --test tests/*.test.js` | all pass; the only skips are the tests that need the public files, when they are absent |
 | The real files | `node tools/check-real.js local/RAW.ged local/CLEANED.ged` | every number equals section 3 of the brief, for a file it measured; the probe's numbers for any other; an edit and a record deleted on each, the whole file checked again within 0.3 s, and undone to its sha256 |
 | The second opinion | `node tools/compare.js fixtures local/RAW.ged local/CLEANED.ged` | no number differs between `core.js` and `tools/baseline_probe.py` |
-| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; Save in place through a folder held in the page's memory; Save a copy downloaded in a browser with no pickers |
+| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; Save in place through a folder held in the page's memory; Save a copy downloaded in a browser with no pickers. `--only PART` walks one part alone (read-only, rest, editing, edges, third, save, copy) |
 
 The tools print counts, tags, ids, line numbers, lengths and hashes only — never a value — so
 they are safe to run over a file that holds living people. The walk drives Google Chrome,
@@ -186,6 +215,7 @@ steps light → sunset → dark.
 | `--tag-weight` | how strong a tag is |
 | `--row-height` | the height of every row in the main frame; the page reads it each time it lays the rows out |
 | `--tab-size` | how wide a tab inside a value shows |
+| `--row-tint` | a row's tint, which each state below sets; the sticky left part of a row (its number, mark and fold) lays it over the frame's own colour |
 | `--row-selected` · `--row-hit` · `--row-hover` | the selected line; a search's lines; the line under the pointer |
 | `--line-number-color` · `--level-color` · `--id-color` · `--tag-color` · `--value-color` | the parts of a line |
 | `--pointer-color` | a pointer value |
@@ -196,9 +226,17 @@ steps light → sunset → dark.
 | `--fold-color` · `--fold-size` | the ▸ ▾ that shut and open a block |
 | `--hidden-bg` | the count of lines a shut block hides |
 | `--section-bg` | the row between two record types |
-| `--mark-changed` · `--mark-added` · `--mark-removed` | what is not yet saved: a changed line, an added one, the rule where lines were removed; the ● in the bar |
-| `--mark-bar` | the width of the bar at the left of a changed or added row |
-| `--row-changed` · `--row-added` · `--row-removed` | the tint of a changed row, an added row, a removed one (Edit on) |
+| `--mark-changed` · `--mark-added` · `--mark-removed` · `--mark-moved` | what is not yet saved: a changed line, an added one, the rule where lines were removed, a moved line and the rule where it was taken from; the ● in the bar |
+| `--mark-bar` | the width of the bar at the left of a changed, added or moved row |
+| `--row-changed` · `--row-added` · `--row-removed` · `--row-moved` | the tint of a changed row, an added row, a removed one (Edit on), a moved one |
+| `--drop-line` · `--drop-line-width` · `--drag-dim` | the gold line where a dragged block would land; how faint what would move is drawn |
+| `--more-color` | "… 81,797 more" at the end of a clipped row |
+| `--split-tab-height` · `--split-tab-width` | the ‹ › tab on each bar that hides and shows its frame |
+| `--back-top` · `--back-left` · `--back-strip` | where Back sits at the main frame's top left, and the height of its strip above the lines |
+| `--copy-color` · `--copy-done` | the copy button at a box's top right, and its check mark |
+| `--surname-weight` | how bold a surname is, with Bold surnames on |
+| `--help-max-width` | what a check means, in the right frame |
+| `--meta-max-height` · `--table-border` | a `_META`'s story before it scrolls; the tables in a story and its persons |
 | `--edit-bg` | the box a line is typed in |
 | `--left-width` · `--right-width` | the left bar and the right frame (also dragged, and remembered) |
 | `--split-width` · `--split-color` | the bars between them |

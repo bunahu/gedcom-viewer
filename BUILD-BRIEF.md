@@ -333,8 +333,10 @@ The net change is `savedOrder` against `order`, never the history of keystrokes:
 | a number in `savedOrder`, absent from `order`, nothing replacing it | **removed** |
 | a number in `order`, absent from `savedOrder` | **added** |
 
-No edit moves a line, so the numbers the two lists share are in the same order in both, and one
-walk over the two finds every difference.
+A move (3.4a) reorders lines, so the net change first finds the most lines that kept their order
+between the two lists — every other line the two share has **moved** — and then one walk over the
+two, between those, finds every other difference. Which lines of a swap are named as moved is
+the smaller side; the file, not the keystrokes, is what is reported.
 
 The Changes panel shows this list at all times. A changed record is one that holds an added or
 changed line, or lost one. A record whose own level-0 line was removed is a deleted record.
@@ -439,34 +441,36 @@ a repo (I9).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│ GEDCOM Viewer 0.4.1 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy Back [Go to Line…] │
+│ GEDCOM Viewer 0.5 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy [Go to Line…]     │
+│                                    Collapse all  Indent  Bold surnames  Theme                │
 │ (a click on the name: GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com… · sha256) │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │ People 2,345   Media 1,234   Families 1,098   Sources 765   _MTTAG 23   Repositories 7   …   │
 ├──────────────────┬─────────────────────────────────────────────────┬────────────────────────┤
-│ Records          │  41,201    0 @I42@ INDI                         │ 1 NAME                 │
-│ Checks      3    │  41,202        1 NAME Jane /Fixture/            │ Jane /Fixture/         │
-│ Changes     2    │  41,203            2 GIVN Jane                  │                        │
-│ Search           │  41,204        1 BIRT                           │ in @I42@ INDI          │
-│ Tags             │  41,205            2 DATE 1 JAN 1900            │                        │
-│                  │  41,206            2 SOUR @S7@                  │                        │
+│ Records          ‹ ← Back to 41,190                                › 1 NAME            [copy] │
+│ Checks      3    │  41,201    0 @I42@ INDI                         │ Jane /Fixture/         │
+│ Changes     2    │  41,202        1 NAME Jane /Fixture/            │                        │
+│ Search           │  41,203            2 GIVN Jane                  │ in @I42@ INDI          │
+│ Tags             │  41,204        1 BIRT                           │                        │
+│                  │  41,205            2 DATE 1 JAN 1900            │                        │
 └──────────────────┴─────────────────────────────────────────────────┴────────────────────────┘
 ```
 
 | Part | Behaviour |
 |---|---|
-| The grid | only the rows in view exist in the page; every row one fixed height; a row shows at most 2,000 characters of its line |
+| The grid | only the rows in view exist in the page; every row one fixed height; a row shows at most 2,000 characters of its line, and then **… 81,797 more** (3.10); it scrolls sideways to the end of the longest line, the line number, mark and fold staying at the left edge (3.1) |
 | A row | line number · a mark (error, note, changed, added) · level · id · tag · value; level quiet, tag strong, a pointer value is a link |
 | Indent on | each row is set in by its level × one step (4 characters wide to start; the width is a setting) |
 | Indent off | every row flush left, as in the file |
-| A pointer | a click jumps to the record it names; Back returns |
-| The right pane | the selected line's whole value, wrapped; the joined value when the line is part of a `CONC`/`CONT` run (read only); its record; for a record line, the lines that point at it; its findings |
-| Checks | grouped by check with counts, errors first; a click jumps to the line |
+| A pointer | a click jumps to the record it names; **← Back to 41,190**, over the lines at the main frame's top left, returns (3.7). ⌥ makes a link plain text (3.9) |
+| The right pane | the selected line's whole value, wrapped; the joined value when the line is part of a `CONC`/`CONT` run (read only); a `_META` drawn as it reads (3.3); its record; for a record line, the lines that point at it; its findings. Every box of text has a copy button (3.2). The › on its bar hides it (3.1) |
+| Checks | grouped by check with counts, errors first; the ▸ ▾ at a check's left opens its lines, a click on its title says what it means (3.6); a click on a line jumps to it |
 | Search | any text in the line as written; a count; next and previous; an id typed whole (`@I42@`) goes to its record first |
 | Go to Line… | a number goes to that line; two (`105-117`) show those lines alone, with a Go button while something is typed and × to show every line again (the owner, 2026-09-28: nothing on the screen points the range out) |
 | The file's name | a chip after the name GEDCOM Viewer; a click shows the file's facts under it, and hides them (remembered). Each fact that comes from a header line goes to it when clicked: the version to `GEDC`'s `VERS`, the encoding to `CHAR`, the date to `DATE`, the exporter to `SOUR`. Open GEDCOM leaves the top bar while a file is open: ⌘O, a drop, or Open another GEDCOM… among the facts |
-| Edit | off whenever a file opens: the file is read, and a double-click highlights a word (a click redraws the rows' looks only, so a highlight holds, to copy). On (⌘E): Enter or a double-click types over a line; the right frame offers Edit line · Add inside · Add after · Delete line · Delete record; ⌫ deletes; and each line removed since the last save stays where it was, struck through in red under its line number as saved — a click on it offers Restore, which puts its run of removed lines back as one step |
-| Types | in a file bunched by record type — each type's records in one run — a row between two types (`▾ INDI People 2,345`); a click shuts or opens every record of that type, ⌥-click every type. A file not bunched has none |
+| Edit | off whenever a file opens: the file is read, and a double-click highlights a word (a click redraws the rows' looks only, so a highlight holds, to copy). On (E): Enter or a double-click types over a line; the right frame offers Edit line · Add inside · Add after · Delete line · Delete record; ⌫ deletes; a press on a row moved a few pixels drags its block among its siblings (3.4a); and each line removed since the last save stays where it was, struck through in red under its line number as saved — a click on it offers Restore, which puts its run of removed lines back as one step |
+| Types | in a file bunched by record type — each type's records in one run — a row between two types (`▾ INDI People 2,345`); a click shuts or opens every record of that type, ⌥-click every type; dragged, it takes its type past another (3.4a). A file not bunched has none. **Collapse all** shuts every record to its `0` line, then reads **Expand all** (3.5) |
+| Bold surnames | a toggle beside Indent: wherever a record's label shows, the name between slashes in bold and without them; never a line as written (3.8) |
 | Leaving with unsaved changes | the browser asks first |
 
 **The look is the sibling project's.** Copy the three palettes from `sibling/frontend/src/index.css` — `:root`
@@ -484,18 +488,18 @@ README lists the properties and what each one moves.
 holds an example value.
 
 **Keys:** arrows, Page Up/Down, Home, End move the selection · ← shuts a block or goes up to the
-line above it, → opens it or goes down into it · ⌘E Edit on or off · Enter edits · Esc drops the
-edit · ⌫ deletes the line and its subtree · ⌘Z undo · ⇧⌘Z redo · ⌘S save · ⇧⌘S save a copy · ⌘O
-open another file · ⌘F search · ⌘L go to line.
+line above it, → opens it or goes down into it · E Edit on or off (3.11; ⌘E before 0.5) · Enter
+edits · Esc drops the edit, or lets go of a drag · ⌫ deletes the line and its subtree · ⌘Z undo ·
+⇧⌘Z redo · ⌘S save · ⇧⌘S save a copy · ⌘O open another file · ⌘F search · ⌘L go to line.
 
 **Blocks open and shut** (the owner's ask of 2026-09-28): every line with a subtree shows ▾, or ▸
 when shut; a shut line hides its subtree and shows how many lines it holds, in the changed colour
 when one of them is not yet saved. ⌥-click opens or shuts every block at that level. Whatever
 jumps to a hidden line opens the blocks around it. Display only (I4), and never remembered.
 
-**Remembered between visits** (`localStorage`): indent on/off and width, theme, panel widths, the
-change-stamp checkbox, whether the file's facts show. Never a file's name, content or handle; and
-Edit is off whenever a file opens.
+**Remembered between visits** (`localStorage`): indent on/off and width, theme, panel widths and
+whether each side frame is hidden, Bold surnames, the change-stamp checkbox, whether the file's
+facts show. Never a file's name, content or handle; and Edit is off whenever a file opens.
 
 ---
 
@@ -842,10 +846,13 @@ is, beside the four files it loads.
 | 2 | Read the counts bar; click **People** | the counts of the measured table (`local/measured.json`), People first; Records lists the people |
 | 3 | Click the file's name | GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com Family Trees 2025.08 · its size · its lines · sha256. **GEDCOM 5.5.1** goes to line 18, **exported…** to line 15; **sha256** shows `<sha256>` and says on hover what it is |
 | 4 | **Checks** | 0 errors. Notes: Line break inside the value 3 · Nothing points at it 9 · Over 255 characters 93 · Mixed line endings, once, for the whole file |
+| 4a | Click the title **Over 255 characters**; then the ▸ at its left | the right frame says what N4 means and what is usually done; the ▸ opens its 93 lines, and a click on one goes to it (3.6) |
 | 5 | Click a **Line break inside the value** | a `CONC` line in media record `@O780@` or `@O1530@`, the character marked in the value |
 | 6 | **Indent** on, then off | rows set in by level, with a width box beside the button; then flush left |
 | 7 | ▾ on a `0 @I…@ INDI` line, then ▸; ← and → on a selected line; ⌥-click ▾ on a `0` line; Go to Line… a line inside a shut record | the record shuts and opens; ⌥ shuts every record; the record gone into opens |
 | 8 | Click the row **▾ INDI People …** between the types; again; ⌥-click it | every person shuts; opens; ⌥ shuts every type |
+| 8a | **Collapse all**; then **Expand all** | every record one row, the type rows open; then every block and every type open (3.5) |
+| 8b | The ‹ on the bar left of the lines; the › on the right; again each | the left bar hides, and the right frame; the tabs flip and bring them back. Close the tab and open the page again with one hidden: still hidden (3.1) |
 | 9 | Drag the scrollbar to the end and back | no blank screen on the way |
 
 **B. Find and move**
@@ -854,19 +861,25 @@ is, beside the four files it loads.
 |---|---|---|
 | 10 | **Go to Line…** (⌘L) the last line's number | `0 TRLR` |
 | 11 | Go to Line… `105-117`, **Go** | only those 13 lines; **×** shows every line again |
-| 12 | Click the `@F…@` of a `1 FAMS` line; **Back** | the family; Back returns |
+| 12 | Click the `@F…@` of a `1 FAMS` line; **← Back to …**, over the lines at the main frame's top left | the family; Back names the line it returns to, and returns (3.7) |
 | 13 | **Search** (⌘F) a word: **Next**, **Previous**. **Tags**: click `_MTTAG` | a count, and each match in turn; the tag's lines |
 | 14 | **Records**: part of a surname in the filter; click a result | that record |
+| 14a | **Bold surnames**; look at Records and the right frame; then at the line itself | the surname in bold, without its slashes, wherever the record is named; the line still reads `/Surname/`. Off again, or leave it: it is remembered (3.8) |
 | 15 | Select a `CONC` line; then a `0 @…@` record line | the right frame's **Joined** holds the whole value; for the record line, the lines that point at it |
-| 16 | Double-click a word | it highlights, and stays highlighted to copy |
+| 15a | Go to Line… his step 1's `_META` | the right frame draws it as it reads — **Story** (70 paragraphs, some in bold), then **Joined**; on another `_META`, Transcription, Persons as a table, Cemetery, Record id where the value holds them (3.3). Two-finger swipe the lines sideways: the 20 `CONC` lines readable to their ends, the line numbers staying put (3.1) |
+| 15b | The copy button at the top right of the Story box, and of the value box of any line; paste somewhere | the box's text, exactly; the icon a check mark for a moment (3.2) |
+| 16 | Double-click a word; then a word of a web address in a `_META` or a `NOTE`; then, holding ⌥, double-click a `@F…@` pointer | the word highlights, and stays highlighted to copy; the address whole; the pointer whole, and nothing jumps (3.9) |
 | 17 | The file's name → **Open another GEDCOM…** → `local/CLEANED.ged`; Go to Line… the number of its longest line. Then reopen `local/walk/RAW.ged` | **What it tests:** a line far longer than any screen neither slows nor breaks the main frame. This one is over 80,000 characters, the `_META` of one media record, which the cleaner joined into one line. The main frame shows its first 2,000 characters (from v0.5, ending **… 81,797 more**); the right frame shows it whole |
 
 **C. Edit a line**
 
 | # | Do | Expect |
 |---|---|---|
-| 18 | Click **Edit** — in this Chrome ⌘E opens the Claude panel instead (3.11). Select a person's `1 NAME` line; Enter (or double-click); change one letter; Enter | the row tinted, a bar at its left; the right frame's **Was** holds the old line; **Changes 1**; ● after the file's name; Save turns on |
+| 18 | **E** (or click Edit). Select a person's `1 NAME` line; Enter (or double-click); change one letter; Enter | Edit on — ⌘E is no longer a key of the page's (3.11); the row tinted, a bar at its left; the right frame's **Was** holds the old line; **Changes 1**; ● after the file's name; Save turns on |
 | 19 | Start typing over another line; Esc | nothing changes |
+| 19a | Press on that person's `1 BIRT` line and drag it up to the top edge of the `1 NAME` line; release | on the way, the block dims and a gold line shows only at a sibling's edge; released, the BIRT block stands first, tinted in the moved colour; **Changes 2**: `moved: BIRT · n lines`; the right frame says **Moved · line … as saved**; a rule marks where it came from (3.4a) |
+| 19b | Press on the row **▾ SOUR Sources …** and drag it up to the row **▾ INDI People …**; release. Then ⇧⌘S, read the dialog, Cancel | the sources stand before the people; **Changes 3**: `moved: section SOUR · … records · … lines`; the dialog lists the move as one entry, and **Change stamps · 1 record** — the person of 19a, not the sources (3.4a). Try dragging a person down to the families: the gold line stops at the last edge among the people |
+| 19c | **Undo**, twice | the sources back, then the BIRT block back; **Changes 1** — the name of step 18 alone |
 
 **D. Save in place, with the change stamp**
 
@@ -929,7 +942,7 @@ The box remembers how it was left: tick it again before a save that should stamp
 | # | Do | Expect |
 |---|---|---|
 | 39 | **Theme**: light → sunset → dark | each reads well |
-| 40 | Close the tab; open the page again | Indent, theme, panel widths and the facts' open or shut as left; Edit off |
+| 40 | Close the tab; open the page again | Indent, theme, panel widths and whether a side frame is hidden, Bold surnames, and the facts' open or shut as left; Edit off |
 
 `local/walk/` then holds the copy, a dated copy, the backups and the log — all real data, all
 ignored by git; delete the folder when the walk is over. He says it is done, and it is v1.0.
@@ -958,7 +971,8 @@ double-click that edits, and a highlight that holds. Built as section 11 now say
 ### The owner's third round (2026-09-29, from walk steps 1–17): v0.5
 
 0.4.1 (2026-09-30) is this brief and the README, nothing else: the walk brought to 0.4, the page
-opened by command, and this round written. The round builds as 0.5.
+opened by command, and this round written. The round is built as 0.5 (session 3, 2026-09-30;
+"Where session 3 is", below, says what it settled).
 
 Steps 1–17 of the phase-5 walk passed; of step 17 he asked what it tested (3.10). What he asked
 for from them, in his words:
@@ -1164,6 +1178,32 @@ each checked against a fresh read and undone to the file's own sha256, every fix
 bytes in a new order, a record moved whole left unstamped; E turning Edit on and off, and not while
 a box is typed in. The phase-5 walk gains a step for each part, in the group it belongs to. Its
 steps 1–17 are walked; he stopped at 18 on ⌘E (3.11), and walks 18–40 on 0.5.
+
+### Where session 3 is
+
+The third round is built as 0.5 (2026-09-30) and passes every gate: the tests (140), the two
+real files through `check-real.js` and `compare.js`, and the walk, which gained a part of its
+own for the round (`node tools/walk.js … --only third` walks it alone). What it settled:
+
+| Settled | Why |
+|---|---|
+| A moved line shows in its row like a changed one — a tint and a bar, in a colour of its own — and the right frame says **Moved · line N as saved**; with Edit on a rule in that colour marks where the lines were taken from | round 2's rule that an unsaved edit shows in its row, in the right frame, in Changes and in the Save dialog; 3.4a names the rule |
+| When two sibling blocks swap, the net change names the smaller side as moved; a section moved past a larger one is the one named | 9.4 reports the file against the file as saved, never the keystrokes; the lines that kept their order are the most that could have (patience sorting) |
+| In the Changes panel a moved run sits at its new place, and reads what moved and how many lines; the Save dialog and the log say the same, and add, for two lines of one tag under one parent, that the first is read as preferred | 3.4a: never their text |
+| The move act refuses a range that is not whole sibling blocks, a landing that is not a sibling's edge, and a move that would leave a `CONC`/`CONT` line continuing another line, as well as the fixed places | 3.4a's rules, read as one; `landings()` gives the page the edges a block may land at |
+| In the page a record lands only among the records of its own type, and a type row only at another type's edge; core.js allows any sibling edge, so a file not bunched by type is not held to it | 3.4a: the file stays bunched |
+| The XML of a `_META`, and the HTML of its story, are read in the page by DOMParser in an inert document (nothing loads) and handed to core.js as plain nodes; the rebuild from the allowlist is pure, tested under Node with a small markup reader of the tests' own, and the page's path is walked in Chrome on a written `_META` of every shape | Node has no DOMParser and nothing is installed (17.11); what survives is decided in one place |
+| A link's address is written after its text only when it is not the text already; a `colspan` or `rowspan` survives as a small plain number | 3.3's allowlist, applied |
+| The Save dialog's change-stamp rows show each record's label beside its id | 3.8 names them among the places a label shows |
+| The Records filter matches a label as written and as shown, toggle or not | 3.8 |
+| With Edit on a double-click types over the line, as before; a web address is selected whole with Edit off, or with ⌥ | 3.9: ⌥ makes a link plain text; Edit on is for typing |
+| The row's left part (line number, mark, fold) stays at the left edge by `position: sticky`; the rows' layer and each row clip with `overflow: clip`, since `overflow: hidden` would make them the scroll container the part sticks to | 3.1 |
+| Chrome 154, headless, with synthetic keys: a raw key-down of a printable key sent into a text box with no character leaves the tab unable to finish its next navigation; and after a key-down whose default the page prevented (E now, ⌘E before), a synthetic Escape sent into a box that was typed in leaves the renderer dispatching key events named Unidentified without end — at 0.4.1 as well as 0.5. A real keyboard does neither. The walk types with the character, clears a box by setting its value, and leaves a typed-in box by a click | found while walking 3.11; `tools/chrome.js` says so at `press` |
+| Back sits in a strip of its own above the lines while it shows, so no line's number is under it | 3.7 puts it at the main frame's top left; laid over the rows it hid the first two lines' numbers after a jump to the top of a file, and its width grows with the line it names |
+| The version is 0.5, tagged | as the owner named the versions |
+
+The phase-5 walk below gained a step for each part, lettered after the step it follows, so
+that 18–40 keep their numbers.
 
 ### Session 3's prompt
 

@@ -49,6 +49,27 @@
     'Change one character anywhere and it changes completely; two files with the same sha256 are the same, ' +
     'byte for byte. Save checks it before it writes, and every backup must match it.';
   const CANCEL = { label: 'Cancel', value: '' };
+  // 3.6 — what each check means, why it matters, and what is usually done about it. The owner's
+  // to change.
+  const CHECK_HELP = {
+    E1: "This line doesn't begin with a level number, so no program can tell where it belongs in the tree. It is usually the tail of a value that broke onto a line of its own, or text pasted in by mistake. Join it to the line it came from as a CONC or CONT line, or delete it.",
+    E2: "This line begins with a number but isn't in GEDCOM's shape — a level, an optional @id@, a tag, then the value, one space apart. Typical causes: a leading zero (01), no space after the level, an id missing its closing @, or a character in the tag other than a letter, digit or underscore. Other programs may skip it or misread it. Retype it in the right shape.",
+    E3: "This line is more than one level deeper than the line above it — a 3 straight under a 1 — so the level between is missing; or the file doesn't open at level 0. Programs attach such a line wherever they guess. Correct its level, or add the missing line above it.",
+    E4: 'A GEDCOM file opens with 0 HEAD and ends with 0 TRLR, once each. Here one is missing or doubled, or there are records after TRLR, which many programs never read. Move or delete the stray lines.',
+    E5: 'An empty line, or one of spaces only. The standard allows none, and some programs stop reading at the first. Delete it.',
+    E6: "Two records carry this same id. A pointer to it could mean either, so programs choose one — often the last — and the other record's links go wrong. Give one of them a new id, and repoint the lines that meant it.",
+    E7: 'This line points at an id that no record in the file has — the record was deleted, or the id mistyped — so the link is lost on import. Point it at the right record, or delete the line.',
+    E8: "This line holds bytes that aren't valid in the file's encoding. They are kept exactly as they are and shown as best they can be. GEDCOM Viewer lets you delete such a line but not edit it, so nothing is changed by a guess. Delete it, or correct it in the program that made the file.",
+    E9: "The header's 1 CHAR line names one encoding and the file's bytes are in another — or a file that needs a CHAR line has none. GEDCOM Viewer reads the bytes as they are; a program that trusts the header may garble every accented letter. Correct the CHAR line to match the bytes.",
+    N1: "This value holds a character that some programs treat as the end of a line, though GEDCOM does not — NEL (U+0085), LS (U+2028) and the like; it's shown marked. A program that breaks there cuts the value in two and can lose the rest of it. Keeping it is usually safe; delete it if the value reads the same without it.",
+    N2: 'This value holds an invisible control character other than a tab, shown marked. It is usually left over from copy and paste, and some programs drop or reject it. Delete it.',
+    N3: "No line in the file points at this record — a person in no family, a source no fact cites, a picture attached to no one. That isn't wrong: it may be kept on purpose. But it's often what is left behind after something else was removed. Look before you delete it.",
+    N4: 'GEDCOM 5.5 allows a line of at most 255 characters; a longer value is meant to continue on CONC lines. A program that keeps to the letter may cut this line short. GEDCOM 7 has no such limit, so this is not noted in version-7 files.',
+    N5: 'There are spaces or tabs before the level number. The standard allows none, and a strict program may reject the line. Delete them.',
+    N6: "This file is in an encoding GEDCOM Viewer can't show as its own letters — ANSEL, for one. Each byte is shown as the character with the same number, so accented letters may look wrong on screen; but every line you don't edit is written back byte for byte. A line you edit may hold plain ASCII only.",
+    N7: "Lines in this file end in more than one way — most with LF and some with CR LF, for instance. Every line keeps its own ending when saved, and a new line takes the file's most common one. Most programs don't mind; a few treat it as damage.",
+  };
+  let drag = null;                    // a block being dragged (3.4a); see "Dragging"
 
   const state = {
     doc: null,                        // the document: the file as read, and the lines typed over it
@@ -65,6 +86,11 @@
     theme: THEMES.includes(store.get('theme', 'light')) ? store.get('theme', 'light') : 'light',
     stamps: store.get('stamps', true) !== false,   // F1, V1: on unless unticked
     showFacts: store.get('facts', false) === true,  // the file's facts, shown under its name
+    boldSurnames: store.get('surnames', false) === true,   // 3.8: surnames in bold wherever a record is named
+    hiddenLeft: store.get('hideLeft', false) === true,     // 3.1: the left bar hidden
+    hiddenRight: store.get('hideRight', false) === true,   // 3.1: the right frame hidden
+    help: null,                       // 3.6: the check whose meaning the right frame shows
+    maxLevel: 0,                      // the deepest level in the file, for the grid's width
     editing: false,                   // Edit: off when a file opens
     folds: new Set(),                 // the lines shut, by their number in the document's order
     sections: null,                   // the record types, when the file is bunched by type
@@ -80,6 +106,7 @@
     marks: null,                      // per line: changed or added; where lines were removed
     runs: [],                         // the net change in runs: the Changes panel
     changeAt: new Map(),              // a changed line → its line as saved
+    movedAt: new Map(),               // a moved line → its place as saved
     recordType: null,
     recordRows: [],                   // the records the list shows, as record numbers
     checkRows: [],                    // a check's head, then its findings, check by check
@@ -286,6 +313,12 @@
       },
       rowHeight: () => h,
       pageRows: () => Math.max(1, Math.floor(scroller.clientHeight / h) - 1),
+      // The rows' width, as CSS: the list scrolls sideways when it is wider than the view.
+      setWidth(css) { layer.style.width = css; spacer.style.width = css; },
+      // Something drawn over the rows, at the top of the view: the gold line of a drag.
+      mount(elt) { layer.appendChild(elt); },
+      // Where row i's top edge is, in the layer (the view's own pixels).
+      topOf(i) { return i * h - scroller.scrollTop; },
       // Bring row i into view: to a few rows below the top for a jump, by as little as it takes
       // otherwise.
       show(i, jump) {
@@ -394,6 +427,7 @@
     state.rows = Int32Array.from(rows);
     state.rowOf = rowOf;
     state.extras = extras;
+    updateFoldAll();
   }
 
   const rowCount = () => state.rows.length;
@@ -499,25 +533,61 @@
     return fd;
   }
 
+  // The part of a row that stays at the left edge while the grid scrolls sideways (3.1): the line
+  // number, the mark, and the indent with the fold.
+  function fixedPart(ln, markClass, lv, kids, shut) {
+    const fx = el('span', 'fx');
+    fx.appendChild(el('span', 'ln', ln));
+    fx.appendChild(el('span', markClass));
+    fx.appendChild(foldPart(lv, kids, shut));
+    return fx;
+  }
+
+  // 3.10 — the text of a row, up to ROW_CHARS characters, and then how many more the line holds.
+  function putClipped(row, tx, text, parts, marks) {
+    const c = C.clip(text, ROW_CHARS);
+    if (parts) putParts(tx, text, parts, c.end, marks); else putText(tx, text.slice(0, c.end));
+    row.appendChild(tx);
+    if (c.more) row.appendChild(el('span', 'more', `… ${fmt(c.more)} more`));
+  }
+
+  // The grid is as wide as the longest line as it shows — at most ROW_CHARS characters, and the
+  // clip's tail — plus the indent while Indent is on, and the line number, mark and fold before it.
+  function updateGridWidth() {
+    const m = state.m;
+    if (!m) { grid.setWidth(''); return; }
+    const indent = state.indent ? Math.min(state.maxLevel, MAX_INDENT) * state.indentWidth : 0;
+    const chars = fmt(m.n).length + 1 + 2 + 2 + indent + Math.min(m.longest, ROW_CHARS) + (m.longest > ROW_CHARS ? 20 : 2);
+    grid.setWidth(`max(100%, ${chars}ch)`);
+  }
+
   // A row's look: its kind, whether it is selected or found, what is not yet saved.
   function rowClass(k) {
     const v = state.rows[k];
+    const dragging = drag && drag.started;
     if (v === -1) return 'row is-added';
     if (v <= -2) {
       const x = extraOf(v);
-      if (x.kind === 'section') return `row is-section${state.shutSections.has(x.sec.tag) ? ' is-shut' : ''}`;
+      if (x.kind === 'section') {
+        return `row is-section${state.shutSections.has(x.sec.tag) ? ' is-shut' : ''}${dragging && drag.section === x.sec ? ' is-dragging' : ''}`;
+      }
       return `row is-removed${isPicked(x) ? ' is-sel' : ''}`;
     }
     const mk = state.marks;
     let cls = 'row';
     if (mk.status[v] === 1) cls += ' is-changed';
     else if (mk.status[v] === 2) cls += ' is-added';
+    else if (mk.status[v] === 3) cls += ' is-moved';
     if (v === state.sel && !state.pick) cls += ' is-sel';
     else if (state.hitFlags && state.hitFlags[v]) cls += ' is-hit';
     if (!state.editing) {                                            // with Edit on, removed lines show themselves
       if (mk.removedAt[v]) cls += ' is-removed-above';
       if (v === state.m.n - 1 && mk.removedAt[state.m.n]) cls += ' is-removed-below';
+    } else {                                                         // and a rule marks where a move took lines from
+      if (mk.movedFrom[v]) cls += ' is-moved-above';
+      if (v === state.m.n - 1 && mk.movedFrom[state.m.n]) cls += ' is-moved-below';
     }
+    if (dragging && v >= drag.from && v < drag.end) cls += ' is-dragging';
     return cls;
   }
 
@@ -533,19 +603,17 @@
     const editing = state.edit && state.edit.kind === 'edit' && state.edit.pos === i;
     if (editing && state.edit.input.parentNode === row) return;     // the box being typed in stays put
     row.textContent = '';
-    row.appendChild(el('span', 'ln', fmt(i + 1)));
     const marks = m.findings.marks[i];
-    row.appendChild(el('span', marks & 1 ? 'mk is-error' : marks & 2 ? 'mk is-note' : 'mk'));
     const kids = hasKids(i);
     const shut = kids && isShut(i);
-    row.appendChild(foldPart(m.level[i], kids, shut));
+    const fx = fixedPart(fmt(i + 1), marks & 1 ? 'mk is-error' : marks & 2 ? 'mk is-note' : 'mk', m.level[i], kids, shut);
+    row.appendChild(fx);
     if (editing) {
       row.appendChild(state.edit.input);
+      state.edit.input.style.width = `${Math.max(120, $('grid').clientWidth - fx.offsetWidth - 12)}px`;
       return;
     }
-    const tx = el('span', 'tx');
-    putParts(tx, m.texts[i], partsOf(m, i), ROW_CHARS, matchesIn(i, ROW_CHARS));
-    row.appendChild(tx);
+    putClipped(row, el('span', 'tx'), m.texts[i], partsOf(m, i), matchesIn(i, C.clip(m.texts[i], ROW_CHARS).end));
     if (shut) {
       const end = C.subtreeEnd(m, i);
       const inside = state.marks.sum[end] - state.marks.sum[i + 1];
@@ -558,9 +626,7 @@
     if (x.kind === 'section') {
       const sec = x.sec;
       const shut = state.shutSections.has(sec.tag);
-      row.appendChild(el('span', 'ln'));
-      row.appendChild(el('span', 'mk'));
-      row.appendChild(foldPart(0, true, shut));
+      row.appendChild(fixedPart('', 'mk', 0, true, shut));
       const tx = el('span', 'tx');
       tx.appendChild(el('span', 'tg', sec.tag));
       if (RECORD_NAMES[sec.tag]) tx.appendChild(el('span', 'sec-name', ` ${RECORD_NAMES[sec.tag]}`));
@@ -570,21 +636,17 @@
       return;
     }
     const was = x.run.lines[x.k].was;                                // a removed line: its number as saved, and its words
-    row.appendChild(el('span', 'ln', fmt(x.run.before + x.k + 1)));
-    row.appendChild(el('span', 'mk'));
-    row.appendChild(foldPart(levelOfText(was), false, false));
-    const tx = el('span', 'tx');
-    putText(tx, was.slice(0, ROW_CHARS));
-    row.appendChild(tx);
+    row.appendChild(fixedPart(fmt(x.run.before + x.k + 1), 'mk', levelOfText(was), false, false));
+    putClipped(row, el('span', 'tx'), was, null, []);
   }
 
   function paintAdding(row) {
     if (state.edit.input.parentNode === row) return;
     row.textContent = '';
-    row.appendChild(el('span', 'ln', '+'));
-    row.appendChild(el('span', 'mk'));
-    row.appendChild(foldPart(state.edit.level === null ? 0 : state.edit.level, false, false));
+    const fx = fixedPart('+', 'mk', state.edit.level === null ? 0 : state.edit.level, false, false);
+    row.appendChild(fx);
     row.appendChild(state.edit.input);
+    state.edit.input.style.width = `${Math.max(120, $('grid').clientWidth - fx.offsetWidth - 12)}px`;
   }
 
   const grid = Virtual($('grid'), paintRow, (row, k) => { row.className = rowClass(k); });
@@ -602,6 +664,7 @@
     }
     state.sel = to;
     state.pick = null;
+    state.help = null;
     grid.show(rowOfLine(to), how === 'jump' || how === 'step');
     grid.restyle();
     renderDetail();
@@ -626,6 +689,7 @@
   // A removed line (Edit on) selected: the right frame says what it was, and offers it back.
   function pickRemoved(x) {
     state.pick = { before: x.run.before, k: x.k };
+    state.help = null;
     grid.restyle();
     renderDetail();
   }
@@ -645,9 +709,17 @@
     if (line !== undefined) select(line, 'step');
   }
 
-  function updateBack() { $('back').disabled = state.back.length === 0; }
+  // 3.7 — Back sits over the lines at the main frame's top left, naming the line it returns to,
+  // only while there is one.
+  function updateBack() {
+    const b = $('back');
+    b.hidden = state.back.length === 0;
+    b.textContent = state.back.length ? `← Back to ${fmt(state.back[state.back.length - 1] + 1)}` : '← Back';
+    b.closest('.middle').classList.toggle('has-back', !b.hidden);   // the strip above the lines
+  }
 
   $('grid').addEventListener('click', (e) => {
+    if (clickAfterDrag) { clickAfterDrag = false; return; }        // the release of a drag is no click
     const k = grid.rowOf(e.target);
     if (k < 0) return;
     const v = state.rows[k];
@@ -662,7 +734,7 @@
       toggleFold(v, e.altKey);
       return;
     }
-    if (e.target.closest('.ptr')) {
+    if (e.target.closest('.ptr') && !e.altKey) {                    // ⌥ makes a link plain text (3.9)
       state.sel = v;                                                 // Back comes back to this line
       jumpToId(C.valueOf(state.m, v));
       return;
@@ -670,18 +742,66 @@
     select(v);
   });
 
-  // With Edit on, a double-click types over the line; with Edit off it is the browser's own, and
-  // highlights a word.
+  // A double-click: with Edit on it types over the line. With Edit off — or with ⌥, which makes
+  // a link plain text (3.9) — it is the browser's own and highlights a word, except that a web
+  // address is selected whole, and, with ⌥, so is a pointer, @ to @.
   $('grid').addEventListener('dblclick', (e) => {
-    if (!state.editing) return;
     const k = grid.rowOf(e.target);
-    if (k < 0 || e.target.closest('input, .fold, .ptr')) return;
+    if (k < 0 || e.target.closest('input, .fold')) return;
     const v = state.rows[k];
-    if (v >= 0) {
-      window.getSelection().removeAllRanges();
-      startEdit(v);
+    const ptr = e.target.closest('.ptr');
+    if (ptr && e.altKey) { selectWhole(ptr); return; }
+    if (ptr) return;                                                 // the first click jumped
+    if (state.editing && !e.altKey) {
+      if (v >= 0) {
+        window.getSelection().removeAllRanges();
+        startEdit(v);
+      }
+      return;
     }
+    selectLinkAt(e);
   });
+
+  function selectWhole(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // The web address under the pointer, selected whole: the text of the value's span as shown, the
+  // character at the point, and the address there (3.9).
+  function selectLinkAt(e) {
+    const host = e.target.closest('.val, .raw');
+    if (!host) return;
+    const caret = document.caretPositionFromPoint ? document.caretPositionFromPoint(e.clientX, e.clientY) : null;
+    const node = caret ? caret.offsetNode : null;
+    if (!node || !host.contains(node)) return;
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let text = '';
+    let at = -1;
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      if (t === node) at = text.length + caret.offset;
+      nodes.push({ node: t, start: text.length });
+      text += t.data;
+    }
+    if (at < 0) return;
+    const link = C.linkAt(text, Math.min(at, text.length - 1));
+    if (!link) return;
+    const place = (k) => {
+      let n = nodes[0];
+      for (const x of nodes) if (x.start <= k) n = x;
+      return [n.node, k - n.start];
+    };
+    const range = document.createRange();
+    range.setStart(...place(link[0]));
+    range.setEnd(...place(link[1]));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
 
   // ---------------------------------------------------------------------------------------------
   // Editing (9.2): a line typed over in its row; a line added under or after it; Enter keeps,
@@ -880,7 +1000,7 @@
     const go = await dialog(`Delete ${recordName(plan.id, plan.tag)}?`, (body) => {
       if (m.labels[plan.record] !== m.texts[plan.from].slice(m.lead[plan.from])) {
         const label = el('div');
-        putText(label, m.labels[plan.record]);
+        putLabel(label, m.labels[plan.record]);
         body.appendChild(label);
       }
       body.appendChild(el('div', 'dialog-sum',
@@ -959,8 +1079,10 @@
     state.m = state.doc.view;
     const m = state.m;
     state.sections = sectionsOf(m);
+    state.maxLevel = Math.max(0, ...[...m.levelCounts.keys()].map(Number));
     updateMarks();
     $('grid').style.setProperty('--ln-width', `${fmt(m.n).length + 1}ch`);
+    updateGridWidth();
     state.back = state.back.filter((b) => b < m.n);
     updateBack();
     if (state.search.query) runSearch();
@@ -988,13 +1110,15 @@
     const marks = C.lineMarks(doc, items);
     const n = doc.order.length;
     const sum = new Int32Array(n + 2);                               // marks before each line, for a shut block
-    for (let p = 0; p <= n; p += 1) sum[p + 1] = sum[p] + ((p < n && marks.status[p]) || marks.removedAt[p] ? 1 : 0);
+    for (let p = 0; p <= n; p += 1) sum[p + 1] = sum[p] + ((p < n && marks.status[p]) || marks.removedAt[p] || marks.movedFrom[p] ? 1 : 0);
     marks.sum = sum;
     state.marks = marks;
     state.runs = C.changeRuns(doc, items);
     state.changeAt = new Map();
+    state.movedAt = new Map();
     for (const run of state.runs) {
       if (run.kind === 'changed') run.lines.forEach((l, k) => state.changeAt.set(run.after + k, l));
+      if (run.kind === 'moved') run.lines.forEach((l, k) => state.movedAt.set(run.after + k, run.before + k));
     }
   }
 
@@ -1004,6 +1128,7 @@
     $('open').hidden = !!doc;                                       // with a file open: ⌘O, a drop, or Open another…
     $('edit').disabled = !doc;
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
+    $('fold-all').hidden = !doc;
     $('file-name').hidden = !doc;
     $('file-name').setAttribute('aria-expanded', String(state.showFacts));
     $('facts').hidden = !doc || !state.showFacts;
@@ -1030,6 +1155,19 @@
     return sec;
   }
 
+  // 3.8 — a record's label (section 8), as the screen shows it: with Bold surnames on, the part
+  // between slashes in bold and without them. Labels only; a line as written goes through putText.
+  function putLabel(parent, label) {
+    if (!state.boldSurnames) { putText(parent, label); return; }
+    for (const part of C.nameParts(label)) {
+      if (part.surname) {
+        const b = el('span', 'surname');
+        putText(b, part.text);
+        parent.appendChild(b);
+      } else putText(parent, part.text);
+    }
+  }
+
   function recordRef(parent, r) {
     const m = state.m;
     const line = m.records[r];
@@ -1042,9 +1180,133 @@
     if (label !== m.texts[line].slice(m.lead[line])) {
       parent.appendChild(document.createTextNode(' '));
       const main = el('span', 'main');
-      putText(main, label);
+      putLabel(main, label);
       parent.appendChild(main);
     }
+  }
+
+  // 3.2 — a copy button at a box's top right: one click copies the box's text, `text()` giving it
+  // exactly as the box shows it, and the icon is a check mark for 1.5 seconds. If the clipboard
+  // refuses, the box's text is selected so that ⌘C copies it, and a notice says so.
+  function copyButton(box, text) {
+    box.classList.add('has-copy');
+    const b = el('button', 'copy');
+    b.type = 'button';
+    b.title = 'Copy';
+    b.setAttribute('aria-label', 'Copy');
+    const icon = (id) => $(id).content.firstElementChild.cloneNode(true);
+    b.appendChild(icon('icon-copy'));
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(text());
+        copied = true;
+      } catch (err) { copied = false; }
+      if (!copied) {
+        const range = document.createRange();
+        range.selectNodeContents(box);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        notice('The clipboard refused, so the text is selected instead: ⌘C copies it.', 'error');
+        return;
+      }
+      b.textContent = '';
+      b.appendChild(icon('icon-check'));
+      b.classList.add('is-done');
+      setTimeout(() => {
+        b.textContent = '';
+        b.appendChild(icon('icon-copy'));
+        b.classList.remove('is-done');
+      }, 1500);
+    });
+    box.appendChild(b);
+    return b;
+  }
+
+  // A box of text with its copy button: the text as written, its special characters marked.
+  function textBox(cls, text) {
+    const box = el('div', cls);
+    putText(box, text);
+    copyButton(box, () => text);
+    return box;
+  }
+
+  // 3.6 — what a check means, in the right frame.
+  function renderHelp(d, code) {
+    const c = CHECK[code];
+    const box = el('div', `help is-${c.kind}`);
+    const head = el('div');
+    head.appendChild(el('span', 'help-code', code));
+    head.appendChild(el('span', 'help-name', c.name));
+    box.appendChild(head);
+    box.appendChild(el('div', 'help-text', CHECK_HELP[code]));
+    const n = state.m ? state.m.findings.byCode[code].length : 0;
+    box.appendChild(el('div', 'detail-title', n ? `${plural(n, 'line', 'lines')} in this file` : 'none in this file'));
+    d.appendChild(box);
+  }
+
+  // 3.3 — the XML of a _META, and the HTML of its story, read in an inert document and handed to
+  // core.js as plain nodes: nothing in them is ever put in the page as markup, and nothing loads.
+  function domToTree(node) {
+    if (node.nodeType === 3 || node.nodeType === 4) return { text: node.data };
+    if (node.nodeType === 8) return { comment: true };
+    if (node.nodeType !== 1) return null;
+    const attrs = {};
+    for (const a of node.attributes) attrs[a.name.toLowerCase()] = a.value;
+    const children = [];
+    for (const c of node.childNodes) {
+      const t = domToTree(c);
+      if (t) children.push(t);
+    }
+    return { name: node.nodeName.toLowerCase(), attrs, children };
+  }
+
+  function metaOf(text) {
+    if (!/^\s*<metadataxml[\s>]/i.test(text)) return null;
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, 'text/xml');
+    if (xml.getElementsByTagName('parsererror').length || !xml.documentElement) return null;
+    return C.metaParts(domToTree(xml.documentElement), (html) => domToTree(parser.parseFromString(html, 'text/html').body));
+  }
+
+  // The rebuilt story as elements: only what the allowlist kept, built by name, never as markup.
+  function buildNodes(parent, nodes) {
+    for (const n of nodes) {
+      if (n.text !== undefined) { parent.appendChild(document.createTextNode(n.text)); continue; }
+      const e = document.createElement(n.name);
+      for (const [k, v] of Object.entries(n.attrs)) e.setAttribute(k, v);
+      buildNodes(e, n.children);
+      parent.appendChild(e);
+    }
+  }
+
+  function renderMeta(d, parts) {
+    if (parts.story) {
+      const card = el('div', 'detail-card meta-story');
+      buildNodes(card, parts.story);
+      copyButton(card, () => card.innerText);
+      section(d, 'Story').appendChild(card);
+    }
+    if (parts.transcription) section(d, 'Transcription').appendChild(textBox('detail-card detail-value meta-text', parts.transcription));
+    if (parts.persons.length) {
+      const table = el('table', 'persons');
+      const head = el('tr');
+      for (const t of ['Name', 'Born', 'Birthplace', 'Died', 'Death place']) head.appendChild(el('th', null, t));
+      table.appendChild(head);
+      for (const p of parts.persons) {
+        const row = el('tr');
+        for (const k of ['name', 'born', 'birthplace', 'died', 'deathplace']) row.appendChild(el('td', null, p[k]));
+        table.appendChild(row);
+      }
+      const card = el('div', 'detail-card');
+      card.appendChild(table);
+      copyButton(card, () => table.innerText);
+      section(d, parts.persons.length === 1 ? 'Person' : 'Persons').appendChild(card);
+    }
+    if (parts.cemetery) section(d, 'Cemetery').appendChild(textBox('detail-value meta-text', parts.cemetery));
+    if (parts.recordId) section(d, 'Record id').appendChild(textBox('detail-value meta-text', parts.recordId));
   }
 
   function actionButton(parent, label, title, act, disabled) {
@@ -1064,9 +1326,7 @@
     actionButton(acts, n > 1 ? `Restore ${fmt(n)} lines` : 'Restore', 'Put back where they were', () => restoreRemoved(x));
     d.appendChild(acts);
     d.appendChild(el('div', 'detail-removed-title', `Removed · line ${fmt(run.before + x.k + 1)} as saved`));
-    const box = el('div', 'detail-value detail-removed');
-    putText(box, run.lines[x.k].was);
-    d.appendChild(box);
+    d.appendChild(textBox('detail-value detail-removed', run.lines[x.k].was));
     if (run.record) d.appendChild(el('div', 'detail-section', `in ${recordName(run.record.id, run.record.tag)}`));
   }
 
@@ -1074,6 +1334,10 @@
     const d = $('detail');
     d.textContent = '';
     const m = state.m;
+    if (state.help) {
+      renderHelp(d, state.help);
+      return;
+    }
     const removed = pickedRemoved();
     if (removed) {
       renderRemoved(d, removed);
@@ -1110,32 +1374,32 @@
           link.addEventListener('click', () => jumpToId(value));
           box.appendChild(link);
         } else putText(box, value);
+        copyButton(box, () => value);
         d.appendChild(box);
       }
     } else {
-      const box = el('div', 'detail-value raw');
-      putText(box, t);
-      d.appendChild(box);
+      d.appendChild(textBox('detail-value raw', t));
     }
 
     const was = state.changeAt.get(i);
+    const movedFrom = state.movedAt.get(i);
     if (was) {
       const sec = section(d, 'Was');
       sec.classList.add('detail-was');
-      const box = el('div', 'detail-value');
-      putText(box, was.was);
-      sec.appendChild(box);
+      sec.appendChild(textBox('detail-value', was.was));
       if (was.ending) sec.appendChild(el('div', 'detail-title', `Line ending: ${was.ending[0]} → ${was.ending[1]}`));
     } else if (state.marks && state.marks.status[i] === 2) {
       section(d).appendChild(el('span', 'detail-added', 'Added'));
     }
+    if (movedFrom !== undefined) section(d).appendChild(el('span', 'detail-moved', `Moved · line ${fmt(movedFrom + 1)} as saved`));
 
     const run = C.joinedValue(m, i);
-    if (run) {
-      const card = el('div', 'detail-card detail-value');
-      putText(card, run.text);
-      section(d, 'Joined').appendChild(card);
+    const head = run ? run.from : i;
+    if (m.tag[head] === '_META') {                                   // 3.3: drawn as it reads, above Joined
+      const meta = metaOf(run ? run.text : C.valueOf(m, head));
+      if (meta && !meta.empty) renderMeta(d, meta);
     }
+    if (run) section(d, 'Joined').appendChild(textBox('detail-card detail-value', run.text));
 
     const r = m.recOf[i];
     if (r >= 0 && m.records[r] !== i) {
@@ -1145,7 +1409,7 @@
       recordRef(sec, r);
       sec.addEventListener('click', () => select(m.records[r], 'jump'));
     } else if (r >= 0 && m.labels[r] !== t.slice(m.lead[i])) {
-      putText(section(d), m.labels[r]);
+      putLabel(section(d), m.labels[r]);
     }
 
     if (m.level[i] === 0 && m.xref[i] !== null) {
@@ -1282,7 +1546,7 @@
     row.textContent = '';
     if (m.xref[line] !== null) row.appendChild(el('span', 'muted mono', m.xref[line]));
     const main = el('span', 'main');
-    putText(main, m.labels[r].slice(0, 400));
+    putLabel(main, m.labels[r].slice(0, 400));
     row.appendChild(main);
     row.appendChild(el('span', 'end', m.tag[line]));
   });
@@ -1296,8 +1560,8 @@
     for (let r = 0; r < m.records.length; r += 1) {
       const line = m.records[r];
       if (type && m.tag[line] !== type) continue;
-      if (q && m.labels[r].toLowerCase().indexOf(q) === -1 && (m.xref[line] || '').toLowerCase().indexOf(q) === -1
-        && m.tag[line].toLowerCase() !== q) continue;
+      if (q && m.labels[r].toLowerCase().indexOf(q) === -1 && C.nameShown(m.labels[r]).toLowerCase().indexOf(q) === -1
+        && (m.xref[line] || '').toLowerCase().indexOf(q) === -1 && m.tag[line].toLowerCase() !== q) continue;
       rows.push(r);
     }
     state.recordRows = rows;
@@ -1315,8 +1579,9 @@
     if (item.head) {
       const c = item.head;
       row.className = `item is-head is-${c.kind}`;
+      row.appendChild(el('span', 'fold', state.collapsed.has(c.code) ? '▸' : '▾'));   // opens or shuts its lines
       row.appendChild(el('span', 'muted', c.code));
-      row.appendChild(el('span', 'main', c.name));
+      row.appendChild(el('span', 'main', c.name));                   // a click on the title: what it means (3.6)
       row.appendChild(el('span', 'end', fmt(m.findings.byCode[c.code].length)));
       return;
     }
@@ -1361,21 +1626,30 @@
     const at = run.kind === 'removed' ? run.at : run.after;
     row.appendChild(el('span', 'muted', fmt(at + 1)));
     const first = run.lines[0];
-    const main = el('span', 'main mono');
-    putText(main, (run.kind === 'removed' ? first.was : first.now).slice(0, 400));
+    const main = el('span', run.kind === 'moved' ? 'main' : 'main mono');
+    if (run.kind === 'moved') main.textContent = `moved: ${S.movedWords(run)}`;   // what moved, never its text (3.4a)
+    else putText(main, (run.kind === 'removed' ? first.was : first.now).slice(0, 400));
     row.appendChild(main);
-    const more = run.lines.length > 1 ? `+${fmt(run.lines.length - 1)}` : '';
-    const where = run.record ? run.record.id || run.record.tag || '' : '';
+    const more = run.kind !== 'moved' && run.lines.length > 1 ? `+${fmt(run.lines.length - 1)}` : '';
+    const where = run.record ? run.record.id || run.record.tag || '' : run.kind === 'moved' && run.moved.tag ? run.moved.tag : '';
     row.appendChild(el('span', 'end', [more, run.stamp ? 'stamp' : '', where].filter((x) => x).join(' · ')));
-    const before = run.before >= 0 ? `; line ${fmt(run.before + 1)} as saved` : '';
+    const span = (first0) => (run.lines.length > 1 ? `${fmt(first0 + 1)}–${fmt(first0 + run.lines.length)}` : fmt(first0 + 1));
+    const before = run.kind === 'moved' ? `; lines ${span(run.before)} as saved, now ${span(run.after)}`
+      : run.before >= 0 ? `; line ${fmt(run.before + 1)} as saved` : '';
     row.title = `${run.kind}${run.stamp ? ' by a change stamp' : ''}: ${plural(run.lines.length, 'line', 'lines')}${before}`;
   });
 
+  function changeCounts(runs) {
+    const count = { changed: 0, removed: 0, added: 0, moved: 0 };
+    for (const run of runs) count[run.kind] += run.lines.length;
+    const words = [`${fmt(count.changed)} changed`, `${fmt(count.removed)} removed`, `${fmt(count.added)} added`];
+    if (count.moved) words.push(`${fmt(count.moved)} moved`);
+    return words.join(' · ');
+  }
+
   function renderChanges() {
-    const count = { changed: 0, removed: 0, added: 0 };
-    for (const run of state.runs) count[run.kind] += run.lines.length;
     $('changes-count').textContent = state.runs.length ? fmt(state.runs.length) : '';
-    $('changes-sum').textContent = `${fmt(count.changed)} changed · ${fmt(count.removed)} removed · ${fmt(count.added)} added`;
+    $('changes-sum').textContent = changeCounts(state.runs);
     changesList.setCount(state.runs.length, true);
   }
 
@@ -1508,10 +1782,14 @@
       const n = run.lines.length;
       const span = (first) => (n > 1 ? `${fmt(first + 1)}–${fmt(first + n)}` : fmt(first + 1));
       const where = run.kind === 'changed' ? `line ${span(run.after)}` : run.kind === 'added' ? `line ${span(run.after)}`
-        : `line ${span(run.before)} as saved`;
+        : run.kind === 'moved' ? `line ${span(run.before)} as saved → ${span(run.after)}` : `line ${span(run.before)} as saved`;
       head.appendChild(el('span', 'muted', where));
       if (run.record) head.appendChild(el('span', 'muted', recordName(run.record.id, run.record.tag)));
       list.appendChild(head);
+      if (run.kind === 'moved') {                                    // what moved and how many lines, never their text
+        list.appendChild(el('div', 'chg-line muted', S.movedWords(run)));
+        continue;
+      }
       for (const l of run.lines.slice(0, LINES_SHOWN)) {
         for (const [text, cls, sign] of [[l.was, 'is-was', '−'], [l.now, 'is-now', '+']]) {
           if (text === null) continue;
@@ -1540,10 +1818,7 @@
     let box;
     const title = kind === 'copy' ? `Save a copy of ${state.fileName}` : `Save ${state.fileName}`;
     const go = await dialog(title, (body) => {
-      const count = { changed: 0, removed: 0, added: 0 };
-      for (const run of state.runs) count[run.kind] += run.lines.length;
-      body.appendChild(el('div', 'dialog-sum', state.runs.length
-        ? `${fmt(count.changed)} changed · ${fmt(count.removed)} removed · ${fmt(count.added)} added`
+      body.appendChild(el('div', 'dialog-sum', state.runs.length ? changeCounts(state.runs)
         : 'No change since the file was opened or last saved: the copy is the file as it is'));
       if (state.runs.length) {
         const list = el('div', 'dialog-list');
@@ -1562,6 +1837,11 @@
       for (const p of plan) {
         const row = el('div');
         row.appendChild(el('span', 'mono', recordName(p.id, p.tag)));
+        const label = state.m.labels[p.record];
+        if (label !== state.m.texts[p.line].slice(state.m.lead[p.line])) {
+          row.appendChild(document.createTextNode(' '));
+          putLabel(row, label);
+        }
         row.appendChild(el('span', 'muted', `  ${STAMP_HOW[p.how]}`));
         stamps.appendChild(row);
       }
@@ -1770,7 +2050,10 @@
     state.extras = [];
     state.range = null;
     state.pick = null;
+    state.help = null;
+    state.movedAt = new Map();
     state.editing = false;
+    endDrag();
     $('file-name').textContent = '';
     $('facts').textContent = '';
     $('counts').textContent = '';
@@ -1788,6 +2071,7 @@
     state.checkRows = [];
     state.tagRows = [];
     for (const list of [grid, recordsList, checksList, changesList, tagsList]) list.setCount(0);
+    updateGridWidth();
     updateBack();
     updateBar();
     $('empty').hidden = false;
@@ -1838,7 +2122,10 @@
     state.shutSections = new Set();
     state.range = null;
     state.pick = null;
+    state.help = null;
+    state.maxLevel = Math.max(0, ...[...doc.view.levelCounts.keys()].map(Number));
     state.editing = false;                                           // a file opens to be read
+    endDrag();
     state.pending = null;
     state.recordType = null;
     state.collapsed = new Set();
@@ -1857,6 +2144,7 @@
     updateGoto();
     $('file-name').textContent = file.name;
     $('grid').style.setProperty('--ln-width', `${fmt(doc.m.n).length + 1}ch`);
+    updateGridWidth();
     updateMarks();
     renderFacts();
     renderCounts();
@@ -1959,6 +2247,7 @@
     $('indent').setAttribute('aria-pressed', String(state.indent));
     $('indent-width').hidden = !state.indent;
     $('indent-width').value = String(state.indentWidth);
+    updateGridWidth();
     grid.refresh();
   }
   $('indent').addEventListener('click', () => {
@@ -1971,8 +2260,68 @@
     if (!Number.isInteger(w) || w < 1 || w > 12) return;
     state.indentWidth = w;
     store.set('indentWidth', w);
+    updateGridWidth();
     grid.refresh();
   });
+
+  // 3.5 — Collapse all shuts every record to its first line (the type rows stay as they are);
+  // Expand all opens every block and every type. The button reads as what it will do.
+  function updateFoldAll() {
+    const m = state.m;
+    if (!m) return;
+    let open = false;
+    for (const i of m.records) if (hasKids(i) && !isShut(i)) { open = true; break; }
+    $('fold-all').textContent = open ? 'Collapse all' : 'Expand all';
+  }
+  $('fold-all').addEventListener('click', () => {
+    const m = state.m;
+    if (!m) return;
+    if ($('fold-all').textContent === 'Collapse all') {
+      for (const i of m.records) if (hasKids(i)) setFold(i, true);
+    } else {
+      state.folds = new Set();
+      state.shutSections = new Set();
+    }
+    rebuildRows();
+    grid.setCount(rowCount(), true);
+    keepSelectionShown(state.sel >= 0 ? rowOfLine(state.sel) : -1);
+    $('grid').focus();
+  });
+
+  // 3.8 — Bold surnames, on or off, remembered.
+  function applySurnames() {
+    $('surnames').setAttribute('aria-pressed', String(state.boldSurnames));
+    if (state.m) {
+      filterRecords(true);
+      renderDetail();
+    }
+  }
+  $('surnames').addEventListener('click', () => {
+    state.boldSurnames = !state.boldSurnames;
+    store.set('surnames', state.boldSurnames);
+    applySurnames();
+  });
+
+  // 3.1 — each split bar's tab hides the frame beside it, and brings it back; a double-click on
+  // the bar does the same. Remembered.
+  function applyFrames() {
+    $('work').classList.toggle('left-hidden', state.hiddenLeft);
+    $('work').classList.toggle('right-hidden', state.hiddenRight);
+    $('hide-left').textContent = state.hiddenLeft ? '›' : '‹';
+    $('hide-left').title = state.hiddenLeft ? 'Show the left bar' : 'Hide the left bar';
+    $('hide-right').textContent = state.hiddenRight ? '‹' : '›';
+    $('hide-right').title = state.hiddenRight ? 'Show the right frame' : 'Hide the right frame';
+  }
+  function toggleFrame(side) {
+    if (side === 'left') state.hiddenLeft = !state.hiddenLeft; else state.hiddenRight = !state.hiddenRight;
+    store.set('hideLeft', state.hiddenLeft);
+    store.set('hideRight', state.hiddenRight);
+    applyFrames();
+  }
+  $('hide-left').addEventListener('click', () => toggleFrame('left'));
+  $('hide-right').addEventListener('click', () => toggleFrame('right'));
+  $('split-left').addEventListener('dblclick', (e) => { if (!e.target.closest('.split-tab')) toggleFrame('left'); });
+  $('split-right').addEventListener('dblclick', (e) => { if (!e.target.closest('.split-tab')) toggleFrame('right'); });
 
   $('back').addEventListener('click', goBack);
   $('save').addEventListener('click', doSave);
@@ -2074,8 +2423,13 @@
     const item = state.checkRows[k];
     if (item.head) {
       const code = item.head.code;
-      if (state.collapsed.has(code)) state.collapsed.delete(code); else state.collapsed.add(code);
-      buildCheckRows(true);
+      if (e.target.closest('.fold')) {
+        if (state.collapsed.has(code)) state.collapsed.delete(code); else state.collapsed.add(code);
+        buildCheckRows(true);
+      } else {
+        state.help = code;
+        renderDetail();
+      }
     } else if (item.f.line >= 0) select(item.f.line, 'jump');
   });
 
@@ -2123,6 +2477,8 @@
   // The side panel and the right pane are dragged wider or narrower by the bars beside the grid.
   function dragSplit(handle, prop, sign) {
     handle.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.split-tab')) return;
+      if ((prop === '--left-width' && state.hiddenLeft) || (prop === '--right-width' && state.hiddenRight)) return;
       e.preventDefault();
       handle.setPointerCapture(e.pointerId);
       const startX = e.clientX;
@@ -2161,11 +2517,6 @@
       pickFile();
       return;
     }
-    if (mod && !e.shiftKey && !e.altKey && key === 'e') {           // ⌘E: Edit on or off
-      e.preventDefault();
-      setEditing(!state.editing);
-      return;
-    }
     if (mod && !e.shiftKey && !e.altKey && (key === 'f' || key === 'l')) {
       if (!state.m) return;
       e.preventDefault();
@@ -2185,6 +2536,10 @@
       return;
     }
     if (!state.m) return;
+    if (drag) {
+      if (key === 'Escape') endDrag();                               // a drag let go: nothing moves
+      return;
+    }
     if (state.edit) {
       if (key === 'Escape') cancelEdit(false);
       return;
@@ -2224,11 +2579,173 @@
     } else if (key === 'Backspace' || key === 'Delete') {
       e.preventDefault();
       deleteSelected();
+    } else if (key === 'e' && !e.shiftKey) {                         // E: Edit on or off (3.11)
+      e.preventDefault();
+      setEditing(!state.editing);
     }
   });
 
+  // ---------------------------------------------------------------------------------------------
+  // Dragging (3.4a): with Edit on, a press on a row — a type row, for a section — moved a few
+  // pixels takes hold of its block, a record, or a section; what would move dims, and a gold line
+  // shows where it would land, only at a sibling's edge; near the frame's top or bottom the frame
+  // scrolls. Release moves it; Esc, or a release where no gold line shows, moves nothing. In a
+  // file bunched by type a record lands only among the records of its own type, and a section
+  // only at another section's edge, so the file stays bunched.
+  // ---------------------------------------------------------------------------------------------
+
+  const dropLine = el('div', 'drop-line');
+  dropLine.hidden = true;
+  grid.mount(dropLine);
+  let clickAfterDrag = false;
+  let scrollTimer = 0;
+
+  // The row at whose top edge the block would land before line `to`: the first row at or after
+  // `to` — a section's row for its first record — or the row after the last, for the end.
+  function edgeRows(tos) {
+    const rows = state.rows;
+    const out = new Map();
+    let k = 0;
+    for (const to of tos) {
+      while (k < rows.length) {
+        const v = rows[k];
+        const at = v >= 0 ? v : v <= -2 && extraOf(v).kind === 'section' ? extraOf(v).sec.from : -1;
+        if (at >= to) break;
+        k += 1;
+      }
+      out.set(to, k);
+    }
+    return out;
+  }
+
+  function startDrag(d) {
+    const l = C.landings(state.doc, d.from, d.end);
+    if (l.reason) {
+      notice(l.reason, 'error');
+      return false;
+    }
+    let tos = l.at;
+    if (state.sections) {
+      const starts = new Set(state.sections.map((s) => s.from));
+      if (d.section) tos = tos.filter((to) => starts.has(to));
+      else if (state.m.level[d.from] === 0) {
+        const sec = state.sections.find((s) => d.from >= s.from && d.from < s.to);
+        tos = tos.filter((to) => to >= sec.from && to <= sec.to);
+      }
+    }
+    if (!tos.length) {
+      notice('This block has nowhere else to go among its siblings.', 'error');
+      return false;
+    }
+    const rows = edgeRows([...tos, d.from, d.end].sort((a, b) => a - b));
+    d.edges = tos.map((to) => ({ to, row: rows.get(to) }));
+    d.stay = [rows.get(d.from), rows.get(d.end)];                    // its own edges: no move
+    d.started = true;
+    d.at = -1;
+    $('grid').classList.add('is-drag');
+    $('grid').setPointerCapture(d.id);
+    window.getSelection().removeAllRanges();
+    grid.restyle();
+    return true;
+  }
+
+  function placeDropLine() {
+    const d = drag;
+    if (!d || !d.started) return;
+    const g = $('grid');
+    const rect = g.getBoundingClientRect();
+    const y = d.y - rect.top + g.scrollTop;
+    const rowY = y / grid.rowHeight();
+    let best = null;
+    for (const e of d.edges) if (!best || Math.abs(e.row - rowY) < Math.abs(best.row - rowY)) best = e;
+    const ownDistance = Math.min(...d.stay.map((r) => Math.abs(r - rowY)));
+    if (!best || ownDistance < Math.abs(best.row - rowY)) {
+      d.at = -1;
+      dropLine.hidden = true;
+      return;
+    }
+    d.at = best.to;
+    dropLine.hidden = false;
+    dropLine.style.top = `${grid.topOf(best.row)}px`;
+  }
+
+  function autoScroll() {
+    const d = drag;
+    if (!d || !d.started) return;
+    const g = $('grid');
+    const rect = g.getBoundingClientRect();
+    const zone = 28;
+    let step = 0;
+    if (d.y < rect.top + zone) step = -Math.ceil((rect.top + zone - d.y) / 4);
+    else if (d.y > rect.bottom - zone) step = Math.ceil((d.y - rect.bottom + zone) / 4);
+    if (step) {
+      g.scrollTop += step * 3;
+      placeDropLine();
+    }
+    scrollTimer = requestAnimationFrame(autoScroll);
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    cancelAnimationFrame(scrollTimer);
+    dropLine.hidden = true;
+    $('grid').classList.remove('is-drag');
+    if (d.started) {
+      try { $('grid').releasePointerCapture(d.id); } catch (e) { /* already released */ }
+      grid.restyle();
+    }
+  }
+
+  $('grid').addEventListener('pointerdown', (e) => {
+    if (!state.editing || e.button !== 0 || e.altKey || state.edit || !state.m) return;
+    const k = grid.rowOf(e.target);
+    if (k < 0 || e.target.closest('input, .copy')) return;
+    const v = state.rows[k];
+    let from; let end; let section = null;
+    if (v >= 0) { from = v; end = C.subtreeEnd(state.m, v); }
+    else if (v <= -2 && extraOf(v).kind === 'section') { section = extraOf(v).sec; from = section.from; end = section.to; }
+    else return;
+    drag = { from, end, section, x0: e.clientX, y0: e.clientY, y: e.clientY, id: e.pointerId, started: false, at: -1, edges: null, stay: null };
+  });
+
+  $('grid').addEventListener('pointermove', (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    d.y = e.clientY;
+    if (!d.started) {
+      if (Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) < 4) return;   // a few pixels first
+      if (!startDrag(d)) { drag = null; return; }
+      autoScroll();
+    }
+    placeDropLine();
+  });
+
+  $('grid').addEventListener('pointerup', (e) => {
+    const d = drag;
+    if (!d || e.pointerId !== d.id) return;
+    const started = d.started;
+    const to = d.at;
+    const { from, end } = d;
+    endDrag();
+    if (!started) return;
+    clickAfterDrag = true;
+    setTimeout(() => { clickAfterDrag = false; }, 0);
+    if (to < 0) return;
+    const r = C.moveLines(state.doc, from, end, to);
+    if (!r.ok) {
+      notice(r.reason, 'error');
+      return;
+    }
+    if (r.step) afterAct(to < from ? to : to - (end - from));
+  });
+  $('grid').addEventListener('pointercancel', () => endDrag());
+
   applyTheme();
   applyIndent();
+  applySurnames();
+  applyFrames();
   openPanel('records');
   updateBack();
   updateBar();

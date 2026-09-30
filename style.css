@@ -103,6 +103,7 @@
   /* the grid */
   --row-height: 22px;                 /* every row, one height; the page reads it at load */
   --tab-size: 4;                      /* how wide a tab inside a value shows */
+  --row-tint: transparent;            /* a row's tint; each state below sets it (selected, found, changed…) */
   --row-selected: color-mix(in srgb, var(--color-accent) 30%, transparent);
   --row-hit: color-mix(in srgb, var(--color-info) 12%, transparent);
   --row-hover: color-mix(in srgb, var(--color-accent) 10%, transparent);
@@ -131,13 +132,30 @@
   --row-changed: color-mix(in srgb, var(--mark-changed) 14%, transparent);
   --row-added: color-mix(in srgb, var(--mark-added) 14%, transparent);
   --row-removed: color-mix(in srgb, var(--mark-removed) 10%, transparent);   /* a removed line, with Edit on */
+  --mark-moved: var(--color-affiliation);           /* a moved line (3.4a): the bar at its left, its tint; the rule where it was taken from */
+  --row-moved: color-mix(in srgb, var(--mark-moved) 12%, transparent);
+  --drop-line: var(--color-accent);                 /* the gold line where a dragged block would land */
+  --drop-line-width: 2px;
+  --drag-dim: 0.35;                                 /* how faint what would move is drawn while it is dragged */
   --edit-bg: var(--color-bg);                       /* the box a line is typed in */
+  --more-color: var(--color-text-muted);            /* "… 81,797 more" at the end of a clipped row */
 
   /* the frame */
   --left-width: 290px;                /* the side panel; dragged wider or narrower, remembered */
   --right-width: 360px;               /* the right pane; the same */
   --split-width: 5px;
   --split-color: var(--color-border);
+  --split-tab-height: 44px;           /* the ‹ › tab on each split bar that hides and shows its frame */
+  --split-tab-width: 14px;
+  --back-top: 5px;                    /* Back, at the main frame's top left, in a strip of its own above the lines */
+  --back-left: 8px;
+  --back-strip: 38px;                 /* the strip's height, while Back shows */
+  --copy-color: var(--color-text-muted);   /* the copy button at a box's top right */
+  --copy-done: var(--color-success);       /* …once it has copied */
+  --surname-weight: 700;              /* Bold surnames */
+  --help-max-width: 40em;             /* what a check means, in the right frame */
+  --meta-max-height: 60vh;            /* the story of a _META, before it scrolls */
+  --table-border: var(--color-border);   /* the tables in a story, and the persons of a _META */
   --list-row-height: 26px;            /* the rows of Records, Checks and Tags */
   --bar-padding: 8px 14px;
   --gap: 10px;
@@ -154,7 +172,7 @@
 
 /* ---------------------------------------------------------------------------------------------- */
 
-html, body { height: 100%; }
+html, body { height: 100%; overscroll-behavior: none; }
 body {
   margin: 0;
   display: flex;
@@ -296,7 +314,32 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   display: grid;
   grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width);
 }
-.split { background: var(--split-color); cursor: col-resize; }
+.work.left-hidden { grid-template-columns: 0 var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width); }
+.work.right-hidden { grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) 0; }
+.work.left-hidden.right-hidden { grid-template-columns: 0 var(--split-width) minmax(0, 1fr) var(--split-width) 0; }
+.work.left-hidden .side, .work.right-hidden .detail { display: none; }
+.split { position: relative; background: var(--split-color); cursor: col-resize; }
+.work.left-hidden #split-left, .work.right-hidden #split-right { cursor: default; }
+/* the tab on a split bar: ‹ or › hides the frame beside it, and the same tab, flipped, brings it back */
+.split-tab {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: var(--split-tab-width);
+  height: var(--split-tab-height);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.split-tab:hover { background: var(--hover-bg); color: var(--color-text); }
+.split-tab:focus-visible { outline: var(--focus-ring); }
 
 .side {
   min-height: 0;
@@ -372,6 +415,8 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .item.is-added { box-shadow: inset var(--mark-bar) 0 0 var(--mark-added); }
 .item.is-removed { box-shadow: inset var(--mark-bar) 0 0 var(--mark-removed); }
 .item.is-removed .main { text-decoration: line-through; color: var(--color-text-muted); }
+.item.is-moved { box-shadow: inset var(--mark-bar) 0 0 var(--mark-moved); }
+.item.is-head .fold { flex: none; width: 1.4em; margin-left: -4px; }
 
 /* -- the grid ---------------------------------------------------------------------------------- */
 
@@ -379,8 +424,8 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .grid {
   position: absolute;
   inset: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;                     /* down, and sideways to the end of the longest line (3.1) */
+  overscroll-behavior: none;          /* a sideways swipe at the edge never takes the browser back a page */
   overflow-anchor: none;
   outline: none;
   background: var(--color-bg-card);
@@ -388,10 +433,14 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   font-size: var(--font-size-grid);
 }
 /* only the rows in view exist; they sit in a layer that stays at the top of the view while the
-   page scrolls under it, so a fast drag of the scrollbar shows rows, never an empty screen */
-.v-rows { position: sticky; top: 0; overflow: hidden; }
+   page scrolls under it, so a fast drag of the scrollbar shows rows, never an empty screen. The
+   layer and the spacer are as wide as the longest line (the page sets it), so the grid scrolls
+   sideways; a row's line number, mark and fold stay at the left edge (.fx) */
+.v-rows { position: sticky; top: 0; overflow: clip; }   /* clip, not hidden: hidden would make the layer a scroll container, and .fx would stick to it instead of the grid */
 .v-inner { will-change: transform; }
 .v-spacer { pointer-events: none; }
+.grid.is-drag { user-select: none; cursor: grabbing; }
+.grid.is-drag .row { cursor: grabbing; }
 
 .row {
   position: relative;
@@ -399,31 +448,54 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   line-height: var(--row-height);
   display: flex;
   white-space: pre;
-  overflow: hidden;
+  overflow: clip;
   cursor: default;
+  background: var(--row-tint, transparent);
 }
-.row:hover { background: var(--row-hover); }
-.row.is-changed { background: var(--row-changed); box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); }
-.row.is-added { background: var(--row-added); box-shadow: inset var(--mark-bar) 0 0 var(--mark-added); }
-.row.is-section { background: var(--section-bg); color: var(--color-text-muted); cursor: pointer; }
+.row:hover { --row-tint: var(--row-hover); }
+.row.is-hit { --row-tint: var(--row-hit); }
+.row.is-changed { --row-tint: var(--row-changed); }
+.row.is-added { --row-tint: var(--row-added); }
+.row.is-moved { --row-tint: var(--row-moved); }
+.row.is-changed .fx { box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); }
+.row.is-added .fx { box-shadow: inset var(--mark-bar) 0 0 var(--mark-added); }
+.row.is-moved .fx { box-shadow: inset var(--mark-bar) 0 0 var(--mark-moved); }
+.row.is-section { --row-tint: var(--section-bg); color: var(--color-text-muted); cursor: pointer; }
 .row.is-section .sec-count { color: var(--color-text); font-weight: 600; }
-.row.is-removed { background: var(--row-removed); color: var(--mark-removed); }
+.row.is-removed { --row-tint: var(--row-removed); color: var(--mark-removed); }
 .row.is-removed .ln, .row.is-removed .tx { text-decoration: line-through; }
-.row.is-hit { background: var(--row-hit); }
-.row.is-sel { background: var(--row-selected); }
+.row.is-sel { --row-tint: var(--row-selected); }
+.row.is-dragging { opacity: var(--drag-dim); }
 /* where lines were removed: a rule along the top of the line now below them (or along the bottom
-   of the last line, when they were at the end) */
+   of the last line, when they were at the end); the same, in the moved colour, where a move took
+   lines from (Edit on) */
 .row.is-removed-above::before,
-.row.is-removed-below::after {
+.row.is-removed-below::after,
+.row.is-moved-above::before,
+.row.is-moved-below::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   height: 2px;
+  z-index: 2;
   background: var(--mark-removed);
 }
-.row.is-removed-above::before { top: 0; }
-.row.is-removed-below::after { bottom: 0; }
+.row.is-moved-above::before, .row.is-moved-below::after { background: var(--mark-moved); }
+.row.is-removed-above::before, .row.is-moved-above::before { top: 0; }
+.row.is-removed-below::after, .row.is-moved-below::after { bottom: 0; }
+/* the part of a row that stays at the left edge while the grid scrolls sideways: the line number,
+   the mark and the fold. It is opaque — the row's tint over the frame's own colour — so the text
+   scrolls under it */
+.fx {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  background: linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)), var(--color-bg-card);
+}
+.row.is-dragging .fx { background: var(--color-bg-card); }
 .ln {
   flex: none;
   width: var(--ln-width, 8ch);
@@ -433,6 +505,18 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   user-select: none;
 }
 .mk { flex: none; width: 2ch; display: flex; align-items: center; justify-content: center; }
+/* the gold line where a dragged block would land */
+.drop-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--drop-line-width);
+  margin-top: calc(-0.5 * var(--drop-line-width));
+  background: var(--drop-line);
+  z-index: 3;
+  pointer-events: none;
+}
+.drop-line[hidden] { display: none; }
 .mk::before { content: ''; width: var(--mark-size); height: var(--mark-size); border-radius: 50%; }
 .mk.is-error::before { background: var(--mark-error); }
 .mk.is-note::before { background: var(--mark-note); }
@@ -449,7 +533,8 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 }
 .fold:not(:empty) { cursor: pointer; }
 .fold:not(:empty):hover { color: var(--color-text); }
-.tx { flex: 0 1 auto; min-width: 0; overflow: hidden; tab-size: var(--tab-size); }
+.tx { flex: none; tab-size: var(--tab-size); }
+.more { flex: none; margin-left: 1ch; color: var(--more-color); user-select: none; }
 .hc {
   flex: none;
   user-select: none;
@@ -477,6 +562,18 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 }
 .edit:focus { outline: var(--focus-ring); outline-offset: -2px; }
 .grid.is-editing { overflow-y: hidden; }
+
+/* Back, at the main frame's top left, while there is somewhere to go back to: in a strip of its
+   own above the lines, so that no line's number is ever under it */
+.middle.has-back .grid { top: var(--back-strip); }
+.back {
+  position: absolute;
+  top: var(--back-top);
+  left: var(--back-left);
+  z-index: 4;
+  background: var(--color-bg-card);
+}
+.back[hidden] { display: none; }
 
 .lv { color: var(--level-color); }
 .id { color: var(--id-color); }
@@ -545,6 +642,59 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   overflow-wrap: anywhere;
   tab-size: var(--tab-size);
 }
+/* a box of text with a copy button at its top right (3.2): two overlapping squares, a check mark
+   for a moment once it has copied */
+.has-copy { position: relative; padding-right: 26px; }
+.copy {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--copy-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.copy:hover { background: var(--hover-bg); color: var(--color-text); }
+.copy:focus-visible { outline: var(--focus-ring); }
+.copy.is-done { color: var(--copy-done); }
+.surname { font-weight: var(--surname-weight); }
+/* what a check means (3.6) */
+.help { max-width: var(--help-max-width); }
+.help-code { font-weight: 700; margin-right: 0.5em; }
+.help.is-error .help-code { color: var(--mark-error); }
+.help.is-note .help-code { color: var(--mark-note); }
+.help-name { font-weight: 600; font-size: var(--font-size-body); }
+.help-text { margin-top: 8px; line-height: 1.5; }
+/* a _META drawn as it reads (3.3): the story in web formatting, the transcription as text, the
+   persons as a table, the cemetery and the record id each one line */
+.meta-story {
+  max-height: var(--meta-max-height);
+  overflow: auto;
+  font-family: var(--font-body);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  white-space: normal;
+}
+.meta-story p, .meta-story div, .meta-story blockquote, .meta-story address, .meta-story ul, .meta-story ol, .meta-story dl { margin: 0 0 0.6em; }
+.meta-story blockquote { padding-left: 1em; border-left: 3px solid var(--color-border); }
+.meta-story pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-grid); }
+.meta-story h1, .meta-story h2, .meta-story h3, .meta-story h4, .meta-story h5, .meta-story h6 { margin: 0.4em 0; font-size: 1.1em; }
+.meta-story hr { border: 0; border-top: 1px solid var(--color-border); margin: 0.6em 0; }
+.meta-story table { border-collapse: collapse; margin: 0 0 0.6em; }
+.meta-story td, .meta-story th { border: 1px solid var(--table-border); padding: 2px 6px; vertical-align: top; }
+.meta-story ul, .meta-story ol { padding-left: 1.4em; }
+.meta-story dd { margin-left: 1.2em; }
+.meta-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.persons { border-collapse: collapse; width: 100%; font-size: var(--font-size-small); }
+.persons th, .persons td { border: 1px solid var(--table-border); padding: 2px 6px; text-align: left; vertical-align: top; }
+.persons th { color: var(--color-text-muted); font-weight: 600; }
 .detail-section { margin-top: 14px; }
 .detail-title { color: var(--color-text-muted); margin-bottom: 4px; }
 .detail-card {
@@ -567,6 +717,7 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .detail-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
 .detail-actions .button { padding: 0.15rem 0.55rem; }
 .detail-was { box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); padding-left: 10px; }
+.detail-moved { color: var(--mark-moved); font-weight: 600; }
 .detail-removed-title { color: var(--mark-removed); font-weight: 600; }
 .detail-removed { color: var(--mark-removed); text-decoration: line-through; }
 .detail-added { color: var(--mark-added); font-weight: 600; }
@@ -605,6 +756,7 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .chg.is-changed .chg-kind { color: var(--mark-changed); }
 .chg.is-added .chg-kind { color: var(--mark-added); }
 .chg.is-removed .chg-kind { color: var(--mark-removed); }
+.chg.is-moved .chg-kind { color: var(--mark-moved); }
 .chg .muted, .dialog-check .muted { color: var(--color-text-muted); }
 .chg-line {
   padding-left: 1.4em;
