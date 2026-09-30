@@ -721,7 +721,7 @@ bare page with nothing working and nothing said. The page could carry a line of 
 Raised 2026-09-29, for the owner to rule, with the third round: ⌥↑ and ⌥↓ to move the selected
 block past the block above or below it — the short moves, without a drag across a long file.
 
-Raised by the owner on 2026-09-30, holding 3.4: a table of which tag may sit under which, taken
+Raised by the owner on 2026-09-30, holding 3.4b: a table of which tag may sit under which, taken
 from the standard (5.5.1 and 7.0) — the validation that would let a moved block land in every legal
 place. The same table could check a file's own lines against the standard (a `BIRT` under a `FAM`,
 say), which section 7 does not do today: its checks are structural only.
@@ -865,7 +865,7 @@ is, beside the four files it loads.
 
 | # | Do | Expect |
 |---|---|---|
-| 18 | **Edit** (⌘E) on. Select a person's `1 NAME` line; Enter (or double-click); change one letter; Enter | the row tinted, a bar at its left; the right frame's **Was** holds the old line; **Changes 1**; ● after the file's name; Save turns on |
+| 18 | Click **Edit** — in this Chrome ⌘E opens the Claude panel instead (3.11). Select a person's `1 NAME` line; Enter (or double-click); change one letter; Enter | the row tinted, a bar at its left; the right frame's **Was** holds the old line; **Changes 1**; ● after the file's name; Save turns on |
 | 19 | Start typing over another line; Esc | nothing changes |
 
 **D. Save in place, with the change stamp**
@@ -968,16 +968,18 @@ for from them, in his words:
 | 1 | "minimize the sidebars — left and right — and … hover-scroll left and right. This came up when I tried to intuitively read the _META tag starting on Line 202,541 and couldn't." | 3.1 |
 | 2 | "the 'Joined' _META I would like to be able to copy and paste, with the one-click copy button/icon you use here in Claude Mac" | 3.2 |
 | 3 | "That whole _META block — I'd like to see it interpreted correctly in the right sidebar (i.e. rich text in a box). If that's not deterministically doable, then skip it — I'd want to be able to rewrite that in plain text." | 3.3 |
-| 4 | "drag and drop lines — and blocks — in the main panel" | 3.4 — held |
+| 4 | "drag and drop lines — and blocks — in the main panel"; then, 2026-09-30, "reordering of blocks among siblings … the reordering of each section" | 3.4 — 3.4a in 0.5, 3.4b held |
 | 5 | "There should be a Collapse All / Expand All button." | 3.5 |
 | 6 | "helper text for the checks on 4 in the right sidebar, when their title is clicked on in the left sidebar" | 3.6 |
 | 7 | "The back button should be somewhere more prominent, and nearer the middle frame if possible." (step 12) | 3.7 |
 | 8 | "Instead of /Surname/ in the panels, try bolding the Surname instead. Make that a toggle on/off as well, to see if I like it. But the raw text should stay /Surname/ no matter what." | 3.8 |
 | 9 | "16 worked except for a highlighted word - considering how to highlight a link easily, when needed." | 3.9 |
 | 10 | "17 worked, I think? Not sure the goal of the main frame being clipped, Not sure what 17 did." | 3.10 |
+| 11 | "18. Hitting ⌘E in Chrome opened Claude as a frame on the right side, I wasn't able to edit." | 3.11 |
 
 His picks, made on 2026-09-30: **P2 = B** (3.2, every box of text carries a copy button) and
-**P3 = L1** (3.9, ⌥ makes a link plain text). P1 went with 3.4, which he held.
+**P3 = L1** (3.9, ⌥ makes a link plain text). P1 went with 3.4's first form; the part he ruled
+in, 3.4a, needs no pick.
 
 **3.1 Hide a side frame; scroll the lines sideways**
 
@@ -1026,33 +1028,51 @@ That `_META` line: a story of 70 paragraphs, 11 bold passages, 531 words — 5,0
 written. His fallback ("rewrite that in plain text") is therefore not needed; editing a split value
 as one text stays in section 18.
 
-**3.4 Moving lines and blocks by dragging — held (the owner, 2026-09-30)**
+**3.4 Moving blocks by dragging**
 
-His words: "P1: Hold on this for right now. I want to allow all legal places for a line to land,
-but that requires validation we haven't done yet. e.g., 1 BIRT could land under any 0 INDI
-places, but a NOTE could change depth validly. Also, I want to be able to drag and drop whole
-blocks (e.g. reorder _MTCAT boxes)."
+His words on 2026-09-30, first: "P1: Hold on this for right now. I want to allow all legal places for
+a line to land, but that requires validation we haven't done yet. e.g., 1 BIRT could land under any
+0 INDI places, but a NOTE could change depth validly. Also, I want to be able to drag and drop whole
+blocks (e.g. reorder _MTCAT boxes)." Then: "Yes, let's allow reordering of blocks among siblings.
+Let's also allow for the reordering of each section (e.g. allow drag-and-drop of Sources above
+People wholesale)."
 
-So 3.4 is not in 0.5, and P1 (M1 or M2) is withdrawn. When it comes:
+So 3.4 comes in two parts, and P1 (M1 or M2) is withdrawn:
+
+| Part | In | What |
+|---|---|---|
+| **3.4a** | 0.5 | a block, a record or a section reordered among its siblings. It needs no new validation: every line keeps its parent and its level |
+| **3.4b** | held | a block moved to another parent, landing wherever the standard allows its tag — a `1 BIRT` under any `0 INDI`; a `NOTE` at another depth. It waits for the table of which tag may sit under which (section 18) |
+
+**3.4a Reordering among siblings**
+
+What the standard says about order, read on 2026-09-30. GEDCOM 7.0.18: the header comes first and
+`TRLR` last, with the records between them in any order; substructures of different types may be
+reordered, but several of one type stand in order of preference, the first the most preferred.
+GEDCOM 5.5.5: the submitter record follows directly after the header; otherwise the order of
+different records is not significant; and several lines of one kind are, again, in order of
+preference.
 
 | Part | Rule |
 |---|---|
-| Where a block may land | every place the GEDCOM standard allows its tag: under any parent whose structure takes it, at the level that parent sets — a `1 BIRT` under any `0 INDI`; a `NOTE` at any depth where a NOTE is allowed, its level numbers rewritten to fit. That needs a table of which tag may sit under which, taken from the standard (5.5.1 and 7.0): a validation GEDCOM Viewer does not have yet (section 18) |
-| What moves | a line and everything under it — a block, up to a whole record: the six `_MTCAT` records reordered, say |
-| When | Edit on only. Edit off keeps the main frame for reading, and a drag for highlighting text |
-| How | press on a row and move a few pixels: the block's rows dim, and a gold line shows where it would land, set in to its level. Near the frame's top or bottom edge the frame scrolls. Release to move it; Esc, or a release where no gold line shows, moves nothing |
-| In the file's terms | a move is the block's lines removed where they were and the same lines added where they land — Changes, the Save dialog and the log list it so, and each record it leaves or joins is stamped (10.4). Implemented so, 9.4's walk holds as written: no original line changes its place among the others |
-| Back | a block moved back to exactly where it was is no change at all (as an edit typed back is, 9.1). Undo reverses a move in one step. Restore is not offered on lines moved away: their lines are elsewhere, and a Restore would copy them |
-| Refused | a block holding a line with unreadable bytes (E8), which can be neither edited nor re-encoded; and, by I11, any move the file could not read back as shown. The rules of 9.2 on line endings hold: a moved line keeps its own; the file's last line, moved, takes the file's common one |
-| Ids and pointers | unchanged: an id moves with its record, and every pointer to it still finds it |
+| What moves | a block — a line and everything under it; a whole record; a whole section — every record of one type, dragged by its type row (▾ SOUR Sources 842) in a file bunched by type |
+| Where it may land | only among its siblings — between two lines with the same parent — so no line's level or parent changes: a fact among its person's facts, a citation among its fact's citations, a record among records, a section among sections. In a file bunched by type, a record lands only among the records of its own type, so the file stays bunched and keeps its type rows |
+| Fixed | `HEAD` stays first and `TRLR` last. In a file below version 7, the submitter record (`SUBM`) stays directly after `HEAD`. A `CONC` or `CONT` line is part of its line's value: it never moves alone, and nothing lands between a line and its `CONC`/`CONT` lines |
+| Same kind | reordering two lines of one tag under one parent — two `1 NAME`, two `1 BIRT` — changes which the standard reads as preferred: the first. That is allowed, and meant; the Save dialog says so beside such a move |
+| When | Edit on only |
+| How | press on a row — a type row, for a section — and move a few pixels: what would move dims, and a gold line shows where it would land, only at a sibling's edge. Near the frame's top or bottom edge the frame scrolls; shut blocks and sections make a long move short. Release to move; Esc, or a release where no gold line shows, moves nothing. A click on a type row that does not move still shuts or opens it |
+| Changes, the Save dialog, the log | a move is listed as **moved**: the record, or the section's type and its count of records; the lines' places before and after; how many lines — never their text, and one entry per move however many lines it carries. 9.4 gains that kind: a run of lines that is, line for line, a run gone from elsewhere, with the same text and endings. A moved line then edited is also listed as changed, in its new place |
+| With Edit on | a rule marks where a move took lines from; nothing is struck, since nothing left the file |
+| The bytes | a moved line is written from its own bytes, as an untouched line is (I1). A move never re-encodes anything, so a line with unreadable bytes (E8) moves with its block |
+| Stamps | a record whose own lines were reordered is stamped (10.4). A record moved whole, or with its section, is not: nothing in it changed, only its place in the file |
+| Back | moved back to exactly where it was, it is no change at all; Undo reverses a move in one step |
+| Refused | by I11, any move the file could not read back as shown |
+| Ids and pointers | unchanged: an id moves with its record |
 
-The rows after the first two were written with the round, and stand for when it comes.
-
-Put to him, awaiting his word: a move among siblings needs no new validation — a block reordered
-under its own parent keeps every tag under a parent that took it, and records may stand in any
-order between `HEAD` and `TRLR`. That part (the `_MTCAT` records reordered, a person's facts put
-in order) could come in 0.5 while moves to another parent wait for the table. Held with the rest
-unless he says so.
+Example: in batch 20's export, drag the row ▾ SOUR Sources 842 up to the edge of ▾ INDI People
+…, and release. The source records now stand before the people. Changes shows one entry —
+Sources, 842 records, moved — and no record is stamped; the log's block has one line for it. Save
+writes the same bytes in a new order: the sha256 changes, the size does not.
 
 **3.5 Collapse all / Expand all**
 
@@ -1125,12 +1145,26 @@ said the rest was elsewhere. A row clipped at `ROW_CHARS` now ends with a muted 
 the characters not shown — and the right frame shows the whole value. Step 17 of the walk now says
 what it tests.
 
+**3.11 Edit's key**
+
+| Part | Rule |
+|---|---|
+| Why | the Claude extension in his Chrome takes ⌘E to open its panel, and a key an extension takes never reaches the page. The Edit button was never affected — it runs the same code (`setEditing`) — so the walk goes on with it |
+| The key | **E**, alone, whenever no box is being typed in. Chrome lets an extension's shortcut be only a key with Ctrl or Alt (⌘ counts as Ctrl on a Mac) — "Extension command shortcuts must include either Ctrl or Alt", in Chrome's `commands` reference, read 2026-09-30 — so a bare letter always reaches the page. ⌘E is dropped |
+| The others | ⌘S, ⇧⌘S, ⌘O, ⌘Z, ⇧⌘Z, ⌘F and ⌘L stay; each also has its button or box. If the walk finds one taken the same way, it goes as ⌘E did |
+| Where it is written | the README's keys and the walk say **E**; until 0.5, step 18 reads "click **Edit**" |
+
 **Tests and the walk.** Each part lands with its tests (section 17, rule 8): the `_META` drawing over
 the fixtures and over each `_META` shape above (written fictional files), with a test that nothing
 is loaded and nothing outside the allowlist survives; the copy button with the clipboard refused;
 the side frames hidden and restored across a reload; bold surnames on and off, and no line as written touched by them; the clip's
-count; the two kinds of link selected whole. The phase-5 walk gains a step for each part, in the
-group it belongs to; its steps 1–17 are walked, 18–40 are still to walk.
+count; the two kinds of link selected whole; moves among siblings at random over every test file,
+each checked against a fresh read and undone to the file's own sha256, every fixed place (`HEAD`,
+`TRLR`, `SUBM` below version 7, a `CONC` run) refused, a section moved with its bytes the same
+bytes in a new order, a record moved whole left unstamped; E turning Edit on and off, and not while
+a box is typed in. The phase-5 walk gains a step for each part, in the group it belongs to. Its
+steps 1–17 are walked; he stopped at 18 on ⌘E (3.11), and with the Edit button 18–40 can be walked
+on 0.4.1.
 
 ### Session 3's prompt
 
@@ -1143,7 +1177,7 @@ F1, change stamps: V1
 F2, commits: C1
 P2, copy buttons: B
 P3, selecting a link: L1
-3.4, dragging: held
+3.4, dragging: 3.4a (siblings and sections) in 0.5; 3.4b held
 
 This is session 3: build the third round (v0.5), then walk me through it. My walk stands at
 step [N]; its findings since step 17: [none / …]. Tell me your plan in a few lines, then start.

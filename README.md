@@ -44,7 +44,7 @@ keep traces of that.
 | ← · → | shut the selected line's block, or go up to the line above it · open it, or go down into it |
 | ⌥-click on ▸ or ▾ | open or shut every block at that level (on a level 0: every record) |
 | a click on a type's row (▾ INDI People 2,345) | shut or open every record of that type; with ⌥, every type |
-| ⌘E | Edit on or off |
+| ⌘E | Edit on or off — the Edit button does the same. Where an extension takes ⌘E, as the Claude extension does, use the button (from 0.5 the key is E) |
 | Enter · a double-click | with Edit on: type over the selected line; Enter keeps it, Esc drops it, clicking away keeps it. With Edit off, a double-click highlights a word, to copy |
 | ⌫ | with Edit on: delete the selected line and the lines under it (asks first when there are any) |
 | ⌘Z · ⇧⌘Z | Undo · Redo, one act each |
