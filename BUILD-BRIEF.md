@@ -1163,8 +1163,7 @@ each checked against a fresh read and undone to the file's own sha256, every fix
 `TRLR`, `SUBM` below version 7, a `CONC` run) refused, a section moved with its bytes the same
 bytes in a new order, a record moved whole left unstamped; E turning Edit on and off, and not while
 a box is typed in. The phase-5 walk gains a step for each part, in the group it belongs to. Its
-steps 1–17 are walked; he stopped at 18 on ⌘E (3.11), and with the Edit button 18–40 can be walked
-on 0.4.1.
+steps 1–17 are walked; he stopped at 18 on ⌘E (3.11), and walks 18–40 on 0.5.
 
 ### Session 3's prompt
 
@@ -1179,6 +1178,8 @@ P2, copy buttons: B
 P3, selecting a link: L1
 3.4, dragging: 3.4a (siblings and sections) in 0.5; 3.4b held
 
-This is session 3: build the third round (v0.5), then walk me through it. My walk stands at
-step [N]; its findings since step 17: [none / …]. Tell me your plan in a few lines, then start.
+This is session 3: build the third round (v0.5), then walk me through it. My walk passed steps
+1–17 and stopped at 18, where ⌘E opened the Claude extension's panel instead of Edit (3.11);
+steps 18–40 are not walked yet, and I'll walk them on 0.5. Tell me your plan in a few lines,
+then start.
 ```
