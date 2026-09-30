@@ -489,8 +489,9 @@ function prng(seed) {
   };
 }
 
-// Acts picked at random over a file, each checked as it is made: the view against a fresh read,
-// the net change against the lines. Then all of it undone: the file, byte for byte.
+// Acts picked at random over a file — edits, lines added and deleted, records deleted, moves,
+// stamps, undo and redo — each checked as it is made: the view against a fresh read, the net
+// change against the lines. Then all of it undone: the file, byte for byte.
 function walkAtRandom(file, count, seed) {
   const bytes = h.bytesOfFile(file);
   const doc = core.openDocument(bytes);
@@ -510,11 +511,15 @@ function walkAtRandom(file, count, seed) {
         `${Math.max(lv, 0)} NOTE edited ${k}`, doc.m.texts[Math.min(pos, doc.m.n - 1)] || 'x']));
     } else if (roll < 0.45) r = core.addChild(doc, pos, `${lv + 1} NOTE child ${k}`);
     else if (roll < 0.55) r = core.addSibling(doc, pos, `${Math.max(lv, 0)} NOTE sibling ${k}`);
-    else if (roll < 0.65) r = core.deleteLine(doc, pos);
-    else if (roll < 0.7) r = core.deleteRecord(doc, pos);
-    else if (roll < 0.8) r = { ok: true, step: core.undo(doc) };
-    else if (roll < 0.88) r = { ok: true, step: core.redo(doc) };
-    else if (roll < 0.94) r = core.applyStamps(doc, AT, `stamp ${k}`);
+    else if (roll < 0.63) r = core.deleteLine(doc, pos);
+    else if (roll < 0.68) r = core.deleteRecord(doc, pos);
+    else if (roll < 0.76) {                                          // a move to a place landings offers (3.4a)
+      const l = core.landings(doc, pos, core.subtreeEnd(doc.view, pos));
+      r = l.at.length ? core.moveLines(doc, pos, core.subtreeEnd(doc.view, pos), pick(l.at)) : { ok: false, reason: l.reason || 'nowhere to go' };
+    }
+    else if (roll < 0.84) r = { ok: true, step: core.undo(doc) };
+    else if (roll < 0.9) r = { ok: true, step: core.redo(doc) };
+    else if (roll < 0.95) r = core.applyStamps(doc, AT, `stamp ${k}`);
     else { core.markSaved(doc); r = { ok: true, step: null }; }
     if (!r.ok) {
       assert.ok(typeof r.reason === 'string' && r.reason.length > 0);

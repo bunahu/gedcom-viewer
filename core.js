@@ -554,6 +554,30 @@
     return -1;
   }
 
+  // The line whose subtree holds line i — the nearest line above it at a lower level — or -1 when
+  // it sits under nothing: a line at level 0, or one before any parsed line. A line that did not
+  // parse sits in the subtree of the nearest parsed line above it (6.4).
+  function parentOf(m, i) {
+    const lv = m.level[i];
+    for (let j = i - 1; j >= 0; j -= 1) if (m.level[j] >= 0 && (lv < 0 || m.level[j] < lv)) return j;
+    return -1;
+  }
+
+  // The blocks directly under `parent` (-1: the file): each a line and its subtree, one after the
+  // other, from the line after the parent to the end of its subtree. They are the siblings among
+  // which a block may be moved (3.4a); a line that did not parse is a block of one line.
+  function blocksUnder(m, parent) {
+    const start = parent < 0 ? 0 : parent + 1;
+    const stop = parent < 0 ? m.n : subtreeEnd(m, parent);
+    const blocks = [];
+    for (let p = start; p < stop;) {
+      const e = subtreeEnd(m, p);
+      blocks.push([p, e]);
+      p = e;
+    }
+    return { start, stop, blocks };
+  }
+
   // The file's facts from its header: the exporting system and its version (HEAD.SOUR, .VERS),
   // and the header's date, as written; and the line each fact comes from (-1 when none), for the
   // page to go to — the GEDCOM version's (GEDC.VERS) and the encoding's (CHAR) among them.
@@ -1182,47 +1206,123 @@
     return (e) => (e >= 0 ? orig[e] : added[-e - 1]);
   }
 
-  // 9.4 — what changed: `savedOrder` against `order`, never the history of keystrokes. No act
-  // moves a line, so the numbers the two lists share come in the same order in both, and one walk
-  // over the two finds every difference. Between two lines they share, a line before and a line
-  // after of one lineage are one line changed; the other lines before were removed, the other
-  // lines after added. Each item holds the line's place before (in `savedOrder`) and after (in
-  // `order`), -1 where it has none; a removed line also holds `at`, the place after where it was.
+  // Which lineages a list holds, and at what place: a line's lineage is the original line it
+  // stands for, or its own number when it is new (9.1).
+  function placesByLineage(doc, list) {
+    const orig = new Int32Array(doc.m.n).fill(-1);
+    const added = new Int32Array(doc.added.length).fill(-1);
+    for (let k = 0; k < list.length; k += 1) {
+      const l = lineageOf(doc, list[k]);
+      if (l >= 0) orig[l] = k; else added[-l - 1] = k;
+    }
+    return (l) => (l >= 0 ? orig[l] : added[-l - 1]);
+  }
+
+  // The longest run of `seq` that rises, as a flag per entry (patience sorting): the most lines
+  // that kept their order between the file as saved and the lines now; every other line the two
+  // share has moved. Where two runs are equally long, the one found first stands, so the same
+  // lines always give the same answer.
+  function lisIndices(seq) {
+    const n = seq.length;
+    const tails = [];                                                // the entry ending the shortest rising run of each length
+    const prev = new Int32Array(n).fill(-1);
+    for (let i = 0; i < n; i += 1) {
+      const x = seq[i];
+      let lo = 0; let hi = tails.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (seq[tails[mid]] < x) lo = mid + 1; else hi = mid; }
+      if (lo > 0) prev[i] = tails[lo - 1];
+      tails[lo] = i;
+    }
+    const out = new Uint8Array(n);
+    let k = tails.length ? tails[tails.length - 1] : -1;
+    while (k >= 0) { out[k] = 1; k = prev[k]; }
+    return out;
+  }
+
+  // 9.4 — what changed: `savedOrder` against `order`, never the history of keystrokes. A line is
+  // known by its lineage. The lines the two lists share that kept their order — the most that
+  // could have — are the frame; of those, the ones that are the same entry in both are anchors,
+  // and between two anchors one walk over the two lists finds every difference: a line before
+  // and a line after of one lineage that kept its order are one line changed; a line the two
+  // share that did not keep its order has moved (3.4a); the other lines before were removed, the
+  // other lines after added. Each item holds the line's place before (in `savedOrder`) and after
+  // (in `order`), -1 where it has none. A removed line also holds `at`, the place after where it
+  // was; so does a moved line — where it was taken from — and a moved line whose entry differs as
+  // well is `changed` too.
   function netChange(doc) {
     const S = doc.savedOrder;
     const O = doc.order;
-    const inS = placesIn(doc, S);
-    const inO = placesIn(doc, O);
+    const lineS = placesByLineage(doc, S);
+    const lineO = placesByLineage(doc, O);
+    const seq = []; const seqB = [];
+    for (let b = 0; b < O.length; b += 1) {
+      const a = lineS(lineageOf(doc, O[b]));
+      if (a >= 0) { seq.push(a); seqB.push(b); }
+    }
+    const kept = lisIndices(seq);
+    const keptA = new Uint8Array(S.length);                          // kept its order
+    const keptB = new Uint8Array(O.length);
+    const anchorA = new Uint8Array(S.length);                        // kept its order, and is the same entry
+    const anchorB = new Uint8Array(O.length);
+    for (let k = 0; k < seq.length; k += 1) {
+      if (!kept[k]) continue;
+      keptA[seq[k]] = 1;
+      keptB[seqB[k]] = 1;
+      if (S[seq[k]] === O[seqB[k]]) { anchorA[seq[k]] = 1; anchorB[seqB[k]] = 1; }
+    }
     const items = [];
+    const movedOut = new Map();                                      // lineage → the item where a moved line was taken from
+    const movedIn = new Map();                                       // lineage → the item where a moved line now is
     let i = 0; let j = 0;
     while (i < S.length || j < O.length) {
-      if (i < S.length && j < O.length && S[i] === O[j]) { i += 1; j += 1; continue; }
+      if (i < S.length && j < O.length && anchorA[i] && S[i] === O[j]) { i += 1; j += 1; continue; }
       const i0 = i; const j0 = j;
-      while (i < S.length && inO(S[i]) < 0) i += 1;
-      while (j < O.length && inS(O[j]) < 0) j += 1;
+      while (i < S.length && !anchorA[i]) i += 1;
+      while (j < O.length && !anchorB[j]) j += 1;
       if ((i < S.length) !== (j < O.length) || (i < S.length && S[i] !== O[j])) {
         throw new Error('netChange: the lines as saved and the lines now are out of step');
       }
       const byLineage = new Map();
-      for (let a = i0; a < i; a += 1) byLineage.set(lineageOf(doc, S[a]), a);
+      for (let a = i0; a < i; a += 1) if (keptA[a]) byLineage.set(lineageOf(doc, S[a]), a);
       const pairOf = new Map();                                      // place after → place before
       for (let b = j0; b < j; b += 1) {
+        if (!keptB[b]) continue;
         const a = byLineage.get(lineageOf(doc, O[b]));
         if (a !== undefined) pairOf.set(b, a);
       }
       const paired = new Set(pairOf.values());
       let a = i0; let b = j0;
       while (a < i || b < j) {
-        if (a < i && !paired.has(a)) { items.push({ kind: 'removed', before: a, after: -1, at: b }); a += 1; }
-        else if (b < j && !pairOf.has(b)) { items.push({ kind: 'added', before: -1, after: b }); b += 1; }
-        else {
+        if (a < i && !paired.has(a)) {
+          const l = lineageOf(doc, S[a]);
+          const half = lineO(l) >= 0 ? movedIn.get(l) : undefined;   // its new place was met already
+          if (half) { half.kind = 'moved'; half.before = a; half.at = b; half.changed = S[a] !== O[half.after]; }
+          else {
+            const it = { kind: 'removed', before: a, after: -1, at: b };
+            if (lineO(l) >= 0) movedOut.set(l, it);
+            items.push(it);
+          }
+          a += 1;
+        } else if (b < j && !pairOf.has(b)) {
+          const l = lineageOf(doc, O[b]);
+          const half = lineS(l) >= 0 ? movedOut.get(l) : undefined;  // where it was taken from was met already
+          if (half) {
+            half.dead = true;
+            items.push({ kind: 'moved', before: half.before, after: b, at: half.at, changed: S[half.before] !== O[b] });
+          } else {
+            const it = { kind: 'added', before: -1, after: b };
+            if (lineS(l) >= 0) movedIn.set(l, it);
+            items.push(it);
+          }
+          b += 1;
+        } else {
           if (pairOf.get(b) !== a) throw new Error('netChange: a changed line out of step');
           items.push({ kind: 'changed', before: a, after: b });
           a += 1; b += 1;
         }
       }
     }
-    return items;
+    return movedOut.size ? items.filter((it) => !it.dead) : items;
   }
 
   // The record a line of `savedOrder` sat in, as its record line's place there (-1: before the
@@ -1238,12 +1338,43 @@
     return r;
   }
 
+  // What a moved run is (3.4a): a block inside a record (its head line's tag; and, when other
+  // blocks under the same parent carry that tag, how many, since the first of them is the one the
+  // standard reads as preferred), one record moved whole, or a section — several records, of one
+  // type when they are. The run's record is the one it is in, or the one it is.
+  function describeMove(doc, run) {
+    const v = doc.view;
+    const first = run.after;
+    const count = run.lines.length;
+    if (v.level[first] === 0) {
+      let r = v.recOf[first];
+      let records = 0;
+      const tags = new Set();
+      while (r < v.records.length && v.records[r] < first + count) { records += 1; tags.add(v.tag[v.records[r]]); r += 1; }
+      if (records === 1) {
+        run.moved = { what: 'record', tag: v.tag[first], records: 1, sameKind: 0 };
+        run.record = { id: v.xref[first], tag: v.tag[first], key: `now ${first}` };
+      } else run.moved = { what: 'section', tag: tags.size === 1 ? v.tag[first] : null, records, sameKind: 0 };
+      return;
+    }
+    const tag = v.tag[first];
+    const { blocks } = blocksUnder(v, parentOf(v, first));
+    const same = tag === null ? 0 : blocks.filter((b) => v.tag[b[0]] === tag).length;
+    run.moved = { what: 'block', tag, records: 0, sameKind: same > 1 ? same : 0 };
+    const rec = v.recOf[first];
+    if (rec >= 0) { const line = v.records[rec]; run.record = { id: v.xref[line], tag: v.tag[line], key: `now ${line}` }; }
+  }
+
   // The net change in runs, for the Changes panel and the log: lines of one kind, each right after
   // the last, in one record, and all written by a change stamp or none. A run holds its kind; its
-  // first place before and after (and, removed, `at`, the place after where it was); its lines, as
-  // `was` and `now` (and `ending`, the line endings before and after, when those differ); its
-  // record, as id and tag — in the file as saved for a removed run, as it now is for the others;
-  // and whether a stamp wrote it.
+  // first place before and after (and, removed or moved, `at`, the place after where the lines
+  // were); its lines, as `was` and `now` (and `ending`, the line endings before and after, when
+  // those differ) — a moved run's lines hold neither, being the lines themselves; its record, as
+  // id and tag — in the file as saved for a removed run, as it now is for the others; and whether
+  // a stamp wrote it. A moved run says what moved (`moved`, describeMove); a moved line that was
+  // also edited is in a changed run too, at its new place. The runs come in the order of the
+  // lines now: a removed run at the line below where its lines were, a moved run where its lines
+  // now are.
   function changeRuns(doc, items) {
     const list = items || netChange(doc);
     const S = doc.savedOrder;
@@ -1251,9 +1382,18 @@
     const v = doc.view;
     const memo = { a: -2, r: -1 };
     const runs = [];
+    const moves = [];
     for (const it of list) {
+      let kind = it.kind;
+      if (kind === 'moved') {
+        const last = moves[moves.length - 1];
+        if (last && it.before === last.before + last.lines.length && it.after === last.after + last.lines.length) last.lines.push({ was: null, now: null });
+        else moves.push({ kind: 'moved', before: it.before, after: it.after, at: it.at, record: null, stamp: false, lines: [{ was: null, now: null }] });
+        if (!it.changed) continue;
+        kind = 'changed';
+      }
       let record = null;
-      if (it.kind === 'removed') {
+      if (kind === 'removed') {
         const r = savedRecordOf(doc, it.before, memo);
         if (r >= 0) { const s = shapeOf(doc, S[r]); record = { id: s.xref, tag: s.tag, key: `saved ${r}` }; }
       } else if (v.recOf[it.after] >= 0) {
@@ -1262,37 +1402,43 @@
       }
       const stamp = it.after >= 0 && stampOf(doc, O[it.after]) !== null;
       const line = { was: it.before >= 0 ? textOf(doc, S[it.before]) : null, now: it.after >= 0 ? textOf(doc, O[it.after]) : null };
-      if (it.kind === 'changed') {                                   // a line can change in its ending alone (9.2)
+      if (kind === 'changed') {                                      // a line can change in its ending alone (9.2)
         const tw = termOf(doc, S[it.before]);
         const tn = termOf(doc, O[it.after]);
         if (tw !== tn) line.ending = [TERM_NAMES[tw], TERM_NAMES[tn]];
       }
       const last = runs[runs.length - 1];
-      const joins = last && last.kind === it.kind && last.stamp === stamp &&
+      const joins = last && last.kind === kind && last.stamp === stamp &&
         (last.record && last.record.key) === (record && record.key) &&
         (it.before < 0 || it.before === last.before + last.lines.length) &&
         (it.after < 0 || it.after === last.after + last.lines.length);
       if (joins) last.lines.push(line);
       else {
-        runs.push({ kind: it.kind, before: it.before, after: it.after, at: it.kind === 'removed' ? it.at : it.after,
+        runs.push({ kind, before: it.before, after: it.after, at: kind === 'removed' ? it.at : it.after,
           record, stamp, lines: [line] });
       }
     }
-    return runs;
+    if (!moves.length) return runs;
+    for (const run of moves) describeMove(doc, run);
+    const rank = { removed: 0, moved: 1, changed: 2, added: 2 };
+    const pos = (r) => (r.kind === 'removed' ? r.at : r.after);
+    return runs.concat(moves).sort((x, y) => (pos(x) - pos(y)) || (rank[x.kind] - rank[y.kind]));
   }
 
-  // For the grid: each line now, 1 changed or 2 added since the last save; and, where lines were
-  // removed, the place after they were.
+  // For the grid: each line now, 1 changed or 2 added since the last save, 3 moved; and, where
+  // lines were removed, or taken from by a move, the place after they were.
   function lineMarks(doc, items) {
     const list = items || netChange(doc);
     const status = new Uint8Array(doc.order.length);
     const removedAt = new Uint8Array(doc.order.length + 1);
+    const movedFrom = new Uint8Array(doc.order.length + 1);
     for (const it of list) {
       if (it.kind === 'changed') status[it.after] = 1;
       else if (it.kind === 'added') status[it.after] = 2;
+      else if (it.kind === 'moved') { status[it.after] = it.changed ? 1 : 3; movedFrom[it.at] = 1; }
       else removedAt[it.at] = 1;
     }
-    return { status, removedAt };
+    return { status, removedAt, movedFrom };
   }
 
   // Lines removed since the last save put back where they were: lines `before` … `before + count -
@@ -1306,6 +1452,97 @@
     const done = [];
     cut(doc, done, items[0].at, 0, items.map((it) => doc.savedOrder[it.before]));
     return finish(doc, count > 1 ? `Restore ${num(count)} lines` : 'Restore a line', done);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // 3.4a Moving a block, a record or a run of records among its siblings
+  // ---------------------------------------------------------------------------------------------
+
+  const continues = (m, i) => i < m.n && (m.tag[i] === 'CONC' || m.tag[i] === 'CONT');
+
+  // The lines from..end of the view as whole sibling blocks: the line whose subtree holds them
+  // (their parent; -1 for the file), the blocks under that parent and which of them these are,
+  // and the nearest and farthest places they may land (HEAD stays first, TRLR last, and below
+  // version 7 the submitter record directly after HEAD). Or the reason they may not move at all.
+  function siblingRange(doc, from, end) {
+    const v = doc.view;
+    if (!(from >= 0 && end <= v.n && from < end)) return { reason: `There are no lines ${num(from + 1)}–${num(end)}.` };
+    if (v.level[from] < 0) return { reason: `Line ${num(from + 1)} did not parse: it moves only with the block it sits in.` };
+    if (continues(v, from)) return { reason: `Line ${num(from + 1)} is a ${v.tag[from]} line, part of its line's value: it moves only with that line.` };
+    if (continues(v, end)) return { reason: `Line ${num(end + 1)} is a ${v.tag[end]} line, and would then continue another line.` };
+    const parent = parentOf(v, from);
+    const { start, stop, blocks } = blocksUnder(v, parent);
+    const k0 = blocks.findIndex((b) => b[0] === from);
+    const k1 = blocks.findIndex((b) => b[1] === end);
+    if (k0 < 0 || k1 < k0) return { reason: `Lines ${num(from + 1)}–${num(end)} are not whole blocks under one line.` };
+    const r = { v, parent, start, stop, blocks, starts: new Set(blocks.map((b) => b[0])), from, end, headEnd: 0, submEnd: 0, trlr: stop };
+    if (parent < 0) {
+      const R = v.records;
+      if (R.length && v.tag[R[0]] === 'HEAD' && v.xref[R[0]] === null) {
+        r.headEnd = recordEnd(v, 0);
+        if (from < r.headEnd) return { reason: HEAD_FIRST };
+        if (!v.v7 && R.length > 1 && v.tag[R[1]] === 'SUBM' && R[1] === r.headEnd) {
+          r.submEnd = recordEnd(v, 1);
+          if (from < r.submEnd) return { reason: SUBM_AFTER_HEAD };
+        }
+      }
+      const last = R.length ? R[R.length - 1] : -1;
+      if (last >= 0 && v.tag[last] === 'TRLR' && v.xref[last] === null) {
+        if (end > last) return { reason: TRLR_LAST };
+        r.trlr = last;
+      }
+    }
+    return r;
+  }
+
+  const HEAD_FIRST = 'HEAD stays first.';
+  const SUBM_AFTER_HEAD = 'The submitter record stays directly after HEAD, below GEDCOM 7.';
+  const TRLR_LAST = 'TRLR stays last.';
+  const AT_AN_EDGE = 'A block lands only at the edge of a sibling: between two lines that sit under the same line as it does.';
+
+  // Why the blocks of `r` may not land before the line at `to`; null when they may, or when `to`
+  // is where they already are.
+  function landingRefusal(r, to) {
+    if (to === r.from || to === r.end) return null;
+    if (to > r.from && to < r.end) return 'A block cannot land inside itself.';
+    if (!(to === r.stop || r.starts.has(to))) return AT_AN_EDGE;
+    if (to < r.headEnd) return HEAD_FIRST;
+    if (to < r.submEnd) return SUBM_AFTER_HEAD;
+    if (to > r.trlr) return TRLR_LAST;
+    if (continues(r.v, to)) return `Nothing lands between a line and its ${r.v.tag[to]} lines.`;
+    return null;
+  }
+
+  function moveRefusal(doc, from, end, to) {
+    const r = siblingRange(doc, from, end);
+    return r.reason || landingRefusal(r, to);
+  }
+
+  // Where the blocks from..end may land: every place `to` the rules allow, in order, other than
+  // where they are; or why they cannot move at all.
+  function landings(doc, from, end) {
+    const r = siblingRange(doc, from, end);
+    if (r.reason) return { reason: r.reason, at: [] };
+    const at = [];
+    for (const b of r.blocks) if (b[0] !== from && b[0] !== end && landingRefusal(r, b[0]) === null) at.push(b[0]);
+    if (r.stop !== end && landingRefusal(r, r.stop) === null) at.push(r.stop);
+    return { reason: null, at, parent: r.parent };
+  }
+
+  // 3.4a — the blocks from..end moved to stand before the line at `to`; every line keeps its
+  // parent and its level. One step; a moved line is written from its own bytes, as an untouched
+  // line is (I1), so a line whose bytes could not be read (E8) moves with its block.
+  function moveLines(doc, from, end, to) {
+    const cannot = moveRefusal(doc, from, end, to);
+    if (cannot) return refuse(cannot);
+    if (to === from || to === end) return { ok: true, step: null };
+    const count = end - from;
+    const block = doc.order.slice(from, end);
+    const done = [];
+    cut(doc, done, from, count, []);
+    const at = to < from ? to : to - count;
+    cut(doc, done, at, 0, block);
+    return finish(doc, count > 1 ? `Move lines ${num(from + 1)}–${num(end)} to ${num(at + 1)}` : `Move line ${num(from + 1)} to ${num(at + 1)}`, done);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1341,8 +1578,10 @@
   }
 
   // The records a save stamps: every record the net change touched — a line changed or added in
-  // it, or a line it lost — other than by a stamp of the viewer's own, that is still in the file,
-  // under a tag that may carry a change date (section 2). Record numbers of the view, last first.
+  // it, a line it lost, or its own lines reordered (3.4a) — other than by a stamp of the viewer's
+  // own, that is still in the file, under a tag that may carry a change date (section 2). A
+  // record moved whole, or with its section, is not stamped: nothing in it changed, only its
+  // place. Record numbers of the view, last first.
   function stampTargets(doc, items) {
     const list = items || netChange(doc);
     const v = doc.view;
@@ -1351,23 +1590,28 @@
     const tags = v.v7 ? STAMP_TAGS_7 : STAMP_TAGS;
     const placeNow = placesIn(doc, O);
     const changedTo = new Map();                                     // place before → place after
-    for (const it of list) if (it.kind === 'changed') changedTo.set(it.before, it.after);
+    for (const it of list) if (it.kind === 'changed' || it.kind === 'moved') changedTo.set(it.before, it.after);
     const memo = { a: -2, r: -1 };
     const hit = new Set();
+    const take = (b) => {
+      const rec = v.recOf[b];
+      if (rec >= 0 && tags.has(v.tag[v.records[rec]])) hit.add(rec);
+    };
     for (const it of list) {
-      let b;
-      if (it.kind !== 'removed') {
-        if (stampOf(doc, O[it.after]) !== null) continue;            // written by a stamp, not by him
-        b = it.after;
+      if (it.kind === 'moved') {
+        if (it.changed) take(it.after);                               // a moved line he also edited; the move itself is judged by its run, below
+      } else if (it.kind !== 'removed') {
+        if (stampOf(doc, O[it.after]) === null) take(it.after);      // written by him, not by a stamp
       } else {
         const r = savedRecordOf(doc, it.before, memo);
         if (r < 0) continue;
-        b = placeNow(S[r]);
+        let b = placeNow(S[r]);
         if (b < 0 && changedTo.has(r)) b = changedTo.get(r);
-        if (b < 0) continue;                                         // its record was deleted: no stamp
+        if (b >= 0) take(b);                                         // its record was deleted otherwise: no stamp
       }
-      const rec = v.recOf[b];
-      if (rec >= 0 && tags.has(v.tag[v.records[rec]])) hit.add(rec);
+    }
+    if (list.some((it) => it.kind === 'moved')) {
+      for (const run of changeRuns(doc, list)) if (run.kind === 'moved' && run.moved.what === 'block') take(run.after);
     }
     return [...hit].sort((x, y) => y - x);
   }
@@ -1447,14 +1691,153 @@
     return finish(doc, 'Change stamps', done);
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // For the screen (3.3, 3.8, 3.9, 3.10): pure, so the tests hold them under Node
+  // ---------------------------------------------------------------------------------------------
+
+  // 3.8 — a label's parts: the text between a pair of slashes is a surname. `Jane /Fixture/` is
+  // [Jane ] then [Fixture, a surname]; `//` gives no surname part; a label with no slashes is one
+  // part. For a label the screen makes (section 8) only, never a line as written.
+  function nameParts(label) {
+    const out = [];
+    const re = /\/([^/]*)\//g;
+    let last = 0;
+    let hit;
+    while ((hit = re.exec(label)) !== null) {
+      if (hit.index > last) out.push({ text: label.slice(last, hit.index), surname: false });
+      if (hit[1]) out.push({ text: hit[1], surname: true });
+      last = hit.index + hit[0].length;
+    }
+    if (last < label.length) out.push({ text: label.slice(last), surname: false });
+    return out;
+  }
+
+  // The label as 3.8 shows it — its slashes gone — for the Records filter to match as well.
+  function nameShown(label) { return nameParts(label).map((p) => p.text).join(''); }
+
+  // 3.9 — the web address in `text` that holds character `at`, as [start, end), or null: http…,
+  // https… or www.…, up to a space or a quote, less the punctuation that closes a sentence (a
+  // closing bracket stays when the address opened one).
+  const LINK = /(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
+  function linkAt(text, at) {
+    LINK.lastIndex = 0;
+    let hit;
+    while ((hit = LINK.exec(text)) !== null) {
+      if (hit.index > at) break;
+      let end = hit.index + hit[0].length;
+      for (;;) {
+        const c = text[end - 1];
+        if (end <= hit.index || !/[.,;:!?)\]}]/.test(c)) break;
+        if ((c === ')' || c === ']' || c === '}')) {
+          const open = c === ')' ? '(' : c === ']' ? '[' : '{';
+          const inside = text.slice(hit.index, end);
+          if (inside.split(open).length > inside.split(c).length - 1) break;   // it closes one the address opened
+        }
+        end -= 1;
+      }
+      if (at >= hit.index && at < end) return [hit.index, end];
+    }
+    return null;
+  }
+
+  // 3.10 — a line clipped to `limit` characters (code points, never half of one): where the shown
+  // part ends in the text, and how many characters are not shown.
+  function clip(text, limit) {
+    const total = codePoints(text);
+    if (total <= limit) return { end: text.length, more: 0 };
+    let end = 0;
+    for (let k = 0; k < limit; k += 1) {
+      const c = text.charCodeAt(end);
+      end += c >= 0xd800 && c <= 0xdbff && end + 1 < text.length ? 2 : 1;
+    }
+    return { end, more: total - limit };
+  }
+
+  // 3.3 — a _META value drawn as it reads. The page reads the value's XML, and the HTML inside
+  // its story, in an inert document (DOMParser) and hands the trees over as plain nodes — { name,
+  // attrs, children } for an element, { text } for text, { comment: true } for a comment — so
+  // that what survives is decided here, the same way every time, and held by the tests.
+  const META_KEEP = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'sup', 'sub', 'div', 'blockquote', 'pre', 'hr',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'address', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    'table', 'thead', 'tbody', 'tr', 'td', 'th']);
+  const META_DROP = new Set(['script', 'style', 'xml', 'head', 'title', 'meta', 'link', 'object', 'embed', 'iframe',
+    'svg', 'math', 'noscript', 'template', 'video', 'audio', 'canvas', 'form', 'input', 'button', 'select', 'textarea']);
+  const META_ATTRS = { td: ['colspan', 'rowspan'], th: ['colspan', 'rowspan'] };
+
+  // The tree rebuilt from the allowlist alone: a kept element keeps only the attributes named for
+  // it (colspan and rowspan, on a cell, as plain numbers); span, font and any element not named
+  // give up their children and go; a link is its text, then its address in plain text; an image
+  // is [image]; comments, script, style, xml and every namespaced element go with their content.
+  // The result is a list of the same plain nodes, for the page to build from — never markup.
+  function metaRebuild(node) {
+    const out = [];
+    const textOfNode = (n) => (n.text !== undefined ? n.text : n.comment ? '' : (n.children || []).map(textOfNode).join(''));
+    const walk = (n, into) => {
+      if (!n || n.comment) return;
+      if (n.text !== undefined) { if (n.text) into.push({ text: n.text }); return; }
+      const name = String(n.name || '').toLowerCase();
+      if (name.includes(':') || META_DROP.has(name)) return;
+      if (name === 'img') { into.push({ text: '[image]' }); return; }
+      if (name === 'a') {
+        for (const c of n.children || []) walk(c, into);
+        const href = n.attrs ? String(n.attrs.href || '') : '';
+        if (href && href !== textOfNode(n).trim()) into.push({ text: ` (${href})` });
+        return;
+      }
+      if (!META_KEEP.has(name)) { for (const c of n.children || []) walk(c, into); return; }
+      const e = { name, attrs: {}, children: [] };
+      for (const a of META_ATTRS[name] || []) {
+        const value = n.attrs && n.attrs[a] !== undefined ? String(n.attrs[a]) : '';
+        if (/^[1-9][0-9]{0,2}$/.test(value) && value !== '1') e.attrs[a] = value;
+      }
+      for (const c of n.children || []) walk(c, e.children);
+      into.push(e);
+    };
+    walk(node, out);
+    return out;
+  }
+
+  // The parts of a _META value, from its XML as the same plain nodes: the story (its content's
+  // lines, joined with a line break, read as HTML by `parseHtml` and rebuilt from the allowlist),
+  // the transcription, the persons, the cemetery and the record id. Null when the root is not
+  // <metadataxml> — another program's _META is never guessed at. An empty part is null (persons:
+  // none), and a value with no part at all gives `empty`.
+  function metaParts(root, parseHtml) {
+    if (!root || root.name === undefined || String(root.name).toLowerCase() !== 'metadataxml') return null;
+    const textOfNode = (n) => (n.text !== undefined ? n.text : n.comment ? '' : (n.children || []).map(textOfNode).join(''));
+    const kids = (n, name) => (n.children || []).filter((c) => c.name !== undefined && String(c.name).toLowerCase() === name);
+    const parts = { story: null, transcription: null, persons: [], cemetery: null, recordId: null, empty: true };
+    for (const c of root.children || []) {
+      if (c.name === undefined) continue;
+      const name = String(c.name).toLowerCase();
+      if (name === 'content') {
+        const lines = kids(c, 'line').map(textOfNode);
+        const html = (lines.length ? lines : [textOfNode(c)]).join('\n');
+        if (html.trim()) parts.story = metaRebuild(parseHtml(html));
+      } else if (name === 'transcription') { const t = textOfNode(c); if (t.trim()) parts.transcription = t; }
+      else if (name === 'personas') {
+        for (const p of kids(c, 'persona')) {
+          const f = (k) => { const e = kids(p, k)[0]; return e ? textOfNode(e).trim() : ''; };
+          const person = { name: f('pname'), born: f('bdate'), birthplace: f('bplace'), died: f('ddate'), deathplace: f('dplace') };
+          if (Object.values(person).some((x) => x)) parts.persons.push(person);
+        }
+      } else if (name === 'cemetery') { const t = textOfNode(c); if (t.trim()) parts.cemetery = t; }
+      else if (name === 'record_source_gid') { const t = textOfNode(c); if (t.trim()) parts.recordId = t; }
+    }
+    parts.empty = !parts.story && !parts.transcription && !parts.persons.length && !parts.cemetery && !parts.recordId;
+    return parts;
+  }
+
   return {
     TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE, STAMP_NOTE_MAX,
     read, detect, bytesOf, summary,
-    recordEnd, subtreeEnd, valueOf, isPointerLine, joinedValue,
+    recordEnd, subtreeEnd, parentOf, blocksUnder, valueOf, isPointerLine, joinedValue,
     search, searchTag, recordCounts, codePoints,
     openDocument, saveBytes, textOf, termOf,
     editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
+    moveRefusal, moveLines, landings,
     markSaved, isChanged, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, stampTargets, stampPlan, applyStamps,
+    nameParts, nameShown, linkAt, clip, metaRebuild, metaParts,
   };
 });

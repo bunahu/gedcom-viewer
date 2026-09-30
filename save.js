@@ -60,11 +60,22 @@
   // 10.5 The log block
   // ---------------------------------------------------------------------------------------------
 
+  // What a moved run carries (3.4a), for the log and the Save dialog: a block by its tag, a record,
+  // or a section by its type and its count of records; and how many lines. Never their text.
+  function movedWords(r) {
+    const mv = r.moved;
+    const lines = `${r.lines.length} ${r.lines.length === 1 ? 'line' : 'lines'}`;
+    if (mv.what === 'record') return `record · ${lines}`;
+    if (mv.what === 'section') return `section ${mv.tag || 'of records'} · ${mv.records} records · ${lines}`;
+    const same = mv.sameKind ? ` · among its ${mv.sameKind} ${mv.tag} lines the first is read as preferred` : '';
+    return `${mv.tag || 'block'} · ${lines}${same}`;
+  }
+
   // One block: what was saved, when, where, with what note, the file before and after, the backup,
   // and the net change run by run — each line's place before, then after, its record, and the
-  // lines themselves, - as they were and + as they are. A copy's block names the copy and has no
-  // backup. It holds what the file holds, living people included: it belongs beside the file,
-  // never in a repo (I9).
+  // lines themselves, - as they were and + as they are; a moved run says what moved and how many
+  // lines, never their text. A copy's block names the copy and has no backup. It holds what the
+  // file holds, living people included: it belongs beside the file, never in a repo (I9).
   function logBlock(o) {
     const out = [o.copy ? `=== ${logTime(o.when)}  copy  ${o.file} -> ${o.copy}` : `=== ${logTime(o.when)}  save  ${o.file}`];
     out.push(`note     ${o.note}`);
@@ -77,8 +88,10 @@
     const wa = Math.max(0, ...rows.map((x) => x.a.length));
     for (const { r, b, a } of rows) {
       const record = r.record ? `${r.record.id ? `${r.record.id} ` : ''}${r.record.tag || ''}` : '';
-      const head = `${r.kind.padEnd(7)}  ${b.padEnd(wb)}${r.kind === 'changed' ? ' -> ' : '    '}${a.padEnd(wa)}  ${record}`;
-      out.push(`${head}${r.stamp ? '  (change stamp)' : ''}`.trimEnd());
+      const arrow = r.kind === 'changed' || r.kind === 'moved';
+      const head = `${r.kind.padEnd(7)}  ${b.padEnd(wb)}${arrow ? ' -> ' : '    '}${a.padEnd(wa)}`;
+      const tail = r.kind === 'moved' ? `(${movedWords(r)})` : r.stamp ? '(change stamp)' : '';
+      out.push([head, record, tail].filter((x) => x).join('  ').trimEnd());
       for (const l of r.lines) {
         if (l.was !== null) out.push(`  - ${l.was}`);
         if (l.now !== null) out.push(`  + ${l.now}`);
@@ -268,7 +281,7 @@
   }
 
   return {
-    HISTORY, timestamp, logTime, split, names, logBlock,
+    HISTORY, timestamp, logTime, split, names, logBlock, movedWords,
     checkDisk, save, saveCopy, copyFiles, writeChecked,
   };
 });
