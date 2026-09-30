@@ -704,9 +704,11 @@ The sibling project's instructions and memory do not load in this folder. These 
 ## 18. Not in version 1
 
 Replace-all · comparing two files · editing a split value as one text · a list of recent files ·
-wrapping long lines in the grid · reading ANSEL as its own characters · moving a line · a stamp for
-a record's creation (`CREA`, version 7) · anything that talks to the sibling project. (Folding a record shut was
-here; the owner asked for it on 2026-09-28, at every level, and phase 4 built it.)
+wrapping long lines in the grid · reading ANSEL as its own characters · a stamp for a record's
+creation (`CREA`, version 7) · anything that talks to the sibling project. (Folding a record shut was here; the
+owner asked for it on 2026-09-28, at every level, and phase 4 built it. Moving a line was here
+too; he asked on 2026-09-29 for lines and blocks dragged in the main frame — the third round,
+section 19.)
 
 Raised at the close of session 1, for the owner to rule: a `CLAUDE.md` in this folder that points
 every session opened here at section 17. It would be a pointer, not a copy, for sessions opened
@@ -715,6 +717,9 @@ without the build prompt.
 Raised 2026-09-29, for the owner to rule: `index.html` moved away from its four files opens as a
 bare page with nothing working and nothing said. The page could carry a line of its own that
 `ui.js` removes as it starts, so a page opened away from its files says so.
+
+Raised 2026-09-29, for the owner to rule, with the third round: ⌥↑ and ⌥↓ to move the selected
+block past the block above or below it — the short moves, without a drag across a long file.
 
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
@@ -849,7 +854,7 @@ is, beside the four files it loads.
 | 14 | **Records**: part of a surname in the filter; click a result | that record |
 | 15 | Select a `CONC` line; then a `0 @…@` record line | the right frame's **Joined** holds the whole value; for the record line, the lines that point at it |
 | 16 | Double-click a word | it highlights, and stays highlighted to copy |
-| 17 | The file's name → **Open another GEDCOM…** → `local/CLEANED.ged`; Go to Line… the number of its longest line. Then reopen `local/walk/RAW.ged` | an 83,797-character line (`_META` of `@O1470@`): clipped in the main frame, whole in the right frame |
+| 17 | The file's name → **Open another GEDCOM…** → `local/CLEANED.ged`; Go to Line… the number of its longest line. Then reopen `local/walk/RAW.ged` | **What it tests:** a line far longer than any screen neither slows nor breaks the main frame. This one is over 80,000 characters, the `_META` of one media record, which the cleaner joined into one line. The main frame shows its first 2,000 characters (from v0.5, ending **… 81,797 more**); the right frame shows it whole |
 
 **C. Edit a line**
 
@@ -945,3 +950,191 @@ double-click that edits, and a highlight that holds. Built as section 11 now say
 | The main frame redraws only the rows' looks on a click | it redrew every row, so a highlight vanished and a double-click's second click landed on text just replaced |
 | The frames are the top bar, the counts bar, the left bar, the main frame, the right frame | his words; the README uses them |
 
+### The owner's third round (2026-09-29, from walk steps 1–17): v0.5
+
+Steps 1–17 of the phase-5 walk passed; of step 17 he asked what it tested (3.10). What he asked
+for from them, in his words:
+
+| # | His words | Below |
+|---|---|---|
+| 1 | "minimize the sidebars — left and right — and … hover-scroll left and right. This came up when I tried to intuitively read the _META tag starting on Line 202,541 and couldn't." | 3.1 |
+| 2 | "the 'Joined' _META I would like to be able to copy and paste, with the one-click copy button/icon you use here in Claude Mac" | 3.2 |
+| 3 | "That whole _META block — I'd like to see it interpreted correctly in the right sidebar (i.e. rich text in a box). If that's not deterministically doable, then skip it — I'd want to be able to rewrite that in plain text." | 3.3 |
+| 4 | "drag and drop lines — and blocks — in the main panel" | 3.4 |
+| 5 | "There should be a Collapse All / Expand All button." | 3.5 |
+| 6 | "helper text for the checks on 4 in the right sidebar, when their title is clicked on in the left sidebar" | 3.6 |
+| 7 | "The back button should be somewhere more prominent, and nearer the middle frame if possible." (step 12) | 3.7 |
+| 8 | "Instead of /Surname/ in the panels, try bolding the Surname instead. Make that a toggle on/off as well, to see if I like it. But the raw text should stay /Surname/ no matter what." | 3.8 |
+| 9 | "16 worked except for a highlighted word - considering how to highlight a link easily, when needed." | 3.9 |
+| 10 | "17 worked, I think? Not sure the goal of the main frame being clipped, Not sure what 17 did." | 3.10 |
+
+Three picks are his, stated in the opening prompt: **P1** (3.4, where a dragged block may land),
+**P2** (3.2, which boxes carry a copy button) and **P3** (3.9, selecting a pointer). No pick
+stated → M1, B and L1, and say so.
+
+**3.1 Hide a side frame; scroll the lines sideways**
+
+| Part | Rule |
+|---|---|
+| Hide | Each split bar carries a small tab — ‹ on the left bar's, › on the right frame's. A click hides that frame, and the same tab, flipped, brings it back; a double-click on the split bar does the same. Hidden or shown is remembered between visits, as the widths are |
+| Sideways | The main frame scrolls left and right — a two-finger swipe on the trackpad, or Shift with the wheel, with the pointer over it. Its width is the file's longest line as the grid shows it (at most `ROW_CHARS`, 2,000 characters), plus the indent while Indent is on. The line number, the mark and the fold stay in view at the left edge |
+| No swipe back | A sideways swipe at the frame's edge must never take Chrome back a page: `overscroll-behavior-x: none` on the grid and on the page. A swipe back would leave the page with edits unsaved |
+| The `_META` line of his step 1 | a `1 _META` and its 20 `CONC` lines, each up to 256 characters: every one readable by scrolling, and the whole value in 3.3's box |
+
+**3.2 A copy button on a value**
+
+A small icon at the box's top right (two overlapping squares, as in the Claude app). One click copies
+the box's text exactly as the box shows it — for Joined, the `CONC` runs joined and each `CONT` a
+line break; for 3.3's parts, the text as drawn. The icon turns into a check mark for 1.5 seconds.
+`navigator.clipboard.writeText` (the page opened from disk is a secure context, section 4; the click
+is the user action it needs). If the clipboard refuses, the box's text is selected so ⌘C copies it,
+and a notice says so.
+
+| P2 | Which boxes |
+|---|---|
+| **A** | Joined only — what he named |
+| **B** (recommended) | every box of text in the right frame: the line's value, Was, Joined, and each of 3.3's parts — one control, the same everywhere |
+
+**3.3 The `_META` drawn as it reads**
+
+Deterministic: yes. Measured on the raw export on 2026-09-29, element and tag names and counts only:
+718 `_META` lines, every one at level 1 in an `OBJE` record, every one a `<metadataxml>` XML
+document, and 718 of 718 parse. The root holds at most these parts:
+
+| Part | In batch 20 | Drawn as |
+|---|---|---|
+| `content` — a story | 73; its `<line>` children hold web formatting once the XML is read: `p` `br` `strong` `em` `span` `table` `tr` `td` `th` `tbody` `thead` `dl` `dt` `dd` `ul` `li` `font` `div` `sup` `blockquote` `pre` `hr` `h1` `address`, links (`a`, 154), images (`img`, 3), and Word's hidden settings (`w:…`, `o:…`, `m:…`, `xml`, comments; one `style`) | its lines joined with a line break and read as HTML in an inert document (`DOMParser`), then rebuilt from an allowlist only — `p` `br` `strong`/`b` `em`/`i` `u` `sup` `sub` `div` `blockquote` `pre` `hr` `h1`–`h6` `address` `ul` `ol` `li` `dl` `dt` `dd` `table` `thead` `tbody` `tr` `td` `th` (with `colspan` and `rowspan` kept). `span` and `font` give up their text and go. Every other attribute goes (style, class, width, colour, face, size). Comments, `style`, `script`, `xml` and every namespaced element (`w:`, `o:`, `m:`) go with their content. A link is its text, then its address in plain text — never a live link. An image is `[image]`, and is never loaded (I5) |
+| `transcription` | 471; 12 hold text | plain text, its line breaks kept |
+| `personas` → `persona` — Find a Grave's people | 79 | a table: Name · Born · Birthplace · Died · Death place (`pname` `bdate` `bplace` `ddate` `dplace`) |
+| `cemetery` | 433; 62 hold text | one labelled line |
+| `record_source_gid` | 124 | one labelled line |
+
+Where: in the right frame, above Joined, whenever the selected line is a `_META` or a line of its
+`CONC`/`CONT` run — each part under its own heading (Story, Transcription, Persons, Cemetery, Record
+id); an empty part shows nothing. Read only. A value that is not `<metadataxml>`, or does not parse
+as XML, gets none of this — Joined alone, as today — so another program's `_META` is never guessed
+at. Every step is fixed, so a value is always drawn the same way.
+
+That `_META` line: a story of 70 paragraphs, 11 bold passages, 531 words — 5,059 characters as
+written. His fallback ("rewrite that in plain text") is therefore not needed; editing a split value
+as one text stays in section 18.
+
+**3.4 Moving lines by dragging**
+
+Section 18's "moving a line" comes in.
+
+| Part | Rule |
+|---|---|
+| When | Edit on only. Edit off keeps the main frame for reading, and a drag for highlighting text |
+| What moves | the line pressed on and everything under it — its block; a line with nothing under it moves alone |
+| How | press on a row and move a few pixels: the block's rows dim, and a gold line shows where it would land, set in to its level. Near the frame's top or bottom edge the frame scrolls. Release to move it; Esc, or a release where no gold line shows, moves nothing |
+| Where it may land | P1, below |
+| In the file's terms | a move is the block's lines removed where they were and the same lines added where they land — Changes, the Save dialog and the log list it so, and each record it leaves or joins is stamped (10.4). Implemented so, 9.4's walk holds as written: no original line changes its place among the others |
+| Back | a block moved back to exactly where it was is no change at all (as an edit typed back is, 9.1). Undo reverses a move in one step. Restore is not offered on lines moved away: their lines are elsewhere, and a Restore would copy them |
+| Refused | a block holding a line with unreadable bytes (E8), which can be neither edited nor re-encoded; and, by I11, any move the file could not read back as shown. The rules of 9.2 on line endings hold: a moved line keeps its own; the file's last line, moved, takes the file's common one |
+| Ids and pointers | unchanged: an id moves with its record, and every pointer to it still finds it |
+
+| P1 | Where a dragged block may land |
+|---|---|
+| **M1** (recommended) | **Its levels are kept, and it lands only where they fit**: after line A and before line B, when A's level is at least the block's top level − 1 and B's level is at most the block's top level — so it has a parent and takes in nothing below it. Dropped onto a shut row one level above its top line, it goes at the end of that block. Example: `1 BIRT` with its `2 DATE` and `2 PLAC`, dragged from person `@I1@` to `@I2@`: the gold line appears between `@I2@`'s level-1 blocks, and never between a `2 DATE` and a `2 PLAC`. No moved line's text changes |
+| **M2** | **It takes the level of where it lands**, chosen by how far right the pointer is, as in an outliner; the level numbers of its lines are rewritten. Example: a `1 NOTE` dropped under a `1 BIRT` becomes `2 NOTE` |
+
+Nothing is refused for where the checks would object — a record dropped after `0 TRLR`, say: the
+checks say so at once (E4), and Undo reverses it.
+
+**3.5 Collapse all / Expand all**
+
+One button in the top bar, beside Indent. While any record is open it reads **Collapse all**, and
+shuts every record to its `0` line; the type rows stay open, so each record is one row. Then it
+reads **Expand all**, and opens every block and every type. (⌥-click on a type row still shuts
+every type.)
+
+**3.6 What each check means**
+
+In Checks, a click on a check's title shows in the right frame what the check means, why it matters
+and what is usually done about it, under the check's name and code. The ▸ or ▾ at the row's left
+opens or shuts its list of lines — today a click anywhere on the title does that. The texts,
+verbatim; he may change any of them:
+
+| Code | Name | Text |
+|---|---|---|
+| E1 | No level number | This line doesn't begin with a level number, so no program can tell where it belongs in the tree. It is usually the tail of a value that broke onto a line of its own, or text pasted in by mistake. Join it to the line it came from as a CONC or CONT line, or delete it. |
+| E2 | Not level · tag · value | This line begins with a number but isn't in GEDCOM's shape — a level, an optional @id@, a tag, then the value, one space apart. Typical causes: a leading zero (01), no space after the level, an id missing its closing @, or a character in the tag other than a letter, digit or underscore. Other programs may skip it or misread it. Retype it in the right shape. |
+| E3 | Level jumps | This line is more than one level deeper than the line above it — a 3 straight under a 1 — so the level between is missing; or the file doesn't open at level 0. Programs attach such a line wherever they guess. Correct its level, or add the missing line above it. |
+| E4 | No HEAD first / TRLR last | A GEDCOM file opens with 0 HEAD and ends with 0 TRLR, once each. Here one is missing or doubled, or there are records after TRLR, which many programs never read. Move or delete the stray lines. |
+| E5 | Blank line | An empty line, or one of spaces only. The standard allows none, and some programs stop reading at the first. Delete it. |
+| E6 | Id defined twice | Two records carry this same id. A pointer to it could mean either, so programs choose one — often the last — and the other record's links go wrong. Give one of them a new id, and repoint the lines that meant it. |
+| E7 | Points at nothing | This line points at an id that no record in the file has — the record was deleted, or the id mistyped — so the link is lost on import. Point it at the right record, or delete the line. |
+| E8 | Unreadable bytes | This line holds bytes that aren't valid in the file's encoding. They are kept exactly as they are and shown as best they can be. GEDCOM Viewer lets you delete such a line but not edit it, so nothing is changed by a guess. Delete it, or correct it in the program that made the file. |
+| E9 | Header and bytes disagree | The header's 1 CHAR line names one encoding and the file's bytes are in another — or a file that needs a CHAR line has none. GEDCOM Viewer reads the bytes as they are; a program that trusts the header may garble every accented letter. Correct the CHAR line to match the bytes. |
+| N1 | Line break inside the value | This value holds a character that some programs treat as the end of a line, though GEDCOM does not — NEL (U+0085), LS (U+2028) and the like; it's shown marked. A program that breaks there cuts the value in two and can lose the rest of it. Keeping it is usually safe; delete it if the value reads the same without it. |
+| N2 | Control character | This value holds an invisible control character other than a tab, shown marked. It is usually left over from copy and paste, and some programs drop or reject it. Delete it. |
+| N3 | Nothing points at it | No line in the file points at this record — a person in no family, a source no fact cites, a picture attached to no one. That isn't wrong: it may be kept on purpose. But it's often what is left behind after something else was removed. Look before you delete it. |
+| N4 | Over 255 characters | GEDCOM 5.5 allows a line of at most 255 characters; a longer value is meant to continue on CONC lines. A program that keeps to the letter may cut this line short. GEDCOM 7 has no such limit, so this is not noted in version-7 files. |
+| N5 | Leading whitespace | There are spaces or tabs before the level number. The standard allows none, and a strict program may reject the line. Delete them. |
+| N6 | Encoding shown as it can be | This file is in an encoding GEDCOM Viewer can't show as its own letters — ANSEL, for one. Each byte is shown as the character with the same number, so accented letters may look wrong on screen; but every line you don't edit is written back byte for byte. A line you edit may hold plain ASCII only. |
+| N7 | Mixed line endings | Lines in this file end in more than one way — most with LF and some with CR LF, for instance. Every line keeps its own ending when saved, and a new line takes the file's most common one. Most programs don't mind; a few treat it as damage. |
+
+**3.7 Back, where the eye is**
+
+| Part | Rule |
+|---|---|
+| Where | at the top left of the main frame, over the lines, and only while there is somewhere to go back to: **← Back to 41,205**, naming the line it returns to. The top bar's Back button goes |
+| What | as today: a jump remembers the line it left, and Back returns to the last one, then the one before |
+
+**3.8 Surnames in bold, on a toggle**
+
+| Part | Rule |
+|---|---|
+| The toggle | **Bold surnames**, a button beside Indent; off until first pressed; remembered between visits |
+| On | wherever GEDCOM Viewer shows a record's label — the name it makes for the screen (section 8): Records, the right frame, the Delete record dialog, the Save dialog's stamps, a family's label — the part of a name between slashes is bold and loses its slashes. `Jane /Fixture/` reads Jane **Fixture**; `/Fixture/ Jr.` reads **Fixture** Jr.; a name with no slashes reads as written; `//` shows no surname |
+| Never | a line as written. The main frame, the value boxes, Joined, Search, Checks, Changes' before and after, the log and the file keep `/Fixture/`, toggle or not |
+| The filter | the Records filter matches a name as written or as shown: `Fixture` finds it either way |
+
+**3.9 Selecting a link**
+
+A pointer jumps on a click (`.ptr`, `ui.js`), so the first click of a double-click leaves the line
+before the second can highlight anything — what step 16 met.
+
+| Case | Rule |
+|---|---|
+| A web address in a value (`http…`, `https…`, `www.…`) | a double-click selects the whole address, not one word of it |
+| A pointer (`@F12@`) | P3 |
+
+| P3 | Selecting a pointer |
+|---|---|
+| **L1** (recommended) | **⌥ makes a link plain text.** Holding ⌥, a double-click selects the whole pointer, `@` to `@`, and a drag selects across it; nothing jumps. A plain click still jumps at once. ⌥ is already this page's key for the other thing a click can do |
+| **L2** | **A double-click selects; a single click jumps a moment later**: it waits a quarter of a second to see whether a second click follows. Nothing to learn; every jump is a beat slower |
+
+**3.10 A clipped row says so**
+
+He could not tell what step 17 did: the main frame showed the start of a long line, and nothing
+said the rest was elsewhere. A row clipped at `ROW_CHARS` now ends with a muted **… 81,797 more** —
+the characters not shown — and the right frame shows the whole value. Step 17 of the walk now says
+what it tests.
+
+**Tests and the walk.** Each part lands with its tests (section 17, rule 8): the `_META` drawing over
+the fixtures and over each `_META` shape above (written fictional files), with a test that nothing
+is loaded and nothing outside the allowlist survives; a move over every test file at random, each
+checked against a fresh read and undone to the file's own sha256, and M1's (or M2's) landing rule
+at every edge; the copy button with the clipboard refused; the side frames hidden and restored
+across a reload; bold surnames on and off, and no line as written touched by them; the clip's
+count; the two kinds of link selected whole. The phase-5 walk gains a step for each part, in the
+group it belongs to; its steps 1–17 are walked, 18–40 are still to walk.
+
+### Session 3's prompt
+
+```
+Read BUILD-BRIEF.md in this folder, all of it, before anything else; section 17 is how I work,
+and section 19 says where things stand (v0.4, and my third round).
+
+Phase 0: PASS, all eight lines
+F1, change stamps: V1
+F2, commits: C1
+P1, where a dragged block lands: M1
+P2, copy buttons: B
+P3, selecting a link: L1
+
+This is session 3: build the third round (v0.5), then walk me through it. My walk stands at
+step [N]; its findings since step 17: [none / …]. Tell me your plan in a few lines, then start.
+```
