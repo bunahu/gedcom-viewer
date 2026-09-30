@@ -12,6 +12,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.2 | phase 3: `core.js` can edit, undo, find what changed, stamp, and make the bytes of a save |
 | 0.3 | phase 4: editing and saving on the page; Open GEDCOM; the facts line in the owner's order; blocks that open and shut |
 | 0.4 | the owner's second round: the name GEDCOM Viewer; Edit on and off, removed lines shown and restored; a row between record types, each type shut at once; Go to Line… takes a range; the facts behind the file's name, each going to its line; Add inside and Add after |
+| 0.4.1 | the brief and the README only: the owner's walk brought to 0.4, the page opened by command, and his third round written — to build as 0.5 |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).

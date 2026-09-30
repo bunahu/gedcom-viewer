@@ -439,7 +439,7 @@ a repo (I9).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│ GEDCOM Viewer 0.4 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy Back [Go to Line…] │
+│ GEDCOM Viewer 0.4.1 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy Back [Go to Line…] │
 │ (a click on the name: GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com… · sha256) │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │ People 2,345   Media 1,234   Families 1,098   Sources 765   _MTTAG 23   Repositories 7   …   │
@@ -721,6 +721,11 @@ bare page with nothing working and nothing said. The page could carry a line of 
 Raised 2026-09-29, for the owner to rule, with the third round: ⌥↑ and ⌥↓ to move the selected
 block past the block above or below it — the short moves, without a drag across a long file.
 
+Raised by the owner on 2026-09-30, holding 3.4: a table of which tag may sit under which, taken
+from the standard (5.5.1 and 7.0) — the validation that would let a moved block land in every legal
+place. The same table could check a file's own lines against the standard (a `BIRT` under a `FAM`,
+say), which section 7 does not do today: its checks are structural only.
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
@@ -952,6 +957,9 @@ double-click that edits, and a highlight that holds. Built as section 11 now say
 
 ### The owner's third round (2026-09-29, from walk steps 1–17): v0.5
 
+0.4.1 (2026-09-30) is this brief and the README, nothing else: the walk brought to 0.4, the page
+opened by command, and this round written. The round builds as 0.5.
+
 Steps 1–17 of the phase-5 walk passed; of step 17 he asked what it tested (3.10). What he asked
 for from them, in his words:
 
@@ -960,7 +968,7 @@ for from them, in his words:
 | 1 | "minimize the sidebars — left and right — and … hover-scroll left and right. This came up when I tried to intuitively read the _META tag starting on Line 202,541 and couldn't." | 3.1 |
 | 2 | "the 'Joined' _META I would like to be able to copy and paste, with the one-click copy button/icon you use here in Claude Mac" | 3.2 |
 | 3 | "That whole _META block — I'd like to see it interpreted correctly in the right sidebar (i.e. rich text in a box). If that's not deterministically doable, then skip it — I'd want to be able to rewrite that in plain text." | 3.3 |
-| 4 | "drag and drop lines — and blocks — in the main panel" | 3.4 |
+| 4 | "drag and drop lines — and blocks — in the main panel" | 3.4 — held |
 | 5 | "There should be a Collapse All / Expand All button." | 3.5 |
 | 6 | "helper text for the checks on 4 in the right sidebar, when their title is clicked on in the left sidebar" | 3.6 |
 | 7 | "The back button should be somewhere more prominent, and nearer the middle frame if possible." (step 12) | 3.7 |
@@ -968,9 +976,8 @@ for from them, in his words:
 | 9 | "16 worked except for a highlighted word - considering how to highlight a link easily, when needed." | 3.9 |
 | 10 | "17 worked, I think? Not sure the goal of the main frame being clipped, Not sure what 17 did." | 3.10 |
 
-Three picks are his, stated in the opening prompt: **P1** (3.4, where a dragged block may land),
-**P2** (3.2, which boxes carry a copy button) and **P3** (3.9, selecting a pointer). No pick
-stated → M1, B and L1, and say so.
+His picks, made on 2026-09-30: **P2 = B** (3.2, every box of text carries a copy button) and
+**P3 = L1** (3.9, ⌥ makes a link plain text). P1 went with 3.4, which he held.
 
 **3.1 Hide a side frame; scroll the lines sideways**
 
@@ -993,7 +1000,7 @@ and a notice says so.
 | P2 | Which boxes |
 |---|---|
 | **A** | Joined only — what he named |
-| **B** (recommended) | every box of text in the right frame: the line's value, Was, Joined, and each of 3.3's parts — one control, the same everywhere |
+| **B** — ruled by the owner, 2026-09-30 | every box of text in the right frame: the line's value, Was, Joined, and each of 3.3's parts — one control, the same everywhere |
 
 **3.3 The `_META` drawn as it reads**
 
@@ -1019,28 +1026,33 @@ That `_META` line: a story of 70 paragraphs, 11 bold passages, 531 words — 5,0
 written. His fallback ("rewrite that in plain text") is therefore not needed; editing a split value
 as one text stays in section 18.
 
-**3.4 Moving lines by dragging**
+**3.4 Moving lines and blocks by dragging — held (the owner, 2026-09-30)**
 
-Section 18's "moving a line" comes in.
+His words: "P1: Hold on this for right now. I want to allow all legal places for a line to land,
+but that requires validation we haven't done yet. e.g., 1 BIRT could land under any 0 INDI
+places, but a NOTE could change depth validly. Also, I want to be able to drag and drop whole
+blocks (e.g. reorder _MTCAT boxes)."
+
+So 3.4 is not in 0.5, and P1 (M1 or M2) is withdrawn. When it comes:
 
 | Part | Rule |
 |---|---|
+| Where a block may land | every place the GEDCOM standard allows its tag: under any parent whose structure takes it, at the level that parent sets — a `1 BIRT` under any `0 INDI`; a `NOTE` at any depth where a NOTE is allowed, its level numbers rewritten to fit. That needs a table of which tag may sit under which, taken from the standard (5.5.1 and 7.0): a validation GEDCOM Viewer does not have yet (section 18) |
+| What moves | a line and everything under it — a block, up to a whole record: the six `_MTCAT` records reordered, say |
 | When | Edit on only. Edit off keeps the main frame for reading, and a drag for highlighting text |
-| What moves | the line pressed on and everything under it — its block; a line with nothing under it moves alone |
 | How | press on a row and move a few pixels: the block's rows dim, and a gold line shows where it would land, set in to its level. Near the frame's top or bottom edge the frame scrolls. Release to move it; Esc, or a release where no gold line shows, moves nothing |
-| Where it may land | P1, below |
 | In the file's terms | a move is the block's lines removed where they were and the same lines added where they land — Changes, the Save dialog and the log list it so, and each record it leaves or joins is stamped (10.4). Implemented so, 9.4's walk holds as written: no original line changes its place among the others |
 | Back | a block moved back to exactly where it was is no change at all (as an edit typed back is, 9.1). Undo reverses a move in one step. Restore is not offered on lines moved away: their lines are elsewhere, and a Restore would copy them |
 | Refused | a block holding a line with unreadable bytes (E8), which can be neither edited nor re-encoded; and, by I11, any move the file could not read back as shown. The rules of 9.2 on line endings hold: a moved line keeps its own; the file's last line, moved, takes the file's common one |
 | Ids and pointers | unchanged: an id moves with its record, and every pointer to it still finds it |
 
-| P1 | Where a dragged block may land |
-|---|---|
-| **M1** (recommended) | **Its levels are kept, and it lands only where they fit**: after line A and before line B, when A's level is at least the block's top level − 1 and B's level is at most the block's top level — so it has a parent and takes in nothing below it. Dropped onto a shut row one level above its top line, it goes at the end of that block. Example: `1 BIRT` with its `2 DATE` and `2 PLAC`, dragged from person `@I1@` to `@I2@`: the gold line appears between `@I2@`'s level-1 blocks, and never between a `2 DATE` and a `2 PLAC`. No moved line's text changes |
-| **M2** | **It takes the level of where it lands**, chosen by how far right the pointer is, as in an outliner; the level numbers of its lines are rewritten. Example: a `1 NOTE` dropped under a `1 BIRT` becomes `2 NOTE` |
+The rows after the first two were written with the round, and stand for when it comes.
 
-Nothing is refused for where the checks would object — a record dropped after `0 TRLR`, say: the
-checks say so at once (E4), and Undo reverses it.
+Put to him, awaiting his word: a move among siblings needs no new validation — a block reordered
+under its own parent keeps every tag under a parent that took it, and records may stand in any
+order between `HEAD` and `TRLR`. That part (the `_MTCAT` records reordered, a person's facts put
+in order) could come in 0.5 while moves to another parent wait for the table. Held with the rest
+unless he says so.
 
 **3.5 Collapse all / Expand all**
 
@@ -1103,7 +1115,7 @@ before the second can highlight anything — what step 16 met.
 
 | P3 | Selecting a pointer |
 |---|---|
-| **L1** (recommended) | **⌥ makes a link plain text.** Holding ⌥, a double-click selects the whole pointer, `@` to `@`, and a drag selects across it; nothing jumps. A plain click still jumps at once. ⌥ is already this page's key for the other thing a click can do |
+| **L1** — ruled by the owner, 2026-09-30 | **⌥ makes a link plain text.** Holding ⌥, a double-click selects the whole pointer, `@` to `@`, and a drag selects across it; nothing jumps. A plain click still jumps at once. ⌥ is already this page's key for the other thing a click can do |
 | **L2** | **A double-click selects; a single click jumps a moment later**: it waits a quarter of a second to see whether a second click follows. Nothing to learn; every jump is a beat slower |
 
 **3.10 A clipped row says so**
@@ -1115,10 +1127,8 @@ what it tests.
 
 **Tests and the walk.** Each part lands with its tests (section 17, rule 8): the `_META` drawing over
 the fixtures and over each `_META` shape above (written fictional files), with a test that nothing
-is loaded and nothing outside the allowlist survives; a move over every test file at random, each
-checked against a fresh read and undone to the file's own sha256, and M1's (or M2's) landing rule
-at every edge; the copy button with the clipboard refused; the side frames hidden and restored
-across a reload; bold surnames on and off, and no line as written touched by them; the clip's
+is loaded and nothing outside the allowlist survives; the copy button with the clipboard refused;
+the side frames hidden and restored across a reload; bold surnames on and off, and no line as written touched by them; the clip's
 count; the two kinds of link selected whole. The phase-5 walk gains a step for each part, in the
 group it belongs to; its steps 1–17 are walked, 18–40 are still to walk.
 
@@ -1126,14 +1136,14 @@ group it belongs to; its steps 1–17 are walked, 18–40 are still to walk.
 
 ```
 Read BUILD-BRIEF.md in this folder, all of it, before anything else; section 17 is how I work,
-and section 19 says where things stand (v0.4, and my third round).
+and section 19 says where things stand (v0.4.1, and my third round).
 
 Phase 0: PASS, all eight lines
 F1, change stamps: V1
 F2, commits: C1
-P1, where a dragged block lands: M1
 P2, copy buttons: B
 P3, selecting a link: L1
+3.4, dragging: held
 
 This is session 3: build the third round (v0.5), then walk me through it. My walk stands at
 step [N]; its findings since step 17: [none / …]. Tell me your plan in a few lines, then start.
