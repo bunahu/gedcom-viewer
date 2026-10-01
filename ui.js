@@ -90,6 +90,7 @@
     hiddenLeft: store.get('hideLeft', false) === true,     // 3.1: the left bar hidden
     hiddenRight: store.get('hideRight', false) === true,   // 3.1: the right frame hidden
     help: null,                       // 3.6: the check whose meaning the right frame shows
+    tagsOrder: [0, 1, 2, 3].includes(store.get('tagsOrder', 0)) ? store.get('tagsOrder', 0) : 0,   // the Tags list's order: by count, by count rising, A–Z, Z–A
     maxLevel: 0,                      // the deepest level in the file, for the grid's width
     editing: false,                   // Edit: off when a file opens
     folds: new Set(),                 // the lines shut, by their number in the document's order
@@ -181,25 +182,31 @@
   // the line: one space between them, as the shape requires. A line that did not parse is one
   // part, shown as written.
   function partsOf(m, i) {
-    const t = m.texts[i];
-    if (m.level[i] < 0) return [[0, t.length, m.kind[i] === C.KIND.BLANK ? '' : 'raw']];
+    const shape = { lead: m.lead[i], level: m.level[i], xref: m.xref[i], tag: m.tag[i], valAt: m.valAt[i], blank: m.kind[i] === C.KIND.BLANK };
+    return partsFromShape(m.texts[i], shape, C.isPointerLine(m, i));
+  }
+
+  // The same, for a line as typed (its shape from core.lineShape), while the right frame follows
+  // the typing.
+  function partsFromShape(t, s, pointer) {
+    if (s.level < 0) return [[0, t.length, s.blank ? '' : 'raw']];
     const out = [];
-    let p = m.lead[i];
+    let p = s.lead;
     if (p) out.push([0, p, '']);
     const lvEnd = t.indexOf(' ', p);
     out.push([p, lvEnd, 'lv']);
     p = lvEnd;
-    const x = m.xref[i];
-    if (x !== null) {
-      out.push([p, p + 1, ''], [p + 1, p + 1 + x.length, 'id']);
-      p += 1 + x.length;
+    if (s.xref !== null) {
+      out.push([p, p + 1, ''], [p + 1, p + 1 + s.xref.length, 'id']);
+      p += 1 + s.xref.length;
     }
-    const tg = m.tag[i];
-    out.push([p, p + 1, ''], [p + 1, p + 1 + tg.length, 'tg']);
-    p += 1 + tg.length;
-    if (m.valAt[i] >= 0) out.push([p, m.valAt[i], ''], [m.valAt[i], t.length, C.isPointerLine(m, i) ? 'ptr' : 'val']);
+    out.push([p, p + 1, ''], [p + 1, p + 1 + s.tag.length, 'tg']);
+    p += 1 + s.tag.length;
+    if (s.valAt >= 0) out.push([p, s.valAt, ''], [s.valAt, t.length, pointer ? 'ptr' : 'val']);
     return out;
   }
+
+  const isPointerValue = (v) => v !== '@VOID@' && ID_WHOLE.test(v);
 
   // The parts into `parent`, up to `limit` characters, with the ranges in `marks` highlighted.
   function putParts(parent, t, parts, limit, marks) {
@@ -535,13 +542,15 @@
 
   // The part of a row that stays at the left edge while the grid scrolls sideways (3.1): the line
   // number, the mark, and the indent with the fold.
-  function fixedPart(ln, markClass, lv, kids, shut) {
+  function fixedPart(ln, markClass, lv, kids, shut, change) {
     const fx = el('span', 'fx');
     fx.appendChild(el('span', 'ln', ln));
     fx.appendChild(el('span', markClass));
+    fx.appendChild(el('span', change ? `cg is-${change}` : 'cg'));   // the change dot, beside the finding's
     fx.appendChild(foldPart(lv, kids, shut));
     return fx;
   }
+  const CHANGE_NAMES = ['', 'changed', 'added', 'moved'];
 
   // 3.10 — the text of a row, up to ROW_CHARS characters, and then how many more the line holds.
   function putClipped(row, tx, text, parts, marks) {
@@ -557,7 +566,7 @@
     const m = state.m;
     if (!m) { grid.setWidth(''); return; }
     const indent = state.indent ? Math.min(state.maxLevel, MAX_INDENT) * state.indentWidth : 0;
-    const chars = fmt(m.n).length + 1 + 2 + 2 + indent + Math.min(m.longest, ROW_CHARS) + (m.longest > ROW_CHARS ? 20 : 2);
+    const chars = fmt(m.n).length + 1 + 2 + 2 + 2 + indent + Math.min(m.longest, ROW_CHARS) + (m.longest > ROW_CHARS ? 20 : 2);
     grid.setWidth(`max(100%, ${chars}ch)`);
   }
 
@@ -606,7 +615,7 @@
     const marks = m.findings.marks[i];
     const kids = hasKids(i);
     const shut = kids && isShut(i);
-    const fx = fixedPart(fmt(i + 1), marks & 1 ? 'mk is-error' : marks & 2 ? 'mk is-note' : 'mk', m.level[i], kids, shut);
+    const fx = fixedPart(fmt(i + 1), marks & 1 ? 'mk is-error' : marks & 2 ? 'mk is-note' : 'mk', m.level[i], kids, shut, CHANGE_NAMES[state.marks.status[i]]);
     row.appendChild(fx);
     if (editing) {
       row.appendChild(state.edit.input);
@@ -626,7 +635,7 @@
     if (x.kind === 'section') {
       const sec = x.sec;
       const shut = state.shutSections.has(sec.tag);
-      row.appendChild(fixedPart('', 'mk', 0, true, shut));
+      row.appendChild(fixedPart('', 'mk', 0, true, shut, ''));
       const tx = el('span', 'tx');
       tx.appendChild(el('span', 'tg', sec.tag));
       if (RECORD_NAMES[sec.tag]) tx.appendChild(el('span', 'sec-name', ` ${RECORD_NAMES[sec.tag]}`));
@@ -636,14 +645,14 @@
       return;
     }
     const was = x.run.lines[x.k].was;                                // a removed line: its number as saved, and its words
-    row.appendChild(fixedPart(fmt(x.run.before + x.k + 1), 'mk', levelOfText(was), false, false));
+    row.appendChild(fixedPart(fmt(x.run.before + x.k + 1), 'mk', levelOfText(was), false, false, ''));
     putClipped(row, el('span', 'tx'), was, null, []);
   }
 
   function paintAdding(row) {
     if (state.edit.input.parentNode === row) return;
     row.textContent = '';
-    const fx = fixedPart('+', 'mk', state.edit.level === null ? 0 : state.edit.level, false, false);
+    const fx = fixedPart('+', 'mk', state.edit.level === null ? 0 : state.edit.level, false, false, 'added');
     row.appendChild(fx);
     row.appendChild(state.edit.input);
     state.edit.input.style.width = `${Math.max(120, $('grid').clientWidth - fx.offsetWidth - 12)}px`;
@@ -665,6 +674,7 @@
     state.sel = to;
     state.pick = null;
     state.help = null;
+    if (how === 'jump' || how === 'step') $('grid').scrollLeft = 0;     // a jump shows the line's start
     grid.show(rowOfLine(to), how === 'jump' || how === 'step');
     grid.restyle();
     renderDetail();
@@ -709,13 +719,13 @@
     if (line !== undefined) select(line, 'step');
   }
 
-  // 3.7 — Back sits over the lines at the main frame's top left, naming the line it returns to,
-  // only while there is one.
+  // 3.7 — Back sits in the strip above the lines, at the main frame's top left, naming the line
+  // it returns to, only while there is one; Top, beside it, is always there.
   function updateBack() {
     const b = $('back');
     b.hidden = state.back.length === 0;
     b.textContent = state.back.length ? `← Back to ${fmt(state.back[state.back.length - 1] + 1)}` : '← Back';
-    b.closest('.middle').classList.toggle('has-back', !b.hidden);   // the strip above the lines
+    $('top').disabled = !state.m;
   }
 
   $('grid').addEventListener('click', (e) => {
@@ -839,6 +849,9 @@
       if (!state.edit || state.edit.input !== input) return;
       if (pressing) keepAfterPress = state.edit;                   // kept once the press's click has landed
       else commitEdit(true);
+    });
+    input.addEventListener('input', () => {                        // the right frame follows the typing
+      if (state.edit && state.edit.input === input) renderDetail();
     });
     return input;
   }
@@ -1125,7 +1138,6 @@
   function updateBar() {
     const doc = state.doc;
     const changed = !!doc && C.isChanged(doc);
-    $('open').hidden = !!doc;                                       // with a file open: ⌘O, a drop, or Open another…
     $('edit').disabled = !doc;
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
     $('fold-all').hidden = !doc;
@@ -1282,14 +1294,21 @@
     }
   }
 
+  // Each part under the name the file gives it.
+  function named(d, name) {
+    const sec = section(d, name);
+    sec.firstChild.classList.add('mono');
+    return sec;
+  }
+
   function renderMeta(d, parts) {
     if (parts.story) {
       const card = el('div', 'detail-card meta-story');
       buildNodes(card, parts.story);
       copyButton(card, () => card.innerText);
-      section(d, 'Story').appendChild(card);
+      named(d, 'content').appendChild(card);
     }
-    if (parts.transcription) section(d, 'Transcription').appendChild(textBox('detail-card detail-value meta-text', parts.transcription));
+    if (parts.transcription) named(d, 'transcription').appendChild(textBox('detail-card detail-value meta-text', parts.transcription));
     if (parts.persons.length) {
       const table = el('table', 'persons');
       const head = el('tr');
@@ -1303,10 +1322,10 @@
       const card = el('div', 'detail-card');
       card.appendChild(table);
       copyButton(card, () => table.innerText);
-      section(d, parts.persons.length === 1 ? 'Person' : 'Persons').appendChild(card);
+      named(d, 'personas').appendChild(card);
     }
-    if (parts.cemetery) section(d, 'Cemetery').appendChild(textBox('detail-value meta-text', parts.cemetery));
-    if (parts.recordId) section(d, 'Record id').appendChild(textBox('detail-value meta-text', parts.recordId));
+    if (parts.cemetery) named(d, 'cemetery').appendChild(textBox('detail-value meta-text', parts.cemetery));
+    if (parts.recordId) named(d, 'record_source_gid').appendChild(textBox('detail-value meta-text', parts.recordId));
   }
 
   function actionButton(parent, label, title, act, disabled) {
@@ -1345,8 +1364,21 @@
     }
     const i = state.sel;
     if (!m || i < 0 || i >= m.n) return;
-    const t = m.texts[i];
-    const parts = partsOf(m, i);
+    const typing = state.edit && state.edit.input ? state.edit : null;
+    if (typing && typing.kind !== 'edit') {                          // a new line being typed, shown first
+      const sec = section(d, typing.kind === 'inside' ? 'New line, inside' : 'New line, after');
+      const typed = typing.input.value;
+      const box = el('div', 'detail-value');
+      putParts(box, typed, partsFromShape(typed, C.lineShape(typed), false), typed.length, []);
+      sec.appendChild(box);
+    }
+    const live = !!typing && typing.kind === 'edit' && typing.pos === i;   // the line itself as it is typed
+    const t = live ? typing.input.value : m.texts[i];
+    const shape = live ? C.lineShape(t) : null;
+    const level = live ? shape.level : m.level[i];
+    const valAt = live ? shape.valAt : m.valAt[i];
+    const pointer = live ? valAt >= 0 && isPointerValue(t.slice(valAt)) : C.isPointerLine(m, i);
+    const parts = live ? partsFromShape(t, shape, pointer) : partsOf(m, i);
 
     if (state.editing) {                                             // what can be done to it: with Edit on
       const acts = el('div', 'detail-actions');
@@ -1360,15 +1392,15 @@
       d.appendChild(acts);
     }
 
-    if (m.level[i] >= 0) {
-      const hasValue = m.valAt[i] >= 0;
+    if (level >= 0) {
+      const hasValue = valAt >= 0;
       const head = el('div', 'detail-head');
       putParts(head, t, hasValue ? parts.slice(0, -2) : parts, t.length, []);
       d.appendChild(head);
-      if (hasValue && m.valAt[i] < t.length) {
+      if (hasValue && valAt < t.length) {
         const box = el('div', 'detail-value');
-        const value = t.slice(m.valAt[i]);
-        if (C.isPointerLine(m, i)) {
+        const value = t.slice(valAt);
+        if (pointer) {
           const link = el('span', 'ptr');
           putText(link, value);
           link.addEventListener('click', () => jumpToId(value));
@@ -1500,9 +1532,9 @@
         f.appendChild(x);
       });
     });
-    const another = el('button', 'fact is-link open-another', 'Open another GEDCOM…');
+    const another = el('button', 'fact is-link open-another', 'Upload another GEDCOM…');
     another.type = 'button';
-    another.title = '⌘O, or drop a file on the page';
+    another.title = '⌘O, or drop a file on the page. Nothing leaves the machine: the file is read here.';
     another.addEventListener('click', pickFile);
     f.appendChild(another);
   }
@@ -1661,10 +1693,23 @@
     row.appendChild(el('span', 'end', fmt(n)));
   });
 
+  // The Tags list in one of four orders, the button beside it stepping to the next: by count,
+  // largest first; by count, smallest first; A–Z; Z–A.
+  const TAG_ORDERS = [
+    (a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1),
+    (a, b) => (a[1] - b[1]) || (a[0] < b[0] ? -1 : 1),
+    (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
+    (a, b) => (a[0] > b[0] ? -1 : a[0] < b[0] ? 1 : 0),
+  ];
   function renderTags(keepScroll) {
-    state.tagRows = [...state.m.tagCounts.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
+    state.tagRows = [...state.m.tagCounts.entries()].sort(TAG_ORDERS[state.tagsOrder]);
     tagsList.setCount(state.tagRows.length, keepScroll);
   }
+  $('tags-order').addEventListener('click', () => {
+    state.tagsOrder = (state.tagsOrder + 1) % TAG_ORDERS.length;
+    store.set('tagsOrder', state.tagsOrder);
+    if (state.m) renderTags(false);
+  });
 
   // -- search -----------------------------------------------------------------------------------
 
@@ -2067,6 +2112,7 @@
     $('goto').value = '';
     state.gotoApplied = '';
     updateGoto();
+    $('grid').scrollLeft = 0;
     state.recordRows = [];
     state.checkRows = [];
     state.tagRows = [];
@@ -2179,7 +2225,6 @@
     await openFile(await handle.getFile(), handle);
   }
 
-  $('open').addEventListener('click', pickFile);
   $('open-empty').addEventListener('click', pickFile);
   $('file-input').addEventListener('change', () => {
     const file = $('file-input').files[0];
@@ -2235,12 +2280,22 @@
   function applyTheme() {
     root.classList.remove('dark', 'sunset');
     if (state.theme !== 'light') root.classList.add(state.theme);
-    $('theme').title = state.theme;
+    for (const name of THEMES) $(`theme-${name}`).setAttribute('aria-pressed', String(name === state.theme));
   }
-  $('theme').addEventListener('click', () => {
-    state.theme = THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length];
-    store.set('theme', state.theme);
-    applyTheme();
+  for (const name of THEMES) {
+    $(`theme-${name}`).addEventListener('click', () => {
+      state.theme = name;
+      store.set('theme', state.theme);
+      applyTheme();
+    });
+  }
+  // Settings opens under its button; a click elsewhere, or Esc, closes it.
+  $('settings-menu').addEventListener('toggle', (e) => {
+    if (e.newState !== 'open') return;
+    const menu = $('settings-menu');
+    const b = $('settings').getBoundingClientRect();
+    menu.style.top = `${Math.round(b.bottom + 4)}px`;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(b.left, window.innerWidth - menu.offsetWidth - 8)))}px`;
   });
 
   function applyIndent() {
@@ -2264,13 +2319,14 @@
     grid.refresh();
   });
 
-  // 3.5 — Collapse all shuts every record to its first line (the type rows stay as they are);
-  // Expand all opens every block and every type. The button reads as what it will do.
+  // 3.5 — Collapse all shuts every record to its first line and every type to its row; Expand all
+  // opens every block and every type. The button reads as what it will do.
   function updateFoldAll() {
     const m = state.m;
     if (!m) return;
     let open = false;
-    for (const i of m.records) if (hasKids(i) && !isShut(i)) { open = true; break; }
+    for (const sec of state.sections || []) if (sec.index > 0 && !state.shutSections.has(sec.tag)) { open = true; break; }
+    if (!open) for (const i of m.records) if (hasKids(i) && !isShut(i)) { open = true; break; }
     $('fold-all').textContent = open ? 'Collapse all' : 'Expand all';
   }
   $('fold-all').addEventListener('click', () => {
@@ -2278,6 +2334,7 @@
     if (!m) return;
     if ($('fold-all').textContent === 'Collapse all') {
       for (const i of m.records) if (hasKids(i)) setFold(i, true);
+      for (const sec of state.sections || []) if (sec.index > 0) state.shutSections.add(sec.tag);
     } else {
       state.folds = new Set();
       state.shutSections = new Set();
@@ -2302,15 +2359,17 @@
     applySurnames();
   });
 
-  // 3.1 — each split bar's tab hides the frame beside it, and brings it back; a double-click on
-  // the bar does the same. Remembered.
+  // 3.1 — the two icons at the ends of the top bar hide the left bar and the right frame, and
+  // bring them back. Remembered.
   function applyFrames() {
     $('work').classList.toggle('left-hidden', state.hiddenLeft);
     $('work').classList.toggle('right-hidden', state.hiddenRight);
-    $('hide-left').textContent = state.hiddenLeft ? '›' : '‹';
-    $('hide-left').title = state.hiddenLeft ? 'Show the left bar' : 'Hide the left bar';
-    $('hide-right').textContent = state.hiddenRight ? '‹' : '›';
-    $('hide-right').title = state.hiddenRight ? 'Show the right frame' : 'Hide the right frame';
+    for (const [id, hidden, name] of [['hide-left', state.hiddenLeft, 'left bar'], ['hide-right', state.hiddenRight, 'right frame']]) {
+      const b = $(id);
+      b.setAttribute('aria-pressed', String(hidden));
+      b.title = `${hidden ? 'Show' : 'Hide'} ${name}`;
+      b.setAttribute('aria-label', b.title);
+    }
   }
   function toggleFrame(side) {
     if (side === 'left') state.hiddenLeft = !state.hiddenLeft; else state.hiddenRight = !state.hiddenRight;
@@ -2320,8 +2379,14 @@
   }
   $('hide-left').addEventListener('click', () => toggleFrame('left'));
   $('hide-right').addEventListener('click', () => toggleFrame('right'));
-  $('split-left').addEventListener('dblclick', (e) => { if (!e.target.closest('.split-tab')) toggleFrame('left'); });
-  $('split-right').addEventListener('dblclick', (e) => { if (!e.target.closest('.split-tab')) toggleFrame('right'); });
+  // Top: line 1, as a jump, so Back returns; the lines at their left edge
+  $('top').addEventListener('click', () => { if (state.m) select(0, 'jump'); $('grid').focus(); });
+  // scrolled sideways, the number column casts a shade on what goes under it
+  $('grid').addEventListener('scroll', () => {
+    const g = $('grid');
+    const aside = g.scrollLeft > 0;
+    if (aside !== g.classList.contains('is-aside')) g.classList.toggle('is-aside', aside);
+  }, { passive: true });
 
   $('back').addEventListener('click', goBack);
   $('save').addEventListener('click', doSave);
@@ -2477,7 +2542,6 @@
   // The side panel and the right pane are dragged wider or narrower by the bars beside the grid.
   function dragSplit(handle, prop, sign) {
     handle.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.split-tab')) return;
       if ((prop === '--left-width' && state.hiddenLeft) || (prop === '--right-width' && state.hiddenRight)) return;
       e.preventDefault();
       handle.setPointerCapture(e.pointerId);
@@ -2560,6 +2624,7 @@
       moveBy(moves[key]);
     } else if (key === 'Home') {
       e.preventDefault();
+      $('grid').scrollLeft = 0;
       moveBy(-state.rows.length);
     } else if (key === 'End') {
       e.preventDefault();
@@ -2601,15 +2666,20 @@
   let scrollTimer = 0;
 
   // The row at whose top edge the block would land before line `to`: the first row at or after
-  // `to` — a section's row for its first record — or the row after the last, for the end.
-  function edgeRows(tos) {
+  // `to`, a type's own row included, or the row after the last for the end. For a record dragged
+  // to the top of its own type (`own` is that type's first line), its type's row is passed over,
+  // so the gold line sits under the row, never above it; at the next type's row it stays, as the
+  // last edge among the record's own kind.
+  function edgeRows(tos, own) {
     const rows = state.rows;
     const out = new Map();
     let k = 0;
     for (const to of tos) {
       while (k < rows.length) {
         const v = rows[k];
-        const at = v >= 0 ? v : v <= -2 && extraOf(v).kind === 'section' ? extraOf(v).sec.from : -1;
+        let at = -1;
+        if (v >= 0) at = v;
+        else if (v <= -2 && extraOf(v).kind === 'section' && extraOf(v).sec.from !== own) at = extraOf(v).sec.from;
         if (at >= to) break;
         k += 1;
       }
@@ -2637,7 +2707,8 @@
       notice('This block has nowhere else to go among its siblings.', 'error');
       return false;
     }
-    const rows = edgeRows([...tos, d.from, d.end].sort((a, b) => a - b));
+    const ownSection = !d.section && state.sections && state.m.level[d.from] === 0 ? state.sections.find((s) => d.from >= s.from && d.from < s.to).from : -1;
+    const rows = edgeRows([...tos, d.from, d.end].sort((a, b) => a - b), ownSection);
     d.edges = tos.map((to) => ({ to, row: rows.get(to) }));
     d.stay = [rows.get(d.from), rows.get(d.end)];                    // its own edges: no move
     d.started = true;

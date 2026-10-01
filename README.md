@@ -14,6 +14,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.4 | the owner's second round: the name GEDCOM Viewer; Edit on and off, removed lines shown and restored; a row between record types, each type shut at once; Go to Line… takes a range; the facts behind the file's name, each going to its line; Add inside and Add after |
 | 0.4.1 | the brief and the README only: the owner's walk brought to 0.4, the page opened by command, and his third round written — to build as 0.5 |
 | 0.5 | the owner's third round: the side frames hidden by their tabs and the lines scrolled sideways; a copy button on every box of text; a `_META` drawn as it reads; blocks, records and sections dragged among their siblings; Collapse all / Expand all; what each check means; Back over the lines; Bold surnames; a link selected whole; a clipped row's count; E for Edit |
+| 0.5.1 | the first half of the owner's fourth round, from his walk of 0.5: the side frames hidden by icons in the top bar, eased; a strip above the lines with Top, Back and Collapse all, which shuts the types too; Settings holding Theme, Indent and Bold surnames; Upload GEDCOM; the Tags list's order stepped by a button; a change dot in the mark column; the right frame following the typing; a `_META` under the names the file gives its parts; a shade when the lines are scrolled sideways, and a jump bringing them back; the gold line under a type's row. The editor and the saving of the round wait for his picks (the brief, section 19) |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -22,11 +23,11 @@ keep traces of that.
 
 | The frames | What is in them |
 |---|---|
-| the top bar | the name, the file's name (a click shows its facts under it), the buttons, Go to Line… |
+| the top bar | an icon that hides the left bar; the name; the file's name (a click shows its facts under it); Edit, Undo, Redo, Save, Save a copy; Go to Line…; Settings; an icon that hides the right frame |
 | the counts bar | People 2,345 · Families … — a click lists that type in Records |
-| the left bar | Records · Checks · Changes · Search · Tags; the ‹ on its bar hides it |
-| the main frame | the lines; **← Back to …** over them, while there is somewhere to go back to |
-| the right frame | the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings; a `_META` drawn as it reads; what a check means; the › on its bar hides it |
+| the left bar | Records · Checks · Changes · Search · Tags |
+| the main frame | a strip — **↑ Top**, **← Back to …** while there is somewhere to go back to, **Collapse all** / **Expand all** — and the lines under it |
+| the right frame | the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings; a `_META` drawn as it reads; what a check means |
 
 ## Open it
 
@@ -34,8 +35,8 @@ keep traces of that.
   or, in Chrome, File → Open File… and pick it. Double-clicking the file opens the default browser
   instead. Keep `index.html` in this folder: it loads `style.css`, `core.js`, `save.js` and `ui.js`
   from beside it, and anywhere else it opens as a bare page.
-- Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
-  opened with ⌘O, by dropping it, or with **Open another GEDCOM…** among the file's facts.
+- Then **Upload GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
+  opened with ⌘O, by dropping it, or with **Upload another GEDCOM…** among the file's facts.
 - Other browsers can read, check and edit a file too. Save, in place, needs Chrome; elsewhere Save
   a copy downloads the copy and its log.
 
@@ -56,25 +57,30 @@ keep traces of that.
 | ⌘F | Search |
 | ⌘L | Go to Line… — a line number, or two (105-117) for those lines alone, until × |
 | Esc | leave a box for the lines; let go of a drag |
-| a two-finger swipe, or ⇧ and the wheel, over the lines | scrolls them sideways, to the end of the longest line; the line numbers stay put |
+| a two-finger swipe, or ⇧ and the wheel, over the lines | scrolls them sideways, to the end of the longest line; the line numbers stay put and cast a shade on what goes under them. Home, a jump and Top bring the lines back to their left edge |
 
-**Collapse all** shuts every record to its first line (the type rows stay open); it then reads
-**Expand all**, which opens every block and every type. **Bold surnames** shows the part of a
-name between slashes in bold, without the slashes, wherever a record is named — Records, the
-right frame, the dialogs — and never in a line as written. The **‹** and **›** tabs on the bars
-beside the lines hide the left bar and the right frame, and bring them back; a double-click on
-a bar does the same. In **Checks**, a click on a check's title says in the right frame what it
-means and what is usually done; the ▸ ▾ at its left opens and shuts its lines. Every box of
-text in the right frame has a **copy** button at its top right. A row longer than 2,000
-characters ends with **… 81,797 more**, the count not shown; the right frame shows it whole.
-A `_META` (Ancestry's Find a Grave block) is drawn as it reads, above Joined: its story in web
-formatting, its transcription, its persons as a table, the cemetery and the record id — read
-only, with nothing loaded from anywhere.
+The strip above the lines holds **↑ Top** (line 1, as a jump, so Back returns), **← Back to …**
+while there is somewhere to go back to, and **Collapse all**, which shuts every record to its
+first line and every type to its row; it then reads **Expand all**, which opens every block and
+every type. **Settings**, in the top bar, holds the theme (Light · Sunset · Dark), Indent and its
+width, and **Bold surnames**, which shows the part of a name between slashes in bold, without
+the slashes, wherever a record is named — Records, the right frame, the dialogs — and never in a
+line as written. The two icons at the ends of the top bar hide the left bar and the right frame,
+and bring them back. In **Checks**, a click on a check's title says in the right frame what it
+means and what is usually done; the ▸ ▾ at its left opens and shuts its lines. In **Tags**, the
+button above the list steps through its orders: by count, by count rising, A–Z, Z–A. Every box
+of text in the right frame has a **copy** button at its top right. A row longer than 2,000
+characters ends with **… 81,797 more**, the count not shown; the right frame shows it whole. A
+`_META` (Ancestry's Find a Grave block) is drawn as it reads, above Joined, each part under the
+name the file gives it — `content` in web formatting, `transcription`, `personas` as a table,
+`cemetery`, `record_source_gid` — read only, with nothing loaded from anywhere. **Upload
+GEDCOM** opens the computer's own file dialog; nothing is uploaded anywhere — the file is read
+here, and nothing leaves the machine.
 
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the two
-panel widths and whether each side frame is hidden, Bold surnames, whether the change stamps
-are ticked, and whether the file's facts show. Never a file's name, content or place. Edit is
-off whenever a file opens.
+panel widths and whether each side frame is hidden, Bold surnames, the Tags list's order,
+whether the change stamps are ticked, and whether the file's facts show. Never a file's name,
+content or place. Edit is off whenever a file opens.
 
 ## Edit and save
 
@@ -102,11 +108,12 @@ lines of one tag under one parent — two `1 NAME` — may be reordered: the fir
 standard reads as preferred, and the Save dialog says so. A moved line is written from its own
 bytes, so a moved block changes the file's sha256 and not its size.
 
-Until it is saved, an edit shows:
+While a line is typed, the right frame already shows it as typed. Until it is saved, an edit
+shows:
 
 | Where | Changed line | Added line | Removed lines | Moved lines |
 |---|---|---|---|---|
-| its row | tinted, a bar at its left edge | tinted another colour, a bar | Edit on: struck through, in red · Edit off: a red rule where they were | tinted a third colour, a bar; Edit on: a rule where they were taken from |
+| its row | tinted, a bar at its left edge, a dot in the mark column | tinted another colour, a bar, a dot | Edit on: struck through, in red · Edit off: a red rule where they were | tinted a third colour, a bar, a dot; Edit on: a rule where they were taken from |
 | the right frame | **Was**, and the line as last saved | **Added** | **Removed**, and **Restore** | **Moved**, and the line's number as saved |
 | Changes | the line, before → after | the line | the lines | what moved — a block by its tag, a record, a type and its count — and how many lines; never their text |
 | a shut block | its count of lines takes the colour when it holds a change | | |
@@ -231,8 +238,11 @@ steps light → sunset → dark.
 | `--row-changed` · `--row-added` · `--row-removed` · `--row-moved` | the tint of a changed row, an added row, a removed one (Edit on), a moved one |
 | `--drop-line` · `--drop-line-width` · `--drag-dim` | the gold line where a dragged block would land; how faint what would move is drawn |
 | `--more-color` | "… 81,797 more" at the end of a clipped row |
-| `--split-tab-height` · `--split-tab-width` | the ‹ › tab on each bar that hides and shows its frame |
-| `--back-top` · `--back-left` · `--back-strip` | where Back sits at the main frame's top left, and the height of its strip above the lines |
+| `--icon-button` | the square buttons that carry an icon: the side frames, the Tags list's order |
+| `--strip-height` | the strip above the lines: Top, Back, Collapse all |
+| `--aside-shade` | the shade the number column casts while the lines are scrolled sideways |
+| `--frame-ease` | how long a side frame takes to hide or show |
+| `--menu-width` | the Settings menu |
 | `--copy-color` · `--copy-done` | the copy button at a box's top right, and its check mark |
 | `--surname-weight` | how bold a surname is, with Bold surnames on |
 | `--help-max-width` | what a check means, in the right frame |

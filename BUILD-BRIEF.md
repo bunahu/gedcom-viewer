@@ -441,13 +441,13 @@ a repo (I9).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│ GEDCOM Viewer 0.5 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy [Go to Line…]     │
-│                                    Collapse all  Indent  Bold surnames  Theme                │
+│ ▯ GEDCOM Viewer 0.5.1 (RAW.ged ▸) ● Edit Undo Redo Save Save a copy [Go to Line…] │
+│                                                                      Settings ▾  ▯          │
 │ (a click on the name: GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com… · sha256) │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │ People 2,345   Media 1,234   Families 1,098   Sources 765   _MTTAG 23   Repositories 7   …   │
 ├──────────────────┬─────────────────────────────────────────────────┬────────────────────────┤
-│ Records          ‹ ← Back to 41,190                                › 1 NAME            [copy] │
+│ Records          │ ↑ Top  ← Back to 41,190              Collapse all │ 1 NAME            [copy] │
 │ Checks      3    │  41,201    0 @I42@ INDI                         │ Jane /Fixture/         │
 │ Changes     2    │  41,202        1 NAME Jane /Fixture/            │                        │
 │ Search           │  41,203            2 GIVN Jane                  │ in @I42@ INDI          │
@@ -851,8 +851,8 @@ is, beside the four files it loads.
 | 6 | **Indent** on, then off | rows set in by level, with a width box beside the button; then flush left |
 | 7 | ▾ on a `0 @I…@ INDI` line, then ▸; ← and → on a selected line; ⌥-click ▾ on a `0` line; Go to Line… a line inside a shut record | the record shuts and opens; ⌥ shuts every record; the record gone into opens |
 | 8 | Click the row **▾ INDI People …** between the types; again; ⌥-click it | every person shuts; opens; ⌥ shuts every type |
-| 8a | **Collapse all**; then **Expand all** | every record one row, the type rows open; then every block and every type open (3.5) |
-| 8b | The ‹ on the bar left of the lines; the › on the right; again each | the left bar hides, and the right frame; the tabs flip and bring them back. Close the tab and open the page again with one hidden: still hidden (3.1) |
+| 8a | **Collapse all**, in the strip above the lines; then **Expand all** | every record and every type one row; then every block and every type open (3.5) |
+| 8b | The icon at the top bar's left end; the one at its right end; again each | the left bar eases shut, and the right frame; the same icons bring them back. Close the tab and open the page again with one hidden: still hidden (3.1) |
 | 9 | Drag the scrollbar to the end and back | no blank screen on the way |
 
 **B. Find and move**
@@ -861,12 +861,12 @@ is, beside the four files it loads.
 |---|---|---|
 | 10 | **Go to Line…** (⌘L) the last line's number | `0 TRLR` |
 | 11 | Go to Line… `105-117`, **Go** | only those 13 lines; **×** shows every line again |
-| 12 | Click the `@F…@` of a `1 FAMS` line; **← Back to …**, over the lines at the main frame's top left | the family; Back names the line it returns to, and returns (3.7) |
+| 12 | Click the `@F…@` of a `1 FAMS` line; **← Back to …**, in the strip above the lines; then **↑ Top** | the family; Back names the line it returns to, and returns; Top goes to line 1, and Back returns from there too (3.7) |
 | 13 | **Search** (⌘F) a word: **Next**, **Previous**. **Tags**: click `_MTTAG` | a count, and each match in turn; the tag's lines |
 | 14 | **Records**: part of a surname in the filter; click a result | that record |
-| 14a | **Bold surnames**; look at Records and the right frame; then at the line itself | the surname in bold, without its slashes, wherever the record is named; the line still reads `/Surname/`. Off again, or leave it: it is remembered (3.8) |
+| 14a | **Settings → Bold surnames**; look at Records and the right frame; then at the line itself | the surname in bold, without its slashes, wherever the record is named; the line still reads `/Surname/`. Off again, or leave it: it is remembered (3.8) |
 | 15 | Select a `CONC` line; then a `0 @…@` record line | the right frame's **Joined** holds the whole value; for the record line, the lines that point at it |
-| 15a | Go to Line… his step 1's `_META` | the right frame draws it as it reads — **Story** (70 paragraphs, some in bold), then **Joined**; on another `_META`, Transcription, Persons as a table, Cemetery, Record id where the value holds them (3.3). Two-finger swipe the lines sideways: the 20 `CONC` lines readable to their ends, the line numbers staying put (3.1) |
+| 15a | **Search** `@O780@`, Enter; then its `1 _META` line, 11 lines down (its place by number depends on the copy's order) | the right frame draws it as it reads — `content` (70 paragraphs, some in bold), then **Joined**; on another `_META`, `transcription`, `personas` as a table, `cemetery`, `record_source_gid` where the value holds them (3.3). Two-finger swipe the lines sideways: the 20 `CONC` lines readable to their ends, the line numbers staying put and casting a shade; ↑ Top, Home or any jump brings the lines back to the left edge (3.1) |
 | 15b | The copy button at the top right of the Story box, and of the value box of any line; paste somewhere | the box's text, exactly; the icon a check mark for a moment (3.2) |
 | 16 | Double-click a word; then a word of a web address in a `_META` or a `NOTE`; then, holding ⌥, double-click a `@F…@` pointer | the word highlights, and stays highlighted to copy; the address whole; the pointer whole, and nothing jumps (3.9) |
 | 17 | The file's name → **Open another GEDCOM…** → `local/CLEANED.ged`; Go to Line… the number of its longest line. Then reopen `local/walk/RAW.ged` | **What it tests:** a line far longer than any screen neither slows nor breaks the main frame. This one is over 80,000 characters, the `_META` of one media record, which the cleaner joined into one line. The main frame shows its first 2,000 characters (from v0.5, ending **… 81,797 more**); the right frame shows it whole |
@@ -877,11 +877,11 @@ is, beside the four files it loads.
 |---|---|---|
 | 18 | **E** (or click Edit). Select a person's `1 NAME` line; Enter (or double-click); change one letter; Enter | Edit on — ⌘E is no longer a key of the page's (3.11); the row tinted, a bar at its left; the right frame's **Was** holds the old line; **Changes 1**; ● after the file's name; Save turns on |
 | 19 | Start typing over another line; Esc | nothing changes |
-| 19a | Press on that person's `1 BIRT` line and drag it up to the top edge of the `1 NAME` line; release | on the way, the block dims and a gold line shows only at a sibling's edge; released, the BIRT block stands first, tinted in the moved colour; **Changes 2**: `moved: BIRT · n lines`; the right frame says **Moved · line … as saved**; a rule marks where it came from (3.4a) |
+| 19a | Press on that person's `1 BIRT` line and drag it up to the top edge of the `1 NAME` line; release | on the way, the block dims and a gold line shows only at a sibling's edge; released, the BIRT block stands first, tinted in the moved colour, a dot in the mark column; **Changes 2**: `moved: BIRT · n lines`; the right frame says **Moved · line … as saved**; a rule marks where it came from — for a block that was last in its record, on the top edge of the next record's first line (3.4a) |
 | 19b | Press on the row **▾ SOUR Sources …** and drag it up to the row **▾ INDI People …**; release. Then ⇧⌘S, read the dialog, Cancel | the sources stand before the people; **Changes 3**: `moved: section SOUR · … records · … lines`; the dialog lists the move as one entry, and **Change stamps · 1 record** — the person of 19a, not the sources (3.4a). Try dragging a person down to the families: the gold line stops at the last edge among the people |
 | 19c | **Undo**, twice | the sources back, then the BIRT block back; **Changes 1** — the name of step 18 alone |
 
-**D. Save in place, with the change stamp**
+**D. Save in place, with the change stamp** — steps 20–24 are of 0.5's saving; 0.6 replaces it (P5), and these steps with it.
 
 | # | Do | Expect |
 |---|---|---|
@@ -1198,12 +1198,69 @@ own for the round (`node tools/walk.js … --only third` walks it alone). What i
 | The Records filter matches a label as written and as shown, toggle or not | 3.8 |
 | With Edit on a double-click types over the line, as before; a web address is selected whole with Edit off, or with ⌥ | 3.9: ⌥ makes a link plain text; Edit on is for typing |
 | The row's left part (line number, mark, fold) stays at the left edge by `position: sticky`; the rows' layer and each row clip with `overflow: clip`, since `overflow: hidden` would make them the scroll container the part sticks to | 3.1 |
-| Chrome 154, headless, with synthetic keys: a raw key-down of a printable key sent into a text box with no character leaves the tab unable to finish its next navigation; and after a key-down whose default the page prevented (E now, ⌘E before), a synthetic Escape sent into a box that was typed in leaves the renderer dispatching key events named Unidentified without end — at 0.4.1 as well as 0.5. A real keyboard does neither. The walk types with the character, clears a box by setting its value, and leaves a typed-in box by a click | found while walking 3.11; `tools/chrome.js` says so at `press` |
+| Chrome 154, headless, with synthetic input: a raw key-down of a printable key sent into a text box with no character leaves the tab unable to finish its next navigation; after a key-down whose default the page prevented (E now, ⌘E before), a synthetic Escape sent into a box that was typed in leaves the renderer dispatching key events named Unidentified without end; and once a few dozen synthetic clicks have gone into a tab, a drag of a row let go with a synthetic Escape leaves the renderer, a moment later, answering nothing — not even the debugger — on the 0.4.1 page's key sequences as on 0.5's. A hand does none of it: the owner dragged and let go at steps 19a–19c without trouble. The walk types with the character, clears a box by setting its value, leaves a typed-in box by a click, sends Escape as its key-down alone, walks each part in a Chrome of its own, keeps the drag let go with Escape for the last act of the drags' part, walks a part again when its page stops answering, and says where the page was when it did | found while walking 3.11 and 3.4a; `tools/chrome.js` says so at `press` |
 | Back sits in a strip of its own above the lines while it shows, so no line's number is under it | 3.7 puts it at the main frame's top left; laid over the rows it hid the first two lines' numbers after a jump to the top of a file, and its width grows with the line it names |
 | The version is 0.5, tagged | as the owner named the versions |
 
 The phase-5 walk below gained a step for each part, lettered after the step it follows, so
 that 18–40 keep their numbers.
+
+### The owner's fourth round (2026-09-30, from his walk of 0.5, steps 4a–24): 0.5.1, then 0.6
+
+His findings, by step, in his words; and what each became.
+
+| # | His words | Became |
+|---|---|---|
+| 8a | "Each block is collapsed, but I'd like all of the sections to collapse/expand as well. Right now I still manually have to collapse each." | 0.5.1: Collapse all shuts every record and every type; Expand all opens everything |
+| 8b | "It hides far too much - instantaneously (bad), then hard to reopen. I'd like an icon similar to screenshot 1 (Claude Mac's own icon), which is what I initially described." | 0.5.1: the tabs on the bars are gone; an icon at each end of the top bar (a square with a line at one side, as the Claude app's) hides and shows its frame, eased over 200 ms; a double-click on a bar does nothing |
+| 12 | "OK. I want a permanent 'Back to Top' as well." | 0.5.1: a strip above the lines, always: **↑ Top**, then **← Back to …** while there is one, then Collapse all. Top is a jump, so Back returns from it |
+| 15a | "Why is it called 'Story?' That's the part that didn't make sense to me. And 202,541 is not a _META line at all. Redo?" | "Story" was session 3's word for the XML's `content`; 0.5.1 draws each part under the name the file gives it: `content`, `transcription`, `personas`, `cemetery`, `record_source_gid`. 202,541 was the `_META`'s line in the raw export; his walk copy was saved at step 20 with the type rows reordered (19b), so that line now sits 6,539 lines lower, at 209,080 — the step now says to search `@O780@` instead of a number |
+| 18 | "I think I'd like the edit mode to make the middle look more like a live code editor (it's all text, can be rewritten/modified in bulk, not just line-by-line). I'd also like the right sidebar to dynamically update as I change the name in the main panel. And the change dot(s) should be on the row(s) that have changed, too." | 0.5.1: the right frame follows the typing; a change dot in the mark column (changed, added, moved, in their colours), beside a finding's. The editor: P4, below |
+| 19a | "I noticed that moving a 2nd one above NAME (like FAMS) is recorded, but no blue line is created. What's the purpose of the blue line - is it intentional? Make sure the 2nd recording is also still factual (original line -> new line). Related - when I move a whole INDI block to the top of the INDI section, the line appears ABOVE the INDI header, not below it as it should." | The rule marks where a block was taken from (3.4a, "a rule marks where a move took lines from"), with Edit on. For FAMS, the record's last line, that place is the record's end: the rule sits on the top edge of the next record's first row, one row under the first rule. The second move's record is factual: lines 10→4 and 7→5 in the test that reproduces it. The gold line: 0.5.1 puts it under a type's row for a record dragged to the top of its type, and keeps it at the next type's row for the end |
+| 20–23 | "I want to change the plan on Saving in general. The original uploaded GEDCOM is always left as-is (unchanged); so any new save is 'Save As' effectively. When saved, it should be 1) the original .ged file name but with a timestamp appended (but the user can rename it like any other file), and 2) a published log of changes to the original one. I'm not sure if the sha256 is needed/warranted - explain to me its purpose. I don't want to overburden the user with multiple files they'll never need or use; if they have the original file unchanged, then that can simplify how we track the changes (basically the log is the changes, the new file is just the new file - no baggage/history other than what's required)." | P5 and P6, below; 0.6 |
+| 24 | "Don't understand what this is supposed to do." | Step 24 proved that a save with the stamps unticked, after the edit was undone, wrote the original file back byte for byte (its sha256 again). It goes with P5: nothing is written over any more |
+| — | "Clean up the top bar with a Settings button which expands into a dropdown, with the smaller buttons (Theme, Indent, etc.) all living there." | 0.5.1: Settings, a menu under its button: Theme as three choices, Indent and its width, Bold surnames |
+| — | "Remove the Open GEDCOM from the header entirely - it's already in the middle of the center pane. Change it to Upload GEDCOM and have it just open the upload frame on the computer like most things do." | 0.5.1: no Open in the top bar; **Upload GEDCOM** in the empty frame and **Upload another GEDCOM…** among the facts, both opening the computer's file dialog. "Upload" is his word for the screen; nothing is uploaded anywhere (I5), and the README says so |
+| — | "Tags - give me some sort of icon (two arrows in a circle?) that, when pressed, cycles through different orderings of the tags - most to least, alphabetical, etc. Avoid naming them anywhere visible - if they need explanation I will let you know." | 0.5.1: a button with two arrows in a circle above the list; by count, by count rising, A–Z, Z–A; no name anywhere visible; remembered |
+| — | "I tried to delete line 8 and everything went haywire (see last screenshot)." | The screenshot shows every row's text slid left under the number column — the tails "/ Trees" and "Parkway" are the ends of lines 3, 4 and 12 — which is 3.1's sideways scroll after a two-finger swipe, with nothing on screen saying so. Deleting line 8 (a leaf, `3 _ENV`) on his copy in headless Chrome removes it, strikes it, and leaves the lines at their left edge. 0.5.1: the number column casts a shade on the lines going under it while they are scrolled sideways, and Home, a jump and Top bring them back to the left edge. P7 asks whether sideways scrolling should stay at all |
+
+**P4 — Edit as a text editor** (step 18). Three ways; the recommendation first.
+
+| P4 | Variant | Worked example |
+|---|---|---|
+| **E1** — recommended | **A block edited as text, in place.** With Edit on, Enter (or a double-click) on a line with lines under it opens the whole block — the line and everything under it; a record from its `0` line — as one box of text in the main frame, as tall as the block; lines are retyped, added, removed or pasted in bulk; ⌘Enter keeps it, Esc drops it, a click away keeps it. One act: the block's lines replaced as one step; a line left as it was keeps its own bytes, so Changes still shows each line changed, added or removed. A line with no lines under it opens as today, one line | Select `0 @I42@ INDI`, Enter: a box holding the person's 47 lines. Retype the NAME, delete the two `_APID` lines, paste three lines of a new `BIRT`. ⌘Enter: Changes reads 1 changed · 2 removed · 3 added, each line marked in its row |
+| **E2** | **The whole file as text.** Edit on turns the main frame into one text box holding every line; retype anywhere; Enter is a new line; ⌘Enter keeps all of it. The document is rebuilt from the text as one act | The raw export is 8 MB of text in one box: Chrome lays it out in seconds and lags on every keystroke; the virtual grid, the folds, the type rows, the marks and the line numbers all go while Edit is on. Not for a file of this size |
+| **E3** | **Every row editable in place.** Each row of the grid is its own box; Enter at a row's end makes a new row, ⌫ at its start joins it to the one above; what is typed lands line by line as today | Reads as an editor; is an editor only row by row. Pasting ten lines into one row still refuses (a line holds no line break), and a block cannot be retyped as one text |
+
+**P5 — Saving, nothing written over** (steps 20–24). The original is never written; every save is a dated copy beside it, and a log of the changes to the original. Three shapes; the recommendation first.
+
+| P5 | Variant | Worked example |
+|---|---|---|
+| **S1** — recommended | **Save opens the computer's Save dialog** with the dated name offered — `RAW.2026-09-30T154200.ged`, in the original's folder — and the copy may be renamed there, or in Finder after. The log, `RAW.ged.edits.log`, is appended beside the original, through the folder asked for once, the first time (as today). One button, **Save**; no backup folder; no file is ever written over | Save, keep the name, Save: the copy is written and read back; one block is appended to the log: when, the note, the original's sha256 and the copy's, the copy's name, then every change from the original to the copy — the lines before and after, moves by what moved. Save again later: another dated copy, another block, each block complete from the original |
+| **S2** | **Save writes the dated copy at once**, no dialog, into the original's folder through the one folder grant; the copy is renamed in Finder when wanted; the log as S1 | Save: "Saved as RAW.2026-09-30T154200.ged, beside the file." Nothing to click through; nothing to name |
+| **S3** | **No folder grant at all**: Save opens the Save dialog for the copy, then a second one for the log block (its own file, `RAW.2026-09-30T154200.edits.log`) | Two dialogs per save; one log file per copy, never appended to; the original's folder is never asked for |
+
+What stays under every shape: the change stamps (F1, V1) on the records changed, in the copy only; the copy read back and compared after writing; Changes counted from the original (what the log will say), ● and Save meaning "changed since the last copy".
+
+**P6 — the sha256.** Its purpose: a fingerprint of a file's exact bytes — change one character and it changes completely. Today it does three jobs: (a) the backup must match the original before the original is written over; (b) the file on disk must still be the file that was opened, before it is written over; (c) the copy or file written must read back as written. With nothing written over, (a) and (b) go. (c) stays and costs nothing. In the log, the original's sha256 names which file the changes were made to — the one line that lets anyone later confirm the log belongs to that file — and the copy's names what came out.
+
+| P6 | Keep it where | Worked example |
+|---|---|---|
+| **H1** — recommended | **In the log, and among the facts on demand** (as now: "sha256", a click shows it, hover says what it is). Nowhere else on the screen | `shasum -a 256 RAW.ged` in Terminal gives `<sha256>`; the log's `before` line says the same; a copy that was renamed is still known by its `after` line |
+| **H2** | **In the log only** | the facts line loses its last item; the log keeps both lines |
+| **H3** | **Nowhere** | the copy is read back and compared all the same, silently; the log names files by name and time only |
+
+**P7 — sideways scrolling** (3.1; "everything went haywire").
+
+| P7 | Variant | Worked example |
+|---|---|---|
+| **K1** — recommended | **Keep it, with the cue** (0.5.1): the number column casts a shade on the lines going under it, and Home, a jump and Top bring the lines back to the left edge | a two-finger swipe to the right slides the lines under the numbers, which now visibly cast a shadow; ⌘L 1 or ↑ Top brings them back |
+| **K2** | **Drop it**: a row shows its first 2,000 characters and stops at the frame's edge (as before 0.5), with its "… 81,797 more"; the right frame shows the whole value, a `_META` drawn as it reads | the lines never move sideways; a `CONC` line of 248 characters is read whole in the right frame, not in the main frame |
+| **K3** | **Wrap** long lines in the main frame (section 18's "wrapping long lines in the grid") | every row the height of its line; the virtual grid's one-height-per-row goes, and with it the fast scrollbar drag |
+
+0.5.1 is built, gated and tagged (2026-09-30). 0.6 is the editor (P4), the saving (P5, P6) and P7's answer, after his picks; the phase-5 walk's steps 20–24 and 33–37 are then rewritten for it.
+
+The walk also met Chrome 154 headless once more, at the drags: once a few dozen synthetic clicks have gone into a tab, a drag of a row let go with a synthetic Escape leaves the renderer, a moment later, answering nothing — not even the debugger. Sixty harmless clicks first: a hang every time; none first: ten rounds clean; nothing in the page's drag changes it (pointer capture, the selection, the dimming, the rows' layer and its width, the GPU, each switched off in turn). So the drags are a part of their own, walked in a fresh Chrome, with the drag let go with Escape last; a part whose page stops answering is walked once more, and says where the page was, by the debugger, instead of waiting (`tools/chrome.js`, `press`).
 
 ### Session 3's prompt
 

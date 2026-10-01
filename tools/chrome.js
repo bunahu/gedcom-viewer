@@ -47,7 +47,7 @@ function connect(url) {
 async function launch({ width = 1600, height = 1000 } = {}) {
   if (!fs.existsSync(CHROME)) throw new Error(`no Chrome at ${CHROME} (set CHROME=path)`);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gedview-chrome-'));
-  const proc = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+  const proc = spawn(CHROME, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, ...(process.env.CHROME_FLAGS || '').split(' ').filter(Boolean),
     '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-background-networking',
     '--disable-component-update', '--disable-sync', '--use-mock-keychain', '--password-store=basic',
     `--window-size=${width},${height}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -86,9 +86,51 @@ async function launch({ width = 1600, height = 1000 } = {}) {
       if (msg.method === 'Log.entryAdded' && p.entry.level === 'error') log.errors.push(`log: ${p.entry.text} ${p.entry.url || ''}`);
       if (msg.method === 'Network.requestWillBeSent') log.requests.push(p.request.url);
       if (msg.method === 'Page.javascriptDialogOpening') log.errors.push(`dialog (${p.type}): ${p.message}`);
+      if (msg.method === 'Inspector.targetCrashed') log.errors.push('crashed: the page\'s renderer crashed');
+      if (msg.method === 'Inspector.detached') log.errors.push(`crashed: the inspector detached (${p.reason})`);
     });
-    for (const domain of ['Page', 'Runtime', 'Network', 'Log']) await S(`${domain}.enable`);
+    for (const domain of ['Page', 'Runtime', 'Network', 'Log', 'Inspector']) await S(`${domain}.enable`);
     await S('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+
+    // Where the page's script is, for a page that no longer answers: the debugger pauses it and
+    // reports the top of the stack (function, file, line) a few times over.
+    async function whereIsIt() {
+      const scripts = new Map();
+      const frames = [];
+      cdp.on((msg) => {
+        if (msg.sessionId !== sessionId) return;
+        if (msg.method === 'Debugger.scriptParsed') scripts.set(msg.params.scriptId, msg.params.url.split('/').pop());
+        if (msg.method === 'Debugger.paused') {
+          const f = msg.params.callFrames[0];
+          frames.push(`${f.functionName || '(anonymous)'} ${scripts.get(f.location.scriptId) || '?'}:${f.location.lineNumber + 1}`);
+        }
+      });
+      const within = (promise, ms) => Promise.race([promise, sleep(ms).then(() => { throw new Error(`no answer in ${ms} ms`); })]);
+      try {
+        await within(S('Debugger.enable'), 3000);
+        for (let k = 0; k < 3; k += 1) {
+          const n = frames.length;
+          S('Debugger.pause').catch(() => {});
+          await new Promise((r) => { const t0 = Date.now(); const poll = () => { if (frames.length > n || Date.now() - t0 > 3000) r(); else setTimeout(poll, 50); }; poll(); });
+          S('Debugger.resume').catch(() => {});
+          await sleep(200);
+        }
+      } catch (e) { frames.push(`(the debugger could not reach it: ${e.message})`); }
+      const crashed = log.errors.filter((x) => x.startsWith('crashed')).join('; ');
+      return `${frames.length ? frames.join(' | ') : 'no script running (a hang outside script)'}${crashed ? `; ${crashed}` : ''}`;
+    }
+
+    // A command the page must acknowledge — an evaluate, a key, a mouse event — within 20 s; past
+    // that, where the page is.
+    async function answered(promise, what) {
+      let timer;
+      const hung = new Promise((resolve) => { timer = setTimeout(() => resolve('hung'), 20000); });
+      const r = await Promise.race([promise, hung]);
+      clearTimeout(timer);
+      if (r === 'hung') throw new Error(`the page did not answer ${what} in 20 s; it is at: ${await whereIsIt()}`);
+      return r;
+    }
+    const input = (method, params) => answered(S(method, params), `${method} ${params.type || ''}`);
 
     const page = {
       log,
@@ -99,8 +141,10 @@ async function launch({ width = 1600, height = 1000 } = {}) {
       browser: (method, params) => cdp.send(method, params),
       // A script run before the page's own, at every load from now on.
       addScript: (source) => S('Page.addScriptToEvaluateOnNewDocument', { source }),
+      // Evaluate in the page. A page that does not answer within 20 s is paused by the debugger
+      // and asked where it is, so a hang reads as a place in the code, not as silence.
       async ev(expression) {
-        const r = await S('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+        const r = await answered(S('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }), `evaluate ${expression.slice(0, 60)}`);
         if (r.exceptionDetails) throw new Error(`in the page: ${(r.exceptionDetails.exception || {}).description || r.exceptionDetails.text}`);
         return r.result.value;
       },
@@ -135,7 +179,7 @@ async function launch({ width = 1600, height = 1000 } = {}) {
       },
       // `buttons` says which buttons are held: 1 from the press to the release.
       async mouse(type, x, y, extra = {}) {
-        await S('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left',
+        await input('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left',
           buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1, ...extra });
       },
       // `modifiers` as DevTools counts them: 1 ⌥, 2 ⌃, 4 ⌘, 8 ⇧.
@@ -172,24 +216,32 @@ async function launch({ width = 1600, height = 1000 } = {}) {
         if (!at) throw new Error(`nothing to click: ${expr}`);
         await page.clickAt(at.x, at.y, modifiers);
       },
+      // A key: its key-down, then its key-up — except Escape's key-up, which is never sent: see
+      // `press` below for what it does to this Chrome.
       async key(key, code, vk, modifiers = 0) {
         const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
-        await S('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
-        await S('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+        await input('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
+        if (key !== 'Escape') await input('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
       },
-      async type(text) { await S('Input.insertText', { text }); },
+      async type(text) { await input('Input.insertText', { text }); },
       // A key pressed with the character it produces, as a real press in a text box does. Found in
-      // Chrome 154, headless, on 2026-09-30, with the page at 0.4.1 as well as 0.5: a raw key-down
-      // of a printable key sent into a text box with no character leaves the tab unable to finish
-      // its next navigation; and after a key-down whose default the page prevented (E, or ⌘E
-      // before it), a synthetic Escape sent into a text box that was typed in leaves the renderer
-      // dispatching key events named Unidentified without end. So a key that types goes this way,
-      // and a box that was typed in is left by a click on the lines, not by Escape, once such a
-      // key has been sent. A real keyboard does neither.
+      // Chrome 154, headless, on 2026-09-30, with the page at 0.4.1 as well as 0.5, and never with
+      // a real keyboard or mouse: a raw key-down of a printable key sent into a text box with no
+      // character leaves the tab unable to finish its next navigation; after a key-down whose
+      // default the page prevented (E, or ⌘E before it), a synthetic Escape sent into a text box
+      // that was typed in leaves the renderer dispatching key events named Unidentified without
+      // end; and once a few dozen synthetic clicks have gone into a tab, a drag of a row let go
+      // with a synthetic Escape leaves the renderer, a moment later, answering nothing at all —
+      // not even the debugger (sixty clicks first: a hang every time; none first: ten rounds
+      // clean; no part of the page's drag — pointer capture, the selection, the dimming, the
+      // rows' layer, the GPU — changes it). So a key that types goes this way; a box that was
+      // typed in is left by a click on the lines, not by Escape, once such a key has been sent;
+      // Escape goes as its key-down alone (`key`); and the walk keeps a drag let go with Escape
+      // for the last act of a part walked in a Chrome of its own.
       async press(key, code, vk, text) {
         const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk };
-        await S('Input.dispatchKeyEvent', { type: 'keyDown', text, unmodifiedText: text, ...base });
-        await S('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+        await input('Input.dispatchKeyEvent', { type: 'keyDown', text, unmodifiedText: text, ...base });
+        await input('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
       },
       // Empty the focused box: its value set to nothing, and the page told as a keystroke would tell
       // it (an input event). A synthetic ⌘A and Backspace did this before; see `press`.

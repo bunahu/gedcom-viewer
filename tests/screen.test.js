@@ -45,6 +45,17 @@ describe('3.9 selecting a link: the web address at a point', () => {
   });
 });
 
+describe('a line as typed, for the right frame to follow the typing', () => {
+  it('its shape: level, id, tag and where the value starts; a line that does not parse; a blank one', () => {
+    assert.deepEqual(core.lineShape('1 NAME Jane /Fixture/'), { lead: 0, level: 1, xref: null, tag: 'NAME', valAt: 7, blank: false });
+    assert.deepEqual(core.lineShape('0 @I1@ INDI'), { lead: 0, level: 0, xref: '@I1@', tag: 'INDI', valAt: -1, blank: false });
+    assert.deepEqual(core.lineShape('  2 CONT x'), { lead: 2, level: 2, xref: null, tag: 'CONT', valAt: 9, blank: false });
+    assert.deepEqual(core.lineShape('1NAME x'), { lead: 0, level: -1, xref: null, tag: null, valAt: -1, blank: false });
+    assert.deepEqual(core.lineShape(''), { lead: 0, level: -1, xref: null, tag: null, valAt: -1, blank: true });
+    assert.deepEqual(core.lineShape('   '), { lead: 3, level: -1, xref: null, tag: null, valAt: -1, blank: true });
+  });
+});
+
 describe('3.10 a clipped row says so', () => {
   it('where the shown part ends and how many characters are not shown, in characters, never half of one', () => {
     assert.deepEqual(core.clip('short', 2000), { end: 5, more: 0 });

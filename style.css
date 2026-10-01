@@ -145,11 +145,11 @@
   --right-width: 360px;               /* the right pane; the same */
   --split-width: 5px;
   --split-color: var(--color-border);
-  --split-tab-height: 44px;           /* the ‹ › tab on each split bar that hides and shows its frame */
-  --split-tab-width: 14px;
-  --back-top: 5px;                    /* Back, at the main frame's top left, in a strip of its own above the lines */
-  --back-left: 8px;
-  --back-strip: 38px;                 /* the strip's height, while Back shows */
+  --icon-button: 28px;                /* the square buttons that carry an icon: the side frames, the tags' order */
+  --strip-height: 38px;               /* the strip above the lines: Top, Back, Collapse all */
+  --aside-shade: color-mix(in srgb, var(--color-text) 28%, transparent);   /* the shade at the number column's edge while the lines are scrolled sideways */
+  --frame-ease: 200ms;                /* how long a side frame takes to hide or show */
+  --menu-width: 19em;                 /* the Settings menu */
   --copy-color: var(--color-text-muted);   /* the copy button at a box's top right */
   --copy-done: var(--color-success);       /* …once it has copied */
   --surname-weight: 700;              /* Bold surnames */
@@ -211,6 +211,25 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .input::placeholder { color: var(--color-text-muted); }
 .input:focus { outline: var(--focus-ring); outline-offset: -1px; }
 
+/* a square button carrying an icon */
+.icon-button {
+  flex: none;
+  width: var(--icon-button);
+  height: var(--icon-button);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-button:hover { background: var(--hover-bg); color: var(--color-text); }
+.icon-button[aria-pressed="true"] { background: var(--pressed-bg); border-color: var(--color-accent); color: var(--color-text); }
+.icon-button:focus-visible { outline: var(--focus-ring); outline-offset: -1px; }
+
 /* -- the bar ----------------------------------------------------------------------------------- */
 
 .bar {
@@ -252,6 +271,24 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .goto { width: 9.5em; }
 .goto-go, .goto-clear { padding: 0.3rem 0.55rem; }
 .indent-width { width: 3.6em; }
+/* Settings: a menu under its button, closed by a click elsewhere or Esc */
+.menu {
+  position: fixed;
+  margin: 0;
+  min-width: var(--menu-width);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+  flex-direction: column;
+  gap: 8px;
+}
+.menu:popover-open { display: flex; }
+.menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.menu-name { color: var(--color-text-muted); }
+.menu-choices { display: inline-flex; align-items: center; gap: 4px; }
 .facts {
   margin-top: 3px;
   min-height: 1.4em;
@@ -314,32 +351,15 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   display: grid;
   grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width);
 }
+.work { transition: grid-template-columns var(--frame-ease) ease; }
 .work.left-hidden { grid-template-columns: 0 var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width); }
 .work.right-hidden { grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) 0; }
 .work.left-hidden.right-hidden { grid-template-columns: 0 var(--split-width) minmax(0, 1fr) var(--split-width) 0; }
-.work.left-hidden .side, .work.right-hidden .detail { display: none; }
-.split { position: relative; background: var(--split-color); cursor: col-resize; }
+/* a hidden frame narrows to nothing over the ease, and only then is out of reach */
+.side, .detail { min-width: 0; overflow: hidden; }
+.work.left-hidden .side, .work.right-hidden .detail { visibility: hidden; transition: visibility 0s var(--frame-ease); }
+.split { background: var(--split-color); cursor: col-resize; }
 .work.left-hidden #split-left, .work.right-hidden #split-right { cursor: default; }
-/* the tab on a split bar: ‹ or › hides the frame beside it, and the same tab, flipped, brings it back */
-.split-tab {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  width: var(--split-tab-width);
-  height: var(--split-tab-height);
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg-card);
-  color: var(--color-text-muted);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-}
-.split-tab:hover { background: var(--hover-bg); color: var(--color-text); }
-.split-tab:focus-visible { outline: var(--focus-ring); }
 
 .side {
   min-height: 0;
@@ -367,6 +387,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 8px 8px; }
 .panel[hidden] { display: none; }
 .panel-head { flex: none; display: flex; gap: 6px; align-items: center; }
+.panel-head-end { justify-content: flex-end; }
 .panel-head .input { flex: 1; }
 .panel-sum { flex: none; padding: 0 4px; color: var(--color-text-muted); font-size: var(--font-size-small); }
 .search-nav { flex: none; display: flex; gap: 6px; align-items: center; }
@@ -505,6 +526,12 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   user-select: none;
 }
 .mk { flex: none; width: 2ch; display: flex; align-items: center; justify-content: center; }
+/* the change dot: a changed, added or moved row, in its colour, beside the finding's dot */
+.cg { flex: none; width: 2ch; display: flex; align-items: center; justify-content: center; }
+.cg::before { content: ''; width: var(--mark-size); height: var(--mark-size); border-radius: 50%; }
+.cg.is-changed::before { background: var(--mark-changed); }
+.cg.is-added::before { background: var(--mark-added); }
+.cg.is-moved::before { background: var(--mark-moved); }
 /* the gold line where a dragged block would land */
 .drop-line {
   position: absolute;
@@ -563,17 +590,37 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .edit:focus { outline: var(--focus-ring); outline-offset: -2px; }
 .grid.is-editing { overflow-y: hidden; }
 
-/* Back, at the main frame's top left, while there is somewhere to go back to: in a strip of its
-   own above the lines, so that no line's number is ever under it */
-.middle.has-back .grid { top: var(--back-strip); }
-.back {
+/* the strip above the lines: Top, Back (while there is somewhere to go back to), Collapse all */
+.middle .grid { top: var(--strip-height); }
+.strip {
   position: absolute;
-  top: var(--back-top);
-  left: var(--back-left);
-  z-index: 4;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--strip-height);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-card);
+  z-index: 4;
 }
-.back[hidden] { display: none; }
+.strip .button { padding: 0.2rem 0.55rem; }
+.strip-gap { flex: 1; }
+.back[hidden], .strip .button[hidden] { display: none; }
+/* scrolled sideways, the number column casts a shade on the lines going under it */
+.grid.is-aside .fx::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 7px;
+  transform: translateX(100%);
+  background: linear-gradient(to right, var(--aside-shade), transparent);
+  pointer-events: none;
+}
 
 .lv { color: var(--level-color); }
 .id { color: var(--id-color); }
@@ -697,6 +744,7 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .persons th { color: var(--color-text-muted); font-weight: 600; }
 .detail-section { margin-top: 14px; }
 .detail-title { color: var(--color-text-muted); margin-bottom: 4px; }
+.detail-title.mono { font-family: var(--font-grid); }
 .detail-card {
   padding: 8px 10px;
   border: 1px solid var(--color-border);

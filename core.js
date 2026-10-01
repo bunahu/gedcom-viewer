@@ -1740,6 +1740,17 @@
     return null;
   }
 
+  // A line as typed, in the shape of 6.3, for the screen while it is being typed: the whitespace
+  // before the level, the level (-1 when the line does not parse), the id, the tag, and where the
+  // value starts (-1 when there is none).
+  function lineShape(text) {
+    let ws = 0;
+    while (ws < text.length && (text[ws] === ' ' || text[ws] === '\t')) ws += 1;
+    const hit = SHAPE.exec(ws ? text.slice(ws) : text);
+    if (!hit) return { lead: ws, level: -1, xref: null, tag: null, valAt: -1, blank: ws === text.length };
+    return { lead: ws, level: Number(hit[1]), xref: hit[2] === undefined ? null : hit[2], tag: hit[3], valAt: hit[4] === undefined ? -1 : text.length - hit[4].length, blank: false };
+  }
+
   // 3.10 — a line clipped to `limit` characters (code points, never half of one): where the shown
   // part ends in the text, and how many characters are not shown.
   function clip(text, limit) {
@@ -1838,6 +1849,6 @@
     moveRefusal, moveLines, landings,
     markSaved, isChanged, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, stampTargets, stampPlan, applyStamps,
-    nameParts, nameShown, linkAt, clip, metaRebuild, metaParts,
+    nameParts, nameShown, linkAt, clip, metaRebuild, metaParts, lineShape,
   };
 });

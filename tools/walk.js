@@ -20,8 +20,8 @@
 // as it reads, blocks and sections dragged, Collapse all, a check's meaning, Back over the lines,
 // Bold surnames, a link selected whole, a clipped row's count, and E. --shots DIR saves pictures
 // of the fictional files, and of nothing else. --only PART walks one part alone, or several
-// named with commas: read-only, rest, editing, edges, third, save, copy. Exit 0 when every step
-// passes.
+// named with commas: read-only, rest, editing, edges, third, drags, save, copy. Exit 0 when every
+// step passes.
 //
 // Save in place is not walked here: its folder picker and its permission prompts need a person's
 // click. tests/save.test.js walks every other step of section 15's editing walk, over in-memory
@@ -68,6 +68,15 @@ async function gotoLine(page, n) {
 }
 
 const GRID_TOP = "document.getElementById('grid').scrollTop";
+
+// A control that lives in Settings (0.5.1): the menu opened under its button, the control
+// clicked, the menu closed again.
+async function setting(page, id) {
+  await page.click("document.getElementById('settings')");
+  await page.waitFor("document.getElementById('settings-menu').matches(':popover-open')");
+  await page.click(`document.getElementById('${id}')`);
+  await page.ev("document.getElementById('settings-menu').hidePopover(); true");
+}
 
 // Press on the scrollbar's thumb at the top, and make sure it is held: a 4-pixel move must scroll
 // the grid. A press that misses the thumb starts a text selection instead, which scrolls nothing;
@@ -194,9 +203,9 @@ async function readOnlyWalk(page, file) {
   if (Number(sel.lv) > 0) {
     const pad = () => page.ev("getComputedStyle(document.querySelector('#grid .row.is-sel .fd')).paddingLeft");
     const before = await pad();
-    await page.click("document.getElementById('indent')");
+    await setting(page, 'indent');
     const on = await pad();
-    await page.click("document.getElementById('indent')");
+    await setting(page, 'indent');
     const off = await pad();
     check(before === '0px' && parseFloat(on) > 0 && off === '0px', `Indent on and off: a level-${sel.lv} row is set in ${before} → ${on} → ${off}`);
   } else skip('no line above level 0 to set in');
@@ -385,9 +394,9 @@ async function restOfThePage(page, dir, shots) {
   // pictures, and the drag, of the fictional file only
   if (shots) {
     await gotoLine(page, m.findings.byCode.N1[0].line + 1);
-    await page.click("document.getElementById('indent')");
+    await setting(page, 'indent');
     await shot('n1-indent');
-    await page.click("document.getElementById('indent')");
+    await setting(page, 'indent');
     let long = 0;
     for (let i = 1; i < m.n; i += 1) if (m.texts[i].length > m.texts[long].length) long = i;
     await gotoLine(page, long + 1);
@@ -401,14 +410,14 @@ async function restOfThePage(page, dir, shots) {
     ? `the scrollbar dragged from 0 to ${fmt(d.reached)} of ${fmt(d.max)} and back, the least ink ${(100 * d.least).toFixed(1)}%`
     : 'the scrollbar: its thumb could not be taken hold of in three tries');
   const themes = [];
-  for (let k = 0; k < 3; k += 1) {
-    await page.click("document.getElementById('theme')");
+  for (const [k, name] of ['sunset', 'dark', 'light'].entries()) {
+    await setting(page, `theme-${name}`);
     themes.push(await page.ev("(document.documentElement.className || 'light') + ' ' + getComputedStyle(document.body).backgroundColor"));
     if (k < 2) await shot(themes[k].split(' ')[0]);
   }
   const names = themes.map((t) => t.split(' ')[0]);
   const colours = new Set(themes.map((t) => t.slice(t.indexOf(' ') + 1)));
-  check(JSON.stringify(names) === '["sunset","dark","light"]' && colours.size === 3, `the three themes, each its own background: ${themes.join(' → ')}`);
+  check(JSON.stringify(names) === '["sunset","dark","light"]' && colours.size === 3, `the three themes, chosen in Settings, each its own background: ${themes.join(' → ')}`);
 
   // a file dropped on the page
   await page.ev(`(() => {
@@ -455,16 +464,16 @@ async function editingOnThePage(page, dir, shots) {
 
   // the name, the file's name, its facts behind it; Open GEDCOM gone from the top bar
   const bar = await page.ev(`({ title: document.querySelector('.app-title').textContent, window: document.title,
-    open: document.getElementById('open').hidden, empty: document.getElementById('open-empty').textContent,
+    open: !document.getElementById('open'), empty: document.getElementById('open-empty').textContent,
     facts: document.getElementById('facts').hidden, name: document.getElementById('file-name').textContent })`);
   check(bar.title === 'GEDCOM Viewer' && bar.window === 'fiction.ged — GEDCOM Viewer',
     `the name: "${bar.title}" in the top bar, "${bar.window}" in the window's title`);
-  check(bar.open && bar.empty === 'Open GEDCOM', 'with a file open, Open GEDCOM is not in the top bar');
+  check(bar.open && bar.empty === 'Upload GEDCOM', `the top bar has no Open; the empty frame's button reads "${bar.empty}"`);
   await page.click("document.getElementById('file-name')");
   const facts = await page.ev("[...document.getElementById('facts').children].map((x) => x.textContent)");
   const size = `${(bytes.length / 1e6).toFixed(1)} MB`;
   check(bar.facts && JSON.stringify(facts) === JSON.stringify(['GEDCOM 5.5.1', 'UTF-8', 'exported 28 SEP 2026', 'by gedview-walk 1.0', size,
-    `${fmt(m.n)} lines`, 'sha256', 'Open another GEDCOM…']), `the facts, hidden until the name is clicked: ${facts.join(' · ')}`);
+    `${fmt(m.n)} lines`, 'sha256', 'Upload another GEDCOM…']), `the facts, hidden until the name is clicked: ${facts.join(' · ')}`);
   const goes = [];
   for (const [k, text] of [[0, 'GEDCOM 5.5.1'], [1, 'UTF-8'], [2, 'exported'], [3, 'by']]) {
     await page.click(`document.querySelectorAll('#facts .fact.is-link')[${k}]`);
@@ -837,20 +846,22 @@ async function thirdRound(page, dir, shots) {
   const returned = await page.ev(SELECTED);
   const thenText = await page.ev("document.getElementById('back').textContent");
   check(hiddenBefore && backText === `← Back to ${fmt(famsLine)}` && returned.ln === famsLine && thenText === '← Back to 1',
-    `Back sits over the lines at the main frame's top left, not in the top bar, only while there is somewhere to go: "${backText}", then back on line ${fmt(returned.ln)}, then "${thenText}"`);
+    `Back sits in the strip above the lines, not in the top bar, only while there is somewhere to go: "${backText}", then back on line ${fmt(returned.ln)}, then "${thenText}"`);
+  await page.click("document.getElementById('top')");
+  const atTop = await page.ev(`({ ln: (${SELECTED}).ln, back: document.getElementById('back').textContent, strip: !!document.querySelector('.middle .strip #top') })`);
+  check(atTop.ln === 1 && atTop.back === `← Back to ${fmt(famsLine)}` && atTop.strip, `Top, always in the strip, goes to line 1 as a jump: "${atTop.back}"`);
 
   // 3.5 — Collapse all, Expand all
   const sectionRows = new Set(m.records.map((i) => m.tag[i])).size - 1;
   const label1 = await page.ev("document.getElementById('fold-all').textContent");
   await page.click("document.getElementById('fold-all')");
-  await page.waitFor(`${ROWS} === ${m.records.length + sectionRows}`);
+  await page.waitFor(`${ROWS} === ${1 + sectionRows}`);                // HEAD shut to its line, every other type to its row
   const label2 = await page.ev("document.getElementById('fold-all').textContent");
-  await page.click("document.querySelector('#grid .row.is-section')");                 // one type shut by hand
   await page.click("document.getElementById('fold-all')");
   await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
   const label3 = await page.ev("document.getElementById('fold-all').textContent");
   check(label1 === 'Collapse all' && label2 === 'Expand all' && label3 === 'Collapse all',
-    `${label1} shuts every record to its first line (${fmt(m.records.length + sectionRows)} rows); ${label2} opens every block and every type (${fmt(m.n + sectionRows)} rows)`);
+    `${label1} shuts every record to its first line and every type to its row (${fmt(1 + sectionRows)} rows); ${label2} opens every block and every type (${fmt(m.n + sectionRows)} rows)`);
 
   // 3.8 — Bold surnames: the labels, not the lines; the filter finds a name either way
   await page.click("document.querySelector('.tab[data-panel=records]')");
@@ -859,14 +870,14 @@ async function thirdRound(page, dir, shots) {
   await page.type('jane fixture');
   await page.waitFor(`${VISIBLE('records-list')}.length === 2`);
   const found = await page.ev(`${VISIBLE('records-list')}.map((r) => r.firstChild.textContent)`);
-  await page.click("document.getElementById('surnames')");
+  await setting(page, 'surnames');
   await gotoLine(page, line('1 NAME Jane /Fixture/'));
   const bold = await page.ev(`({ pressed: document.getElementById('surnames').getAttribute('aria-pressed'),
     list: ${VISIBLE('records-list')}.map((r) => [...r.querySelectorAll('.surname')].map((x) => x.textContent).join('|')),
     listText: ${VISIBLE('records-list')}[0].querySelector('.main').textContent,
     row: document.querySelector('#grid .row.is-sel .tx').textContent,
     detail: (document.querySelector('#detail .surname') || {}).textContent, value: document.querySelector('#detail .detail-value').textContent })`);
-  await page.click("document.getElementById('surnames')");
+  await setting(page, 'surnames');
   check(JSON.stringify(found) === '["@I1@","@F1@"]' && bold.pressed === 'true' && bold.list[0] === 'Fixture' && bold.listText.startsWith('Jane Fixture')
     && bold.row === '1 NAME Jane /Fixture/' && bold.detail === 'Fixture' && bold.value === 'Jane /Fixture/',
     `"jane fixture" finds ${found.join(' and ')} with the toggle off; on, Records reads "${bold.listText}" with Fixture in bold, and the line stays "${bold.row}"`);
@@ -895,30 +906,35 @@ async function thirdRound(page, dir, shots) {
     return { tail: (r.querySelector('.more') || {}).textContent, shown: r.querySelector('.tx').textContent.length, pane: document.querySelector('#detail .detail-value').textContent.length,
       wide: g.scrollWidth > g.clientWidth, help: !document.querySelector('#detail .help') }; })()`);
   await page.ev("document.getElementById('grid').scrollLeft = 300");
-  await sleep(50);
+  await sleep(80);
   const scrolled = await page.ev(`(() => { const r = document.querySelector('#grid .row.is-sel'); const g = document.getElementById('grid').getBoundingClientRect();
-    return { left: g.left, fx: r.querySelector('.fx').getBoundingClientRect().left, tx: r.querySelector('.tx').getBoundingClientRect().left, at: document.getElementById('grid').scrollLeft }; })()`);
-  await page.ev("document.getElementById('grid').scrollLeft = 0");
+    return { left: g.left, fx: r.querySelector('.fx').getBoundingClientRect().left, tx: r.querySelector('.tx').getBoundingClientRect().left, at: document.getElementById('grid').scrollLeft, cue: document.getElementById('grid').classList.contains('is-aside') }; })()`);
+  await gotoLine(page, longLine - 1);
+  await sleep(60);                                                   // the scroll event that clears the cue
+  const afterJump = await page.ev("({ at: document.getElementById('grid').scrollLeft, cue: document.getElementById('grid').classList.contains('is-aside') })");
   check(clipped.tail === '… 500 more' && clipped.shown === 2000 && clipped.pane === 2493 && clipped.help,
     `line ${fmt(longLine)}, 2,500 characters: the row shows 2,000 and ends "${clipped.tail}"; the right frame shows the value whole (${fmt(clipped.pane)}); a line selected puts the check's meaning away`);
-  check(clipped.wide && scrolled.at === 300 && Math.abs(scrolled.fx - scrolled.left) < 1 && scrolled.tx < scrolled.left,
-    `the main frame scrolls sideways (${scrolled.at} px): the line number stays at the left edge, the text goes under it`);
+  check(clipped.wide && scrolled.at === 300 && Math.abs(scrolled.fx - scrolled.left) < 1 && scrolled.tx < scrolled.left && scrolled.cue,
+    `the main frame scrolls sideways (${scrolled.at} px): the line number stays at the left edge, the text goes under it, and the number column casts a shade to say so`);
+  check(afterJump.at === 0 && !afterJump.cue, 'a jump to a line brings the lines back to their left edge');
   await shot('sideways');
 
   // 3.1 — the side frames hidden and shown, and remembered across a reload
   await page.click("document.getElementById('hide-left')");
   await page.click("document.getElementById('hide-right')");
-  const hidden = await page.ev("({ cls: document.getElementById('work').className, side: getComputedStyle(document.getElementById('side')).display, detail: getComputedStyle(document.getElementById('detail')).display, tab: document.getElementById('hide-left').textContent + document.getElementById('hide-right').textContent })");
+  await sleep(350);                                                  // the frames ease shut
+  const hidden = await page.ev("({ cls: document.getElementById('work').className, side: getComputedStyle(document.getElementById('side')).visibility, detail: getComputedStyle(document.getElementById('detail')).visibility, width: document.getElementById('side').getBoundingClientRect().width, tab: document.getElementById('hide-left').getAttribute('aria-pressed') + '/' + document.getElementById('hide-left').title + '/' + document.getElementById('hide-right').title })");
   await shot('frames-hidden');
   await page.goto(`file://${path.join(ROOT, 'index.html')}`);
   const remembered = await page.ev("document.getElementById('work').className");
   await page.click("document.getElementById('hide-left')");
-  await page.ev("document.getElementById('split-right').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))");
-  const shown = await page.ev("({ cls: document.getElementById('work').className, tab: document.getElementById('hide-left').textContent + document.getElementById('hide-right').textContent })");
-  check(hidden.cls === 'work left-hidden right-hidden' && hidden.side === 'none' && hidden.detail === 'none' && hidden.tab === '›‹',
-    `‹ and › hide the left bar and the right frame (${hidden.cls}), and flip (${hidden.tab})`);
-  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tab === '‹›',
-    `hidden or shown is remembered across a reload (${remembered}); the tab, and a double-click on the bar, bring them back (${shown.cls || 'both shown'})`);
+  await page.click("document.getElementById('hide-right')");
+  await sleep(350);
+  const shown = await page.ev("({ cls: document.getElementById('work').className, side: getComputedStyle(document.getElementById('side')).visibility, tab: document.getElementById('hide-left').getAttribute('aria-pressed') + '/' + document.getElementById('hide-left').title })");
+  check(hidden.cls === 'work left-hidden right-hidden' && hidden.side === 'hidden' && hidden.detail === 'hidden' && hidden.width === 0 && hidden.tab === 'true/Show left bar/Show right frame',
+    `the two icons at the ends of the top bar hide the left bar and the right frame (${hidden.cls}, eased shut), and read "${hidden.tab.split('/')[1]}"`);
+  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.side === 'visible' && shown.tab === 'false/Hide left bar',
+    `hidden or shown is remembered across a reload (${remembered}); the same icons bring them back (${shown.cls === 'work' ? 'both shown' : shown.cls})`);
   await page.openFile(file);
 
   // 3.2 — a copy button on every box of text: the value, Joined, and each part of a _META
@@ -951,8 +967,8 @@ async function thirdRound(page, dir, shots) {
   await page.click("document.querySelector('#detail .meta-story .copy')");
   await page.waitFor("typeof window.__copied === 'string' && window.__copied.includes('Fixtureville')");
   const storyCopied = await page.ev('window.__copied');
-  check(JSON.stringify(drawn.titles) === JSON.stringify(['Story', 'Transcription', 'Persons', 'Cemetery', 'Record id', 'Joined', 'Pointed at by 0'].slice(0, 6)) || drawn.titles.slice(0, 6).join('|') === 'Story|Transcription|Persons|Cemetery|Record id|Joined',
-    `a CONC line of the _META: the right frame draws Story · Transcription · Persons · Cemetery · Record id above Joined (${drawn.titles.join(' · ')})`);
+  check(drawn.titles.slice(0, 6).join('|') === 'content|transcription|personas|cemetery|record_source_gid|Joined',
+    `a CONC line of the _META: the right frame draws its parts under the names the file gives them, above Joined (${drawn.titles.join(' · ')})`);
   check(drawn.strong === 'Fixture' && drawn.gone === '' && drawn.colspan === '2' && drawn.red === false && drawn.text.includes('the record (https://example.org/grave/1)') && drawn.text.includes('[image]'),
     `the story keeps its bold, its table (colspan ${drawn.colspan}) and its text; the link is text with its address, the image is [image]; no link, image, script, style, span, font or Word element survives`);
   check(drawn.persons === 2 && drawn.person === 'Jane Fixture · 1 Jan 1900 · Fixtureville · 2 Feb 1950 · Fixture City' && drawn.transcription === 'Line one\nLine two' && drawn.copies >= 6,
@@ -982,6 +998,77 @@ async function thirdRound(page, dir, shots) {
   check(url === 'https://example.org/fixture/jane', `a double-click on an address selects it whole: "${url}"`);
   check(ptr.text === '@F1@' && ptr.line === famsLine, `⌥ and a double-click on a pointer select it whole ("${ptr.text}"), and nothing jumps (still line ${fmt(ptr.line)})`);
 
+  // the change dot in the mark column, and the right frame following the typing (0.5.1)
+  const nameLine = line('1 NAME Jane /Fixture/');
+  await page.click("document.getElementById('edit')");
+  await gotoLine(page, nameLine);
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+  await page.ev("(() => { const i = document.querySelector('#grid input.edit'); i.setSelectionRange(i.value.length, i.value.length); })()");
+  await page.type(' Jr');
+  await sleep(50);
+  const following = await page.ev("({ value: document.querySelector('#detail .detail-value').textContent, was: (document.querySelector('#detail .detail-was .detail-value') || {}).textContent })");
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("document.querySelector('#grid .row.is-sel.is-changed')");
+  const dots = await page.ev("({ dot: !!document.querySelector('#grid .row.is-sel .cg.is-changed'), value: document.querySelector('#detail .detail-value').textContent })");
+  check(following.value === 'Jane /Fixture/ Jr' && !following.was, `while the line is typed, the right frame already reads its value: "${following.value}"`);
+  check(dots.dot && dots.value === 'Jane /Fixture/ Jr', 'kept, the row has a change dot in the mark column, in the changed colour');
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor("document.getElementById('changes-count').textContent === ''");
+  await page.click("document.getElementById('edit')");
+
+  // Settings holds Theme, Indent and Bold surnames; the Tags list steps through its orders
+  await page.click("document.getElementById('settings')");
+  await page.waitFor("document.getElementById('settings-menu').matches(':popover-open')");
+  const menu = await page.ev("[...document.querySelectorAll('#settings-menu button')].map((b) => b.id).join(',')");
+  await page.ev("document.getElementById('settings-menu').hidePopover(); true");
+  const inBar = await page.ev("['theme','fold-all','indent','surnames'].map((id) => !!document.querySelector('.bar #' + id)).join(',')");
+  check(menu === 'theme-light,theme-sunset,theme-dark,indent,surnames' && inBar === 'false,false,false,false',
+    `Settings opens a menu holding ${menu.split(',').length} controls: the themes, Indent, Bold surnames; none of them in the top bar`);
+  await page.click("document.querySelector('.tab[data-panel=tags]')");
+  await page.waitFor(LAID_OUT('tags-list'));
+  const firstTag = () => page.ev(`${VISIBLE('tags-list')}[0].firstChild.textContent + ' ' + ${VISIBLE('tags-list')}[0].lastChild.textContent`);
+  const orders = [await firstTag()];
+  for (let k = 0; k < 4; k += 1) {
+    await page.click("document.getElementById('tags-order')");
+    orders.push(await firstTag());
+  }
+  const byCount = [...m.tagCounts.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
+  const rising = [...m.tagCounts.entries()].sort((a, b) => (a[1] - b[1]) || (a[0] < b[0] ? -1 : 1));
+  const names = [...m.tagCounts.keys()].sort();
+  const want = [byCount[0], rising[0], [names[0], m.tagCounts.get(names[0])], [names[names.length - 1], m.tagCounts.get(names[names.length - 1])], byCount[0]].map((x) => `${x[0]} ${fmt(x[1])}`);
+  check(JSON.stringify(orders) === JSON.stringify(want), `the Tags list's order button steps through by count, by count rising, A–Z, Z–A and back: ${orders.join(' → ')}`);
+
+  // 3.11 — E turns Edit on and off; not while a box is typed in. Last, and the box left by a
+  // click: see `press` in tools/chrome.js for what a synthetic key can do to headless Chrome.
+  await page.press('e', 'KeyE', 69, 'e');                            // a real press: the key with its character
+  const on = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
+  await page.press('e', 'KeyE', 69, 'e');
+  const off = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
+  await page.click("document.getElementById('goto')");
+  await page.clearBox();
+  await page.press('e', 'KeyE', 69, 'e');
+  const inBox = await page.ev("({ pressed: document.getElementById('edit').getAttribute('aria-pressed'), typed: document.getElementById('goto').value })");
+  await page.clearBox();
+  await page.click("document.querySelector('#grid .row')");
+  check(on === 'true' && off === 'false' && inBox.pressed === 'false' && inBox.typed === 'e',
+    `E turns Edit on (${on}), E again off (${off}); in a box it types (Edit ${inBox.pressed}, the box holds "${inBox.typed}"); ⌘E is not taken`);
+}
+
+
+// 3.4a, dragged: a block among its siblings, a section past another, a record to the top of its
+// type, Esc, a release in place. In a Chrome of its own with as little before it as can be: in
+// Chrome 154 headless, a few dozen synthetic clicks before a drag let go with Escape leave the
+// renderer answering nothing (see `press` in tools/chrome.js); a hand does not do that.
+async function fourthDrags(page, dir, shots) {
+  const file = path.join(dir, 'third.ged');
+  if (!fs.existsSync(file)) fs.writeFileSync(file, thirdFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `third-${name}.png`)) : null);
+  console.log(`\n== the third round's drags (0.5), on the fictional file of ${fmt(m.n)} lines`);
+  await page.openFile(file);
+  const line = (text) => m.texts.indexOf(text) + 1;
+  const famsLine = line('1 FAMS @F1@');
   // 3.4a — a block dragged among its siblings; a section dragged past another; Esc; own place
   await page.click("document.getElementById('edit')");
   const birt = line('1 BIRT');
@@ -1038,11 +1125,37 @@ async function thirdRound(page, dir, shots) {
   await page.key('z', 'KeyZ', 90, 4);
   await page.waitFor("document.getElementById('changes-count').textContent === ''");
 
-  // a record lands only among its own type; Esc lets go; a release over its own place moves nothing
+  // a record dragged to the top of its type: the gold line under the type's row, not above it
+  const i2 = line('0 @I2@ INDI');
+  await gotoLine(page, i2);
+  await page.ev("document.getElementById('grid').scrollTop = 0; true");   // the rows clear of the frame's edges, where a drag scrolls
+  await sleep(60);
+  const i2Rect = await page.ev(ROW_RECT(i2));
+  const indiHead = await page.ev(SECTION_RECT('INDI'));
+  await page.mouse('mouseMoved', i2Rect.x, i2Rect.y);
+  await page.mouse('mousePressed', i2Rect.x, i2Rect.y);
+  await page.mouse('mouseMoved', i2Rect.x, i2Rect.y + 8, { button: 'left', buttons: 1 });
+  await page.mouse('mouseMoved', indiHead.x, indiHead.top + 2, { button: 'left', buttons: 1 });
+  await sleep(50);
+  const atHead = await page.ev("(() => { const l = document.querySelector('#grid .drop-line'); return { line: !l.hidden, y: l.getBoundingClientRect().top }; })()");
+  await page.mouse('mouseMoved', i2Rect.x, i2Rect.y + 6, { button: 'left', buttons: 1 });   // back over its own row: no gold line
+  await sleep(50);
+  await page.mouse('mouseReleased', i2Rect.x, i2Rect.y + 6);
+  check(atHead.line && Math.abs(atHead.y - indiHead.bottom) < 2 && (await page.ev("document.getElementById('changes-count').textContent")) === '',
+    'a person dragged to the top of the people: the gold line sits under the INDI row, not above it; released back over its own row, nothing moves');
+
+  // a release over its own place moves nothing; then, last of all — a drag let go with Escape is
+  // where this Chrome can stop answering (tools/chrome.js, `press`) — a record dragged beyond its
+  // own type, and Esc letting go
   const i1 = line('0 @I1@ INDI');
   await gotoLine(page, i1);
+  await page.ev("document.getElementById('grid').scrollTop = 1e9; true");   // as far down as it goes: the families mid-view
+  await sleep(60);
   const i1Rect = await page.ev(ROW_RECT(i1));
   const f2Rect = await page.ev(ROW_RECT(line('0 @F2@ FAM')));
+  const own = await dragRow(page, i1Rect, { x: i1Rect.x, y: i1Rect.y + 6 });
+  check(!own.line && (await page.ev("document.getElementById('changes-count').textContent")) === '' && (await page.ev(`(${SELECTED}).id`)) === '@I1@',
+    'released where it already is — no gold line — it moves nothing');
   await page.mouse('mouseMoved', i1Rect.x, i1Rect.y);
   await page.mouse('mousePressed', i1Rect.x, i1Rect.y);
   await page.mouse('mouseMoved', i1Rect.x, i1Rect.y + 8, { button: 'left', buttons: 1 });
@@ -1055,27 +1168,9 @@ async function thirdRound(page, dir, shots) {
   const famTop = await page.ev(SECTION_RECT('FAM'));
   check(overFam.line && Math.abs(overFam.y - famTop.top) < 2, `a person dragged down to the families: the gold line stays at the last edge among the people (the FAM row's top), never inside another type`);
   check(afterEsc.changes === '' && afterEsc.dim === 0, 'Esc lets go: nothing moves, nothing dims');
-  const own = await dragRow(page, i1Rect, { x: i1Rect.x, y: i1Rect.y + 6 });
-  check(!own.line && (await page.ev("document.getElementById('changes-count').textContent")) === '' && (await page.ev(`(${SELECTED}).id`)) === '@I1@',
-    'released where it already is — no gold line — it moves nothing');
   await page.click("document.getElementById('edit')");
 
-  // 3.11 — E turns Edit on and off; not while a box is typed in. Last, and the box left by a
-  // click: see `press` in tools/chrome.js for what a synthetic key can do to headless Chrome.
-  await page.press('e', 'KeyE', 69, 'e');                            // a real press: the key with its character
-  const on = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
-  await page.press('e', 'KeyE', 69, 'e');
-  const off = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
-  await page.click("document.getElementById('goto')");
-  await page.clearBox();
-  await page.press('e', 'KeyE', 69, 'e');
-  const inBox = await page.ev("({ pressed: document.getElementById('edit').getAttribute('aria-pressed'), typed: document.getElementById('goto').value })");
-  await page.clearBox();
-  await page.click("document.querySelector('#grid .row')");
-  check(on === 'true' && off === 'false' && inBox.pressed === 'false' && inBox.typed === 'e',
-    `E turns Edit on (${on}), E again off (${off}); in a box it types (Edit ${inBox.pressed}, the box holds "${inBox.typed}"); ⌘E is not taken`);
 }
-
 // Save in place through the page (10.2), with the folder picker stood in for by a folder held in
 // the page's memory: the picker and its permission prompt are a person's clicks, and they are the
 // owner's in phase 5; every step after them is walked here. Then the file is changed from outside,
@@ -1272,13 +1367,22 @@ async function waitForFile(dir, pattern, timeout = 10000) {
   // can leave a tab unable to take the next one (see `press` in tools/chrome.js) — and the console
   // and the requests of all of them are read together at the end.
   const log = { errors: [], requests: [] };
-  async function inChrome(fn) {
+  async function inChrome(fn, attempt = 1) {
     const { page, close } = await launch();
+    const before = failures;
     try {
       await page.goto(`file://${path.join(ROOT, 'index.html')}`);
       await fn(page);
     } catch (e) {
       if (page.log.errors.length) console.error(`the page said: ${page.log.errors.join(' | ')}`);
+      // the page stopped answering — Chrome, not the page (tools/chrome.js, `press`): the part is
+      // walked once more in a fresh Chrome, and its checks so far are counted again from the start
+      if (/did not answer/.test(e.message) && attempt < 3) {
+        console.log(`  --    the page stopped answering (${e.message.slice(0, 80)}…): Chrome is restarted and this part walked again`);
+        failures = before;
+        await close();
+        return inChrome(fn, attempt + 1);
+      }
       throw e;
     } finally {
       log.errors.push(...page.log.errors);
@@ -1292,6 +1396,7 @@ async function waitForFile(dir, pattern, timeout = 10000) {
     if (part('editing')) await inChrome((page) => editingOnThePage(page, dir, shots));
     if (part('edges')) await inChrome((page) => editingEdges(page));
     if (part('third')) await inChrome((page) => thirdRound(page, dir, shots));
+    if (part('drags')) await inChrome((page) => fourthDrags(page, dir, shots));
     if (part('save')) await inChrome((page) => saveInPlace(page, dir));
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
     console.log('\n== the whole walk');
