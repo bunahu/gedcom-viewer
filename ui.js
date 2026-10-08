@@ -1,3 +1,4 @@
+// GEDCOM Viewer. Copyright (C) 2026 bunahu. Free software under the GNU General Public License, version 3 or later: see LICENSE.
 /* GEDCOM Viewer — ui.js
  *
  * The page: the grid, the panels, the right pane, the dialogs, the keys. It is the only file that

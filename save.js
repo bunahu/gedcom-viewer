@@ -1,3 +1,4 @@
+// GEDCOM Viewer. Copyright (C) 2026 bunahu. Free software under the GNU General Public License, version 3 or later: see LICENSE.
 /* GEDCOM Viewer — save.js
  *
  * Saving: the names of BUILD-BRIEF 10.1, Save in place in the order of 10.2, Save a copy (10.3)

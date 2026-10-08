@@ -1,3 +1,4 @@
+// GEDCOM Viewer. Copyright (C) 2026 bunahu. Free software under the GNU General Public License, version 3 or later: see LICENSE.
 /* GEDCOM Viewer — core.js
  *
  * The reading half: bytes → encoding → lines → shape → records and pointers → checks → counts →

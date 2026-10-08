@@ -189,8 +189,8 @@ git tag -a v0.6 -m "0.6: …" && git push origin main v0.6
 One tag per push: GitHub makes no event for a push of more than three tags at once, so
 `git push --tags` after a rewrite publishes nothing, and **Run workflow** on the tag does it by hand.
 `.github/workflows/publish.yml` then runs the tests and, when they pass, uploads the page's files
-alone — `index.html`, `style.css`, `core.js`, `save.js`, `ui.js`, `privacy.html` and the three
-icons — never the tests, the tools, the brief, or anything in `local/`. **Run workflow**, on the
+alone — `index.html`, `style.css`, `core.js`, `save.js`, `ui.js`, `privacy.html`, the three
+icons and `LICENSE` — never the tests, the tools, the brief, or anything in `local/`. **Run workflow**, on the
 Actions tab, publishes what `main` holds, by hand. The domain is registered at Name.com, whose
 nameservers answer for it: four A and four AAAA records at the bare name point at GitHub Pages,
 and `www` is a CNAME to `bunahu.github.io`, which GitHub redirects to the bare name; HTTPS is
@@ -284,3 +284,11 @@ steps light → sunset → dark.
 | `--pressed-bg` · `--hover-bg` | a pressed button; anything under the pointer |
 | `--drop-bg` | the wash over the page while a file is dragged over it |
 | `--dialog-width` · `--shadow` · `--backdrop` | the dialogs (Save, Save a copy, deleting): their width, their shadow, the wash behind them |
+
+## License
+
+GEDCOM Viewer is free software. Copyright (C) 2026 bunahu. It is released under the GNU General
+Public License, version 3 or, at your option, any later version: the text is in [LICENSE](LICENSE),
+and the page serves it beside its files. It comes with no warranty. Anyone may use it, read it,
+change it and pass it on; a changed copy that is passed on, served as a page included, must carry
+its source under the same terms.
