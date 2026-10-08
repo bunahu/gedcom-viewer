@@ -1267,6 +1267,31 @@ What stays under every shape: the change stamps (F1, V1) on the records changed,
 
 The walk also met Chrome 154 headless once more, at the drags: once a few dozen synthetic clicks have gone into a tab, a drag of a row let go with a synthetic Escape leaves the renderer, a moment later, answering nothing — not even the debugger. Sixty harmless clicks first: a hang every time; none first: ten rounds clean; nothing in the page's drag changes it (pointer capture, the selection, the dimming, the rows' layer and its width, the GPU, each switched off in turn). So the drags are a part of their own, walked in a fresh Chrome, with the drag let go with Escape last; a part whose page stops answering is walked once more, and says where the page was, by the debugger, instead of waiting (`tools/chrome.js`, `press`).
 
+**P8 — Report a problem** (the owner's ask of 2026-10-08, after 0.5.2: a button that builds a
+diagnostic the user reads, and may change or cut, before it goes anywhere; the original never goes).
+Three ways; the recommendation first. Under every way the page sends nothing: what leaves is what
+the user copies or saves, and only that.
+
+| P8 | Variant | Worked example |
+|---|---|---|
+| **R1** — recommended | **Copy, with a checksum.** Settings → **Report a problem…** opens a dialog: a line saying that nothing is sent and that the box holds counts and codes only, never a line of the file; the report in a box, as text, to read, change or cut; a second box, **What happened**, the user's own words, with a line beside it saying so; **Copy**. The report's last line is a checksum of every line above it (the first eight characters of their sha256), so a report changed after it was built no longer matches, and `tools/report-check.js` says so; the original is kept nowhere. Under the boxes, in words: paste it into a new issue at github.com/bunahu/gedcom-viewer/issues, as the privacy page says — words, not a link, since the page holds no web address (section 14, No network) | The box reads `GEDCOM Viewer 0.5.3 — a problem report. Counts and codes only; no line of the file.` · `Where: gedcom-viewer.net · Chrome 154 · macOS` · `File: 4.2 MB · 123,456 lines · UTF-8, header says UTF-8 · GEDCOM 5.5.1 · exported by Ancestry.com Family Trees 2025.08 · sha256 7f3a9c0d2e1b…` · `Lines: LF 123,000 · CR LF 456 · longest 2,048 characters · CONC 3,498 · CONT 1,605` · `Records: INDI 2,345 · OBJE 1,234 · FAM 1,098 · SOUR 765 · REPO 7` · `Checks: E7 2 (lines 18,204 and 91,377) · N1 3 · N3 9 · N4 93` · `Edit: off · unsaved changes: 0` · `What happened:` and the user's words · `checksum: 1a2b3c4d`. The user cuts the browser line, types what happened, presses Copy: the clipboard holds the box as it reads, and the checksum no longer matches the lines above it, which is all the report says about editing. Cut the checksum too, and the report is simply unverified — at worst, useless |
+| **R2** | **Save as a file.** The same dialog, but **Save report** writes `gedcom-viewer-report.<YYYY-MM-DDTHHMMSS>.txt` the way Save a copy writes its copy — Chrome's Save dialog, a download elsewhere — to attach to the issue | The same text, as a file beside the GEDCOM; the reporter attaches it to the issue instead of pasting. Two steps where R1 has one, and a file to find afterwards |
+| **R3** | **One click to a pre-filled issue.** A button opens GitHub's new-issue page with the report in the address | One click and the issue is ready; but the report travels in a web address, the page gains an outbound link, and the No-network gate must learn an exception. Not recommended |
+
+What stays under every way: the report is built in `core.js`, by a function the tests hold to its
+word — a fixture's every line is searched for in the report, and none is found; the checksum rule is
+the one `tools/report-check.js` applies — and the walk gains a step: open the dialog, cut a line,
+Copy, and the checksum no longer matches. Never the file's name or folder (the name is a family's
+name), never a value, never an id; the browser's name is one line the user may cut. The privacy
+page's "Reporting a problem" says the button exists and what it does. Assumed, unless he says
+otherwise: the entry lives in Settings, as the smaller controls do; this is 0.5.3, tagged when his
+walk of it passes.
+
+On "is anyone using this?", asked the same day: GitHub counts visits to the repository (Insights →
+Traffic: views, unique visitors, clones, referrers, for 14 days) and nothing about the site at the
+domain, which GitHub Pages does not count. That is all he wants for now; nothing is added to the
+page.
+
 ### Session 3's prompt
 
 ```
