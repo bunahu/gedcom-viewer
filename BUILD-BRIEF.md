@@ -515,6 +515,7 @@ facts show. Never a file's name, content or handle; and Edit is off whenever a f
 | `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script (0.5.2) | — |
 | `favicon.svg` · `favicon.ico` · `apple-touch-icon.png` | the icon (0.5.2) | — |
 | `.github/workflows/publish.yml` | on a version tag: the tests, then the page's files alone to GitHub Pages (0.5.2) | — |
+| `tools/report-check.js` | reads a problem report back: as built, changed after it was built, or no checksum (P8; 0.5.3) | — |
 | `tests/*.test.js` | Node's own test runner (`node --test`); nothing to install | — |
 | `tests/helpers.js` | what the tests share: where the fixtures are, and how findings are written down | — |
 | `tests/fake-handles.js` | in-memory stand-ins with the same few methods as the real file and folder handles | — |
@@ -1291,6 +1292,11 @@ On "is anyone using this?", asked the same day: GitHub counts visits to the repo
 Traffic: views, unique visitors, clones, referrers, for 14 days) and nothing about the site at the
 domain, which GitHub Pages does not count. That is all he wants for now; nothing is added to the
 page.
+
+R1 picked and built the same day, as 0.5.3: `core.js` writes the report (`report`, `withChecksum`,
+`reportChecksumParts`), `ui.js` the dialog under Settings (Help · **Report a problem…**),
+`tools/report-check.js` reads one back, `tests/report.test.js` holds it to its word, and the walk's
+third-round part gained the step (140 steps pass; 148 tests). Tagged when his walk of it passes.
 
 ### Session 3's prompt
 

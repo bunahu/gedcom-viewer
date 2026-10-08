@@ -1781,6 +1781,89 @@
   }
   $('notice').addEventListener('click', () => { $('notice').hidden = true; });
 
+  // P8 — Report a problem (Settings; 0.5.3). core.js writes the report from counts and codes; the
+  // dialog shows it in a box to read, change or cut, with a line under it saying whether it still
+  // reads as built; a second box, What happened, the reporter's own words; Copy puts the first box
+  // as it reads, then "What happened:" and the second, on the clipboard — and nothing else. Nothing
+  // is sent, and the original is kept nowhere.
+  function browserName() {
+    const ua = navigator.userAgent;
+    const pick = (pairs) => { for (const [name, re] of pairs) { const x = re.exec(ua); if (x) return x[1] ? `${name} ${x[1]}` : name; } return ''; };
+    const browser = pick([['Edge', /Edg\/(\d+)/], ['Chrome', /Chrome\/(\d+)/], ['Firefox', /Firefox\/(\d+)/], ['Safari', /Version\/(\d+)[.\d]* .*Safari/]]) || 'a browser';
+    const os = pick([['iOS', /iPhone|iPad/], ['macOS', /Mac OS X/], ['Windows', /Windows/], ['Android', /Android/], ['Linux', /Linux/]]);
+    return [browser, os].filter((x) => x).join(' · ');
+  }
+
+  // A text to the clipboard; refused, the box's text is selected instead, so that ⌘C copies it (3.2).
+  async function copyPlain(text, box, said) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notice(said);
+      return true;
+    } catch (err) {
+      if (box && box.select) box.select();
+      notice('The clipboard refused, so the report box is selected instead: ⌘C copies it; add What happened by hand.', 'error');
+      return false;
+    }
+  }
+
+  async function reportProblem() {
+    const version = ($('version') || document.querySelector('.version') || {}).textContent || '';
+    const where = location.protocol === 'file:' ? 'opened from disk' : location.host;
+    const settings = `theme ${state.theme} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'}`;
+    const info = {
+      version, where, browser: browserName(),
+      bytes: state.disk ? state.disk.bytes : null,
+      sha256: state.disk ? (state.disk.sha256 || await state.hashing) : null,
+      editing: !!state.editing, unsaved: state.runs.length, settings,
+    };
+    const encoder = new TextEncoder();
+    const text = C.report(state.m, info);
+    const built = C.withChecksum(text, await sha256(encoder.encode(`${text}\n`)));
+    let box;
+    let what;
+    let stateLine;
+    const asBuilt = async () => {
+      const p = C.reportChecksumParts(box.value);
+      if (!p.claimed) { stateLine.textContent = 'No checksum line: the report cannot be read back as built.'; return; }
+      const hex = await sha256(encoder.encode(p.above));
+      stateLine.textContent = hex.startsWith(p.claimed)
+        ? 'As built: the checksum matches the lines above it.'
+        : 'Changed since it was built: the checksum no longer matches the lines above it.';
+    };
+    const composed = () => `${box.value.replace(/\n+$/, '')}\nWhat happened: ${what.value.trim() || '(nothing said)'}\n`;
+    await dialog('Report a problem', (body) => {
+      body.appendChild(el('div', 'dialog-sum', 'Nothing is sent by this page. The box holds counts and codes only, never a line of the file. ' +
+        'Read it; change or cut anything; then Copy, and paste it into a new issue at github.com/bunahu/gedcom-viewer/issues. The privacy page says more.'));
+      box = el('textarea', 'report');
+      box.id = 'report-text';
+      box.value = built;
+      box.rows = 11;
+      box.spellcheck = false;
+      box.setAttribute('aria-label', 'The report');
+      box.addEventListener('input', () => { asBuilt(); });
+      body.appendChild(box);
+      stateLine = el('div', 'dialog-sum');
+      stateLine.id = 'report-state';
+      body.appendChild(stateLine);
+      body.appendChild(el('div', 'dialog-sum', 'What happened — your own words; write nothing you would not want public:'));
+      what = el('textarea', 'report is-words');
+      what.id = 'report-what';
+      what.rows = 4;
+      what.setAttribute('aria-label', 'What happened');
+      body.appendChild(what);
+      const row = el('div', 'dialog-note');
+      const copy = el('button', 'button is-primary', 'Copy');
+      copy.type = 'button';
+      copy.id = 'report-copy';
+      copy.addEventListener('click', () => copyPlain(composed(), box, 'Copied: the report, then What happened. Paste it into a new issue at github.com/bunahu/gedcom-viewer/issues.'));
+      row.appendChild(copy);
+      row.appendChild(el('span', 'muted', 'puts the report as it reads, then What happened, on the clipboard'));
+      body.appendChild(row);
+      asBuilt();
+    }, [{ label: 'Close', value: '' }]);
+  }
+
   // A dialog: a title, what `fill` puts in its body, and its buttons. It resolves with the value of
   // the button pressed, or null for Cancel or Esc.
   function dialog(title, fill, buttons) {
@@ -2227,6 +2310,10 @@
   }
 
   $('open-empty').addEventListener('click', pickFile);
+  $('report').addEventListener('click', () => {
+    try { $('settings-menu').hidePopover(); } catch (err) { /* not open */ }
+    reportProblem();
+  });
   $('file-input').addEventListener('change', () => {
     const file = $('file-input').files[0];
     $('file-input').value = '';

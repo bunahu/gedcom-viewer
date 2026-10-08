@@ -1840,6 +1840,86 @@
     return parts;
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // P8 — a problem report: counts and codes only, never a line of the file (section 19; 0.5.3)
+  // ---------------------------------------------------------------------------------------------
+  //
+  // `report` writes the text the Report a problem dialog shows, from `m`, the file as read (null
+  // when none is open), and `info`, what only the page knows: the version, where the page is, the
+  // browser, the size on disk, the sha256, Edit, the unsaved changes, the settings. Nothing in it
+  // is a value from the file — sizes, counts, codes, line numbers, the header's program, and the
+  // first twelve characters of the sha256. `withChecksum` ends it with a checksum line, and
+  // `reportChecksumParts` reads one back: the checksum is the first eight hex characters of the
+  // sha256 of every line above it, each followed by a line feed — the one rule tools/report-check.js
+  // applies, and the page, to say whether a report still reads as built. The lines after the
+  // checksum are the reporter's own words, and are not checked.
+
+  const REPORT_CHECKS = ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7'];
+  const CHECKSUM = 'checksum: ';
+
+  // "line 5" · "lines 5 and 9" · "lines 5, 9 and 12, of 40"
+  function linesOf(findings, max) {
+    const nums = findings.slice(0, max).map((f) => num(f.line + 1));
+    const more = findings.length > max ? `, of ${num(findings.length)}` : '';
+    if (nums.length === 1) return `line ${nums[0]}`;
+    return `lines ${nums.slice(0, -1).join(', ')} and ${nums[nums.length - 1]}${more}`;
+  }
+
+  function report(m, info) {
+    const out = [];
+    out.push(`GEDCOM Viewer ${info.version} — a problem report. Counts and codes only; no line of the file.`);
+    out.push(`Where: ${[info.where, info.browser].filter((x) => x).join(' · ')}`);
+    if (!m) {
+      out.push('File: none open');
+    } else {
+      const f = m.facts || {};
+      const file = [];
+      if (info.bytes !== undefined && info.bytes !== null) file.push(`${num(info.bytes)} bytes`);
+      file.push(`${num(m.n)} lines`);
+      file.push(m.encodingLabel || m.codec);
+      if (m.version) file.push(`GEDCOM ${m.version}`);
+      const source = [f.source, f.sourceVersion].filter((x) => x).join(' ');
+      if (f.date || source) file.push(`exported${f.date ? ` ${f.date}` : ''}${source ? ` by ${source}` : ''}`);
+      if (info.sha256) file.push(`sha256 ${info.sha256.slice(0, 12)}…`);
+      out.push(`File: ${file.join(' · ')}`);
+      const tc = m.termCounts;
+      const ends = [['LF', tc[TERM.LF]], ['CR LF', tc[TERM.CRLF]], ['CR', tc[TERM.CR]], ['LF CR', tc[TERM.LFCR]], ['none', tc[TERM.NONE]]]
+        .filter(([, c]) => c > 0).map(([k, c]) => `${k} ${num(c)}`);
+      const tag = (t) => num(m.tagCounts.get(t) || 0);
+      out.push(`Lines: ${ends.join(' · ')} · longest ${num(m.longest)} characters · CONC ${tag('CONC')} · CONT ${tag('CONT')} · CHAN ${tag('CHAN')}`);
+      const records = [...m.topCounts.entries()].sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t} ${num(c)}`);
+      out.push(`Records: ${records.join(' · ') || 'none'}`);
+      out.push(`Tags: ${num(m.tagCounts.size)} distinct · ids defined ${num(m.definedAt.size)}`);
+      const checks = [];
+      for (const code of REPORT_CHECKS) {
+        const list = m.findings.byCode[code] || [];
+        if (!list.length) continue;
+        checks.push(code[0] === 'E' ? `${code} ${num(list.length)} (${linesOf(list, 3)})` : `${code} ${num(list.length)}`);
+      }
+      out.push(`Checks: ${checks.join(' · ') || 'none'}`);
+    }
+    out.push(`Edit: ${info.editing ? 'on' : 'off'} · unsaved changes: ${num(info.unsaved || 0)}`);
+    if (info.settings) out.push(`Settings: ${info.settings}`);
+    return out.join('\n');
+  }
+
+  function withChecksum(text, hex) { return `${text}\n${CHECKSUM}${hex.slice(0, 8)}`; }
+
+  // `above`: every line above the checksum line, each ended with a line feed — what the sha256 is
+  // of; `claimed`: the checksum as written, or null when there is no checksum line; `after`: the
+  // lines after it, the reporter's own.
+  function reportChecksumParts(text) {
+    const lines = text.split('\n');
+    const k = lines.findIndex((l) => l.startsWith(CHECKSUM));
+    if (k < 0) return { above: text.endsWith('\n') ? text : `${text}\n`, claimed: null, after: '' };
+    return {
+      above: lines.slice(0, k).map((l) => `${l}\n`).join(''),
+      claimed: lines[k].slice(CHECKSUM.length).trim().toLowerCase() || null,
+      after: lines.slice(k + 1).join('\n'),
+    };
+  }
+
+
   return {
     TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE, STAMP_NOTE_MAX,
     read, detect, bytesOf, summary,
@@ -1851,5 +1931,6 @@
     markSaved, isChanged, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, stampTargets, stampPlan, applyStamps,
     nameParts, nameShown, linkAt, clip, metaRebuild, metaParts, lineShape,
+    report, withChecksum, reportChecksumParts,
   };
 });

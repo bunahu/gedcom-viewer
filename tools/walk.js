@@ -1023,8 +1023,32 @@ async function thirdRound(page, dir, shots) {
   const menu = await page.ev("[...document.querySelectorAll('#settings-menu button')].map((b) => b.id).join(',')");
   await page.ev("document.getElementById('settings-menu').hidePopover(); true");
   const inBar = await page.ev("['theme','fold-all','indent','surnames'].map((id) => !!document.querySelector('.bar #' + id)).join(',')");
-  check(menu === 'theme-light,theme-sunset,theme-dark,indent,surnames' && inBar === 'false,false,false,false',
-    `Settings opens a menu holding ${menu.split(',').length} controls: the themes, Indent, Bold surnames; none of them in the top bar`);
+  check(menu === 'theme-light,theme-sunset,theme-dark,indent,surnames,report' && inBar === 'false,false,false,false',
+    `Settings opens a menu holding ${menu.split(',').length} controls: the themes, Indent, Bold surnames, Report a problem; none of them in the top bar`);
+
+  // P8 — Report a problem: the report reads as counts and codes and holds no line of the file; cut
+  // a line and it no longer reads as built; Copy puts the box as it reads, then What happened, on
+  // the clipboard, and nothing else
+  await setting(page, 'report');
+  await page.waitFor("document.getElementById('report-text') !== null");
+  const p8Report = await page.ev("({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.getElementById('report-text').value, state: document.getElementById('report-state').textContent })");
+  await shot('report');
+  const p8Leaked = [];
+  for (let i = 0; i < m.n; i += 1) { const t = m.texts[i].trim(); if (t.length >= 3 && p8Report.text.includes(t)) p8Leaked.push(i + 1); }
+  check(p8Report.title === 'Report a problem' && p8Report.text.startsWith('GEDCOM Viewer ') && /\nRecords: INDI \d/.test(p8Report.text) && /\nchecksum: [0-9a-f]{8}$/.test(p8Report.text)
+    && !/Fixture/.test(p8Report.text) && p8Leaked.length === 0 && /^As built/.test(p8Report.state),
+    `Report a problem: ${p8Report.text.split('\n').length} lines of counts and codes, no line of the file, and it reads as built: "${p8Report.state}"`);
+  await page.ev("(() => { const b = document.getElementById('report-text'); b.value = b.value.split('\\n').filter((l) => !l.startsWith('Where:')).join('\\n'); b.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await page.waitFor("/^Changed/.test(document.getElementById('report-state').textContent)");
+  await page.ev("document.getElementById('report-what').value = 'The walk cut the Where line.'; true");
+  await page.ev("navigator.clipboard.writeText = (t) => { window.__reportCopied = t; return Promise.resolve(); }; true");
+  await page.click("document.getElementById('report-copy')");
+  await page.waitFor("window.__reportCopied !== undefined");
+  const p8Copied = await page.ev("({ text: window.__reportCopied, box: document.getElementById('report-text').value, state: document.getElementById('report-state').textContent })");
+  check(p8Copied.text === `${p8Copied.box}\nWhat happened: The walk cut the Where line.\n` && !/Where:/.test(p8Copied.text),
+    `the Where line cut: "${p8Copied.state}"; Copy puts the box as it reads, then What happened, on the clipboard, and the original nowhere`);
+  await page.click(BUTTON('#dialog', 'Close'));
+  await page.waitFor("!document.getElementById('dialog').open");
   await page.click("document.querySelector('.tab[data-panel=tags]')");
   await page.waitFor(LAID_OUT('tags-list'));
   const firstTag = () => page.ev(`${VISIBLE('tags-list')}[0].firstChild.textContent + ' ' + ${VISIBLE('tags-list')}[0].lastChild.textContent`);

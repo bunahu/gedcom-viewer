@@ -156,6 +156,7 @@
   --surname-weight: 700;              /* Bold surnames */
   --help-max-width: 40em;             /* what a check means, in the right frame */
   --prose-max-width: 38em;            /* the privacy page's column of text */
+  --report-height: 14em;              /* the Report a problem box */
   --meta-max-height: 60vh;            /* the story of a _META, before it scrolls */
   --table-border: var(--color-border);   /* the tables in a story, and the persons of a _META */
   --list-row-height: 26px;            /* the rows of Records, Checks and Tags */
@@ -826,6 +827,21 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .dialog-stamps { display: flex; flex-direction: column; gap: 2px; padding-left: 24px; font-size: var(--font-size-small); }
 .dialog-stamps[hidden] { display: none; }
 .dialog-note { display: flex; align-items: center; gap: 8px; }
+/* P8 — Report a problem: the report in a box of its own, to read, change or cut; What happened under it */
+.report {
+  width: 100%;
+  min-height: var(--report-height);
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: var(--font-size-small)/1.45 var(--font-grid);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.report.is-words { min-height: 5em; font-family: var(--font-body); }
+.report:focus { outline: var(--focus-ring); outline-offset: -1px; }
 .dialog-note .input { flex: 1; }
 
 /* -- dropping a file on the page --------------------------------------------------------------- */

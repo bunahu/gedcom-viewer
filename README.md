@@ -16,6 +16,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.5 | the owner's third round: the side frames hidden by their tabs and the lines scrolled sideways; a copy button on every box of text; a `_META` drawn as it reads; blocks, records and sections dragged among their siblings; Collapse all / Expand all; what each check means; Back over the lines; Bold surnames; a link selected whole; a clipped row's count; E for Edit |
 | 0.5.1 | the first half of the owner's fourth round, from his walk of 0.5: the side frames hidden by icons in the top bar, eased; a strip above the lines with Top, Back and Collapse all, which shuts the types too; Settings holding Theme, Indent and Bold surnames; Upload GEDCOM; the Tags list's order stepped by a button; a change dot in the mark column; the right frame following the typing; a `_META` under the names the file gives its parts; a shade when the lines are scrolled sideways, and a jump bringing them back; the gold line under a type's row. The editor and the saving of the round wait for his picks (the brief, section 19) |
 | 0.5.2 | on the web: gedcom-viewer.net serves the page, published from a version tag once the tests pass, the page's files alone; Open GEDCOM again, since online "upload" says the file goes somewhere, and it does not; the icon; a description for search engines; `privacy.html`, how the page treats a file, linked under the button; a content-security policy in both pages, which has the browser refuse every connection; the repository public, its history rewritten first — the real file's name became `RAW.ged`, and the commits' identity the owner's GitHub handle |
+| 0.5.3 | Report a problem, in Settings (the brief's P8, R1): a report of counts and codes, never a line of the file, in a box to read, change or cut; What happened, in the user's own words; Copy — the page sends nothing, and the original is kept nowhere. Its last line is a checksum, so a changed report reads as changed; `tools/report-check.js` reads one back |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -66,8 +67,8 @@ keep traces of that.
 The strip above the lines holds **↑ Top** (line 1, as a jump, so Back returns), **← Back to …**
 while there is somewhere to go back to, and **Collapse all**, which shuts every record to its
 first line and every type to its row; it then reads **Expand all**, which opens every block and
-every type. **Settings**, in the top bar, holds the theme (Light · Sunset · Dark), Indent and its
-width, and **Bold surnames**, which shows the part of a name between slashes in bold, without
+every type. **Settings**, in the top bar, holds the theme (Light · Sunset · Dark), Indent and its width,
+**Report a problem…** (below), and **Bold surnames**, which shows the part of a name between slashes in bold, without
 the slashes, wherever a record is named — Records, the right frame, the dialogs — and never in a
 line as written. The two icons at the ends of the top bar hide the left bar and the right frame,
 and bring them back. In **Checks**, a click on a check's title says in the right frame what it
@@ -148,6 +149,19 @@ change one character and it changes completely; two files with the same sha256 a
 for byte. Save checks it before it writes, and a backup must match it. `shasum -a 256 <file>` in
 Terminal gives the same one.
 
+## Report a problem
+
+**Settings → Report a problem…** writes a report of counts and codes — the file's size, lines,
+encoding, the header's program, record counts, check findings by code and line number, the
+browser, Edit and the unsaved changes, and the first twelve characters of the file's sha256 — and
+never a line of the file, its name or its folder. It shows in a box to read, change or cut; **What
+happened** takes the user's own words; **Copy** puts the report as it reads, then What happened, on
+the clipboard, to paste into a new issue at github.com/bunahu/gedcom-viewer/issues. The page sends
+nothing, and the original is kept nowhere. The report's last line is a checksum of the lines above
+it, so a report changed after it was built reads as changed, on the page and in
+`node tools/report-check.js report.txt` (or `pbpaste | node tools/report-check.js`): as built,
+changed, or no checksum. The lines after the checksum are the reporter's own and are not checked.
+
 ## The tests and the gates
 
 Node's own test runner; nothing to install.
@@ -209,6 +223,7 @@ the computer either way; `privacy.html` says how.
 | `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script |
 | `favicon.svg` · `favicon.ico` · `apple-touch-icon.png` | the icon: three lines of a file, each a level deeper, on the palette's gold |
 | `.github/workflows/publish.yml` | what puts a version on the web (Publish, above) |
+| `tools/report-check.js` | reads a problem report back: as built, changed after it was built, or no checksum |
 | `tests/` | the tests; `helpers.js` they share; `fake-handles.js`, in-memory files and folders for `save.js` |
 | `fixtures/synthetic/` | small files written for the checks, fictional people only |
 | `tools/` | `baseline_probe.py` (the Python second opinion), `check-real.js`, `compare.js`; `walk.js`, which walks the page in headless Chrome, driven by `chrome.js` |
@@ -274,6 +289,7 @@ steps light → sunset → dark.
 | `--surname-weight` | how bold a surname is, with Bold surnames on |
 | `--help-max-width` | what a check means, in the right frame |
 | `--prose-max-width` | the privacy page's column of text |
+| `--report-height` | the Report a problem box |
 | `--meta-max-height` · `--table-border` | a `_META`'s story before it scrolls; the tables in a story and its persons |
 | `--edit-bg` | the box a line is typed in |
 | `--left-width` · `--right-width` | the left bar and the right frame (also dragged, and remembered) |
