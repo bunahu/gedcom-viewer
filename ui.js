@@ -1532,7 +1532,7 @@
         f.appendChild(x);
       });
     });
-    const another = el('button', 'fact is-link open-another', 'Upload another GEDCOM…');
+    const another = el('button', 'fact is-link open-another', 'Open another GEDCOM…');
     another.type = 'button';
     another.title = '⌘O, or drop a file on the page. Nothing leaves the machine: the file is read here.';
     another.addEventListener('click', pickFile);

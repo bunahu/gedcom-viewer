@@ -1,6 +1,6 @@
 # GEDCOM Viewer
 
-One web page, opened from disk in Chrome, that opens a GEDCOM file, shows it readably, checks it
+One web page, at gedcom-viewer.net or opened from disk in Chrome, that opens a GEDCOM file, shows it readably, checks it
 for obviously malformed lines, counts what it holds, and lets clean hand edits be made and saved —
 in place with a dated backup, or as a dated copy, with a log of what changed. It is standalone: it
 shares no code with the sibling project and never talks to it. Nothing is installed, and nothing leaves the
@@ -15,6 +15,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.4.1 | the brief and the README only: the owner's walk brought to 0.4, the page opened by command, and his third round written — to build as 0.5 |
 | 0.5 | the owner's third round: the side frames hidden by their tabs and the lines scrolled sideways; a copy button on every box of text; a `_META` drawn as it reads; blocks, records and sections dragged among their siblings; Collapse all / Expand all; what each check means; Back over the lines; Bold surnames; a link selected whole; a clipped row's count; E for Edit |
 | 0.5.1 | the first half of the owner's fourth round, from his walk of 0.5: the side frames hidden by icons in the top bar, eased; a strip above the lines with Top, Back and Collapse all, which shuts the types too; Settings holding Theme, Indent and Bold surnames; Upload GEDCOM; the Tags list's order stepped by a button; a change dot in the mark column; the right frame following the typing; a `_META` under the names the file gives its parts; a shade when the lines are scrolled sideways, and a jump bringing them back; the gold line under a type's row. The editor and the saving of the round wait for his picks (the brief, section 19) |
+| 0.5.2 | on the web: gedcom-viewer.net serves the page, published from a version tag once the tests pass, the page's files alone; Open GEDCOM again, since online "upload" says the file goes somewhere, and it does not; the icon; a description for search engines; `privacy.html`, how the page treats a file, linked under the button; a content-security policy in both pages, which has the browser refuse every connection; the repository public, its history rewritten first — the real file's name became `RAW.ged`, and the commits' identity the owner's GitHub handle |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -31,12 +32,15 @@ keep traces of that.
 
 ## Open it
 
+- **On the web:** [gedcom-viewer.net](https://gedcom-viewer.net) — the same page, served by GitHub
+  Pages from this repository's last tagged version; nothing is installed, and the file still never
+  leaves the computer. Or, from disk:
 - **In Chrome:** `open -a "Google Chrome" ~/Desktop/claude/gedcom-viewer/index.html` in Terminal,
   or, in Chrome, File → Open File… and pick it. Double-clicking the file opens the default browser
   instead. Keep `index.html` in this folder: it loads `style.css`, `core.js`, `save.js` and `ui.js`
   from beside it, and anywhere else it opens as a bare page.
-- Then **Upload GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
-  opened with ⌘O, by dropping it, or with **Upload another GEDCOM…** among the file's facts.
+- Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
+  opened with ⌘O, by dropping it, or with **Open another GEDCOM…** among the file's facts.
 - Other browsers can read, check and edit a file too. Save, in place, needs Chrome; elsewhere Save
   a copy downloads the copy and its log.
 
@@ -73,9 +77,9 @@ of text in the right frame has a **copy** button at its top right. A row longer 
 characters ends with **… 81,797 more**, the count not shown; the right frame shows it whole. A
 `_META` (Ancestry's Find a Grave block) is drawn as it reads, above Joined, each part under the
 name the file gives it — `content` in web formatting, `transcription`, `personas` as a table,
-`cemetery`, `record_source_gid` — read only, with nothing loaded from anywhere. **Upload
+`cemetery`, `record_source_gid` — read only, with nothing loaded from anywhere. **Open
 GEDCOM** opens the computer's own file dialog; nothing is uploaded anywhere — the file is read
-here, and nothing leaves the machine.
+here, and nothing leaves the machine; `privacy.html`, linked under the button, says so in full.
 
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the two
 panel widths and whether each side frame is hidden, Bold surnames, the Tags list's order,
@@ -173,6 +177,24 @@ and the sibling project's `ancestry_shapes.ged` and `ancestry_dup_citation.ged` 
 
 **Real files go in `local/`**, which git ignores, as it ignores every backup and log.
 
+## Publish
+
+The page is served at [gedcom-viewer.net](https://gedcom-viewer.net) by GitHub Pages, from this
+repository. A version goes live when its tag is pushed:
+
+```
+git tag -a v0.6 -m "0.6: …" && git push origin main v0.6
+```
+
+`.github/workflows/publish.yml` then runs the tests and, when they pass, uploads the page's files
+alone — `index.html`, `style.css`, `core.js`, `save.js`, `ui.js`, `privacy.html` and the three
+icons — never the tests, the tools, the brief, or anything in `local/`. **Run workflow**, on the
+Actions tab, publishes what `main` holds, by hand. The domain is registered at Name.com, whose
+nameservers answer for it: four A and four AAAA records at the bare name point at GitHub Pages,
+and `www` is a CNAME to `bunahu.github.io`, which GitHub redirects to the bare name; HTTPS is
+GitHub's, from Let's Encrypt. Served or from disk, the page is the same files, and nothing leaves
+the computer either way; `privacy.html` says how.
+
 ## Files
 
 | File | Holds |
@@ -182,6 +204,9 @@ and the sibling project's `ancestry_shapes.ged` and `ancestry_dup_citation.ged` 
 | `core.js` | reading: bytes → encoding → lines → shape → records and pointers → checks → counts → labels; editing: the document, the acts, undo, the net change, the change stamps, the bytes of a save; never touches the page, and runs the same under Node |
 | `save.js` | saving: the dated names, Save in place, Save a copy, the log block — over file handles passed to it; never touches the page |
 | `ui.js` | the page: the main frame, the left bar's panels, the right frame, the dialogs, the keys; the only file that knows the pickers exist |
+| `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script |
+| `favicon.svg` · `favicon.ico` · `apple-touch-icon.png` | the icon: three lines of a file, each a level deeper, on the palette's gold |
+| `.github/workflows/publish.yml` | what puts a version on the web (Publish, above) |
 | `tests/` | the tests; `helpers.js` they share; `fake-handles.js`, in-memory files and folders for `save.js` |
 | `fixtures/synthetic/` | small files written for the checks, fictional people only |
 | `tools/` | `baseline_probe.py` (the Python second opinion), `check-real.js`, `compare.js`; `walk.js`, which walks the page in headless Chrome, driven by `chrome.js` |
@@ -246,6 +271,7 @@ steps light → sunset → dark.
 | `--copy-color` · `--copy-done` | the copy button at a box's top right, and its check mark |
 | `--surname-weight` | how bold a surname is, with Bold surnames on |
 | `--help-max-width` | what a check means, in the right frame |
+| `--prose-max-width` | the privacy page's column of text |
 | `--meta-max-height` · `--table-border` | a `_META`'s story before it scrolls; the tables in a story and its persons |
 | `--edit-bg` | the box a line is typed in |
 | `--left-width` · `--right-width` | the left bar and the right frame (also dragged, and remembered) |

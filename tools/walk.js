@@ -468,12 +468,12 @@ async function editingOnThePage(page, dir, shots) {
     facts: document.getElementById('facts').hidden, name: document.getElementById('file-name').textContent })`);
   check(bar.title === 'GEDCOM Viewer' && bar.window === 'fiction.ged — GEDCOM Viewer',
     `the name: "${bar.title}" in the top bar, "${bar.window}" in the window's title`);
-  check(bar.open && bar.empty === 'Upload GEDCOM', `the top bar has no Open; the empty frame's button reads "${bar.empty}"`);
+  check(bar.open && bar.empty === 'Open GEDCOM', `the top bar has no Open; the empty frame's button reads "${bar.empty}"`);
   await page.click("document.getElementById('file-name')");
   const facts = await page.ev("[...document.getElementById('facts').children].map((x) => x.textContent)");
   const size = `${(bytes.length / 1e6).toFixed(1)} MB`;
   check(bar.facts && JSON.stringify(facts) === JSON.stringify(['GEDCOM 5.5.1', 'UTF-8', 'exported 28 SEP 2026', 'by gedview-walk 1.0', size,
-    `${fmt(m.n)} lines`, 'sha256', 'Upload another GEDCOM…']), `the facts, hidden until the name is clicked: ${facts.join(' · ')}`);
+    `${fmt(m.n)} lines`, 'sha256', 'Open another GEDCOM…']), `the facts, hidden until the name is clicked: ${facts.join(' · ')}`);
   const goes = [];
   for (const [k, text] of [[0, 'GEDCOM 5.5.1'], [1, 'UTF-8'], [2, 'exported'], [3, 'by']]) {
     await page.click(`document.querySelectorAll('#facts .fact.is-link')[${k}]`);

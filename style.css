@@ -154,6 +154,7 @@
   --copy-done: var(--color-success);       /* …once it has copied */
   --surname-weight: 700;              /* Bold surnames */
   --help-max-width: 40em;             /* what a check means, in the right frame */
+  --prose-max-width: 38em;            /* the privacy page's column of text */
   --meta-max-height: 60vh;            /* the story of a _META, before it scrolls */
   --table-border: var(--color-border);   /* the tables in a story, and the persons of a _META */
   --list-row-height: 26px;            /* the rows of Records, Checks and Tags */
@@ -650,6 +651,9 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .empty[hidden] { display: none; }
 .empty .button { font-size: 1.1em; padding: 0.5rem 1.4rem; }
 .message { max-width: 34em; text-align: center; color: var(--color-danger); }
+/* under the button: nothing is uploaded, and where that is said in full */
+.empty-note { max-width: 34em; margin: 0; text-align: center; color: var(--color-text-muted); font-size: var(--font-size-small); line-height: 1.5; }
+.empty-note a { color: var(--color-accent-hover); }
 
 /* what an act or a save has to say: at the foot of the grid, until clicked or replaced */
 .notice {
@@ -833,3 +837,15 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   pointer-events: none;
 }
 .drop[hidden] { display: none; }
+
+/* ---------------------------------------------------------------------------------------------- */
+/* privacy.html: a page of text in the same look, and no script */
+.prose-page { display: block; overflow: auto; }
+.prose { max-width: var(--prose-max-width); margin: 0 auto; padding: 2rem 1.25rem 4rem; line-height: 1.55; }
+.prose h1 { font: 700 1.6em var(--font-title); color: var(--title-color); margin: 0 0 0.25em; }
+.prose h2 { font-size: 1.1em; margin: 1.6em 0 0.4em; }
+.prose p, .prose li { margin: 0 0 0.8em; }
+.prose ul { padding-left: 1.2em; }
+.prose a { color: var(--color-accent-hover); }
+.prose-date { color: var(--color-text-muted); font-size: var(--font-size-small); }
+.prose-back { margin-top: 2.5em; }

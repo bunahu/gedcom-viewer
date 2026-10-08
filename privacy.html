@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Privacy — GEDCOM Viewer</title>
+<meta name="description" content="How GEDCOM Viewer treats your file: it is read in your browser and never sent anywhere; the page makes no network requests, keeps no copy, and uses no analytics.">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+</head>
+<body class="prose-page">
+
+<main class="prose">
+<h1>How GEDCOM Viewer treats your file</h1>
+<p class="prose-date">8 October 2026</p>
+
+<p><strong>The short version.</strong> GEDCOM Viewer is one web page that runs entirely in your
+browser. Your GEDCOM file is read by your browser, on your computer, and is never sent anywhere.
+After it loads, the page makes no network requests of its own. It keeps no copy of your file and
+uses no analytics, no cookies and no code from anyone else.</p>
+
+<h2>Your file</h2>
+<ul>
+<li><strong>Opening.</strong> Open GEDCOM, or dropping a file on the page, has your browser read the
+file from your disk into the page's memory. Nothing is uploaded. The button says Open because that
+is all it does.</li>
+<li><strong>Saving.</strong> Save writes to your own disk, through the permission Chrome asks you for.
+The folder you grant is held in the page's memory for that visit and forgotten when the tab
+closes. Save a copy, in a browser without that permission, downloads the copy as any download.</li>
+<li><strong>Closing.</strong> When the tab closes, the file is gone from the page. Nothing of it is
+kept.</li>
+</ul>
+
+<h2>What stays in your browser</h2>
+<p>Between visits the page remembers only its settings, in your browser's own storage on your
+computer: the theme, Indent and its width, Bold surnames, the widths of the side frames and whether
+each is hidden, the Tags list's order, whether the change stamps are ticked, and whether the file's
+facts show. Never a file's name, its contents or where it is. Clearing this site's data in your
+browser removes all of it.</p>
+
+<h2>No network</h2>
+<p>The page carries its own content-security policy, which tells your browser to refuse every
+connection, image, font and script except the page's own files; the browser enforces it, and you
+can read it in the page's source. The page's five files hold no code that fetches, posts or opens
+a connection, and the project's tests check that on every change.</p>
+
+<h2>What the host sees</h2>
+<p>The page is served by GitHub Pages. Like every web host, GitHub sees the address and request
+details of each visitor, and says that it logs visitors' IP addresses;
+<a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>
+governs that. That is the whole of what leaves your computer: the request for the page and its
+files. The file you open is never part of it.</p>
+
+<h2>The code is public</h2>
+<p>Everything the page runs is in the open, at
+<a href="https://github.com/bunahu/gedcom-viewer">github.com/bunahu/gedcom-viewer</a>. What is
+served at gedcom-viewer.net is published from that repository, version by tagged version. The
+page's files can also be downloaded and opened from your own disk, with no web at all.</p>
+
+<h2>Reporting a problem</h2>
+<p>There is no feedback form, and the page sends no error reports. To report a problem, open an
+issue in the repository. If you include a line from your file, take out anything you would not
+want public.</p>
+
+<h2>Changes</h2>
+<p>Changes to this page are made in the repository, where each one is dated and visible.</p>
+
+<p class="prose-back"><a href="index.html">← GEDCOM Viewer</a></p>
+</main>
+
+</body>
+</html>

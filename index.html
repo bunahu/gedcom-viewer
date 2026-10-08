@@ -3,15 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The browser enforces what the page promises: nothing is loaded from, or sent to, anywhere but the page's own files.
+     Styles may be inline only because Chrome styles its own XML parse-error block inline, in the inert document a
+     malformed _META is read in (ui.js, metaOf); the page writes no inline style, and nothing it draws from a file may
+     carry one (core.js, the allowlist). An inline style can reach nothing outside the page either: images, fonts and
+     connections stay refused. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>GEDCOM Viewer</title>
+<meta name="description" content="Read, check and hand-edit a GEDCOM file in your browser, and save it with a log of what changed. Nothing is uploaded: the file never leaves your computer.">
 <link rel="stylesheet" href="style.css">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 </head>
 <body>
 
 <header class="bar">
   <div class="bar-top">
     <button class="icon-button" id="hide-left" type="button" aria-pressed="false" aria-label="Hide left bar" title="Hide left bar"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7.5 3.5v13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
-    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.5.1</span></span>
+    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.5.2</span></span>
     <button class="file-name" id="file-name" type="button" aria-expanded="false" hidden></button>
     <span class="dirty" id="dirty" title="Changed since it was opened or last saved" hidden>●</span>
     <nav class="actions">
@@ -119,8 +129,9 @@
     </div>
     <div class="grid" id="grid" tabindex="0" aria-label="Lines"></div>
     <div class="empty" id="empty">
-      <button class="button" id="open-empty" type="button">Upload GEDCOM</button>
+      <button class="button" id="open-empty" type="button">Open GEDCOM</button>
       <div class="message" id="message" hidden></div>
+      <p class="empty-note">Nothing is uploaded: the file is read here, in your browser, and never leaves your computer. <a href="privacy.html">Privacy</a></p>
     </div>
     <div class="notice" id="notice" role="status" hidden></div>
   </section>
