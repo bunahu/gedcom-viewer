@@ -186,6 +186,8 @@ repository. A version goes live when its tag is pushed:
 git tag -a v0.6 -m "0.6: …" && git push origin main v0.6
 ```
 
+One tag per push: GitHub makes no event for a push of more than three tags at once, so
+`git push --tags` after a rewrite publishes nothing, and **Run workflow** on the tag does it by hand.
 `.github/workflows/publish.yml` then runs the tests and, when they pass, uploads the page's files
 alone — `index.html`, `style.css`, `core.js`, `save.js`, `ui.js`, `privacy.html` and the three
 icons — never the tests, the tools, the brief, or anything in `local/`. **Run workflow**, on the
