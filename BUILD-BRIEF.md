@@ -1296,7 +1296,8 @@ page.
 R1 picked and built the same day, as 0.5.3: `core.js` writes the report (`report`, `withChecksum`,
 `reportChecksumParts`), `ui.js` the dialog under Settings (Help · **Report a problem…**),
 `tools/report-check.js` reads one back, `tests/report.test.js` holds it to its word, and the walk's
-third-round part gained the step (140 steps pass; 148 tests). Tagged when his walk of it passes.
+third-round part gained the step (140 steps pass; 148 tests). Tagged and put on the site the same
+day, at his word, ahead of his walk.
 
 ### Session 3's prompt
 
