@@ -5,3 +5,4 @@ gedview-history/
 *.edits.log
 *.bak
 .DS_Store
+.claude/settings.local.json
