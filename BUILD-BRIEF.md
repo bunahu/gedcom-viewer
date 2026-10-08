@@ -1317,3 +1317,56 @@ This is session 3: build the third round (v0.5), then walk me through it. My wal
 steps 18–40 are not walked yet, and I'll walk them on 0.5. Tell me your plan in a few lines,
 then start.
 ```
+
+### The readiness review (2026-10-08): the punch list, triaged, and the rulings so far
+
+A separate Claude session, outside this folder, reviewed 0.5.2 in code and 0.5.3 on the site for
+privacy, usability, accessibility, AI tells and launch, and wrote a punch list of 21 items. The
+review itself stays outside the repository: it names people and a private canvas. Its punch list
+was checked here against the code, item by item, before anything was built.
+
+Checked and true: the tab title carries the file's name (`ui.js` updateBar); Save asks for the
+folder that directly holds the file, which Chrome refuses to grant for Downloads, Desktop,
+Documents and the home folder; spell check is off only in the line editor and the report box;
+`style.css` has no media query at all; Save is disabled without the pickers, and a download clears
+nothing, so the dot stays and leaving warns; the theme ignores the system; 14, 13 and 12.5 px type
+and 22 px rows; no h1, and the lines a div with an aria-label; browser errors raw in five places;
+no GitHub release exists, only tags. The contrast ratios were not re-measured here.
+
+What the review could not see from outside:
+
+- Item 1, ask for the file rather than the folder, meets I6: the backup and the log are written
+  through the folder handle (10.2 steps 7 and 8, 10.5). A grant on the file alone can write, read
+  back and check the disk, but has no folder to put a backup in. A ruling is open, below.
+- Item 3 has two triggers, not one: the focus, and the caret placed at the end of the value, each
+  of which scrolls the grid sideways. The fix keeps `scrollLeft` across both.
+- Item 5's sample file cannot be fetched (I5; `connect-src 'none'`; the No-network gate). It ships
+  as one of the page's own script files, named in `publish.yml` and `tests/page.test.js`.
+- Every new setting is named on `privacy.html`'s list of what the page stores: items 1, 2, 12, 17.
+- Item 16's mailto fails `tests/page.test.js` ("links out go to GitHub alone") until the test
+  allows it.
+- Item 6: the dated copy name stays (10.1), since a copy named as the original would land on it;
+  the screen says where the copy went; after a copy is written, leaving warns only for changes
+  made since, in every browser.
+- Item 11 is the owner's writing: a session lists the most-seen strings, he rewrites them, a
+  session applies them and updates the tests. After items 13 and 21, which change labels.
+- Item 20 needs a release per tag, and `contents: write` in `publish.yml`.
+- The policy's `'unsafe-inline'` for styles stays; `tests/page.test.js` says why. `privacy.html`
+  gains a half-sentence on it.
+
+The order, as releases, one tag per push, each tagged at the owner's word after his walk:
+
+| Release | Items | Built by |
+|---|---|---|
+| 0.5.4 | 3 the scroll; 2 the title, with a setting; 9 spell check off and `translate="no"`; 4 the privacy wording (P4, P5) and the half-sentence; the README's local path; from 1, a plain notice when Chrome refuses a folder | Sonnet |
+| 0.5.5 | 7 contrast; 12 type; 15's row height and fold area; 17 System theme and Sunset renamed; reduced motion and forced colors from 19 | Sonnet |
+| 0.5.6 | 1 and 6, what Save means in each browser | Opus, after the ruling on I6 |
+| 0.6 | 5 the first screen with the sample; 8 drawers; 13 Viewing and Editing; 21 | Opus |
+| alongside | 10 the README; 11 the strings; 16 the email | the owner writes, Sonnet applies |
+| later | 14 tag meanings; Move up and down from 15; treegrid and h1 from 19; 20 hashes; 18 the default look | — |
+
+Rulings (2026-10-08): the sample file is baked in; the dated copy names are kept; the
+Co-Authored-By trailers are kept, and the README's disclosure section will say so; Parchment stays
+the default for now, to be looked at again after the contrast work; the email will be a dedicated
+address, to come. Open: the backup when there is no folder (item 1), and a release per tag (item
+20).
