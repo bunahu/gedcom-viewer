@@ -5,7 +5,7 @@
  * after them only use them. README.md lists the properties and what each one moves.
  */
 
-/* the sibling project's three palettes, as the sibling project has them (sibling/frontend/src/index.css at v3.254.9). Light is the
+/* The sibling project's three palettes, as it has them (sibling/frontend/src/index.css at v3.254.9). Light is the
    default; Theme steps light → sunset → dark by setting a class on <html>. */
 :root {
   --color-bg: #ede5d2;

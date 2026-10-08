@@ -243,7 +243,7 @@ steps light → sunset → dark.
 |---|---|
 | `--font-title` · `--font-size-title` · `--title-color` | the name in the top bar: its serif, its size, the colour of GEDCOM |
 | `--font-size-file` · `--file-bg` · `--file-border` | the open file's name |
-| `--font-body` | the type of everything but the lines (The sibling project's system sans) |
+| `--font-body` | the type of everything but the lines (the sibling project's system sans) |
 | `--font-grid` | the lines' monospace, in the main frame and the right frame |
 | `--font-size-body` · `--font-size-small` · `--font-size-grid` | the three type sizes |
 | `--tag-weight` | how strong a tag is |
