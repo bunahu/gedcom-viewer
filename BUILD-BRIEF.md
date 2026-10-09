@@ -384,7 +384,7 @@ written); the Changes tab counts from the original throughout.
 | 3 | Apply the change stamps (10.4) as one undo step | — |
 | 4 | Build the bytes; hash them | — |
 | 5 | Ask where: `showSaveFilePicker`, the dated name offered, opening at the original (`startIn` its handle), accepting `.ged` and `.gedcom` | Cancel: the stamps are taken back; "No copy was written." |
-| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's). Chrome empties the picked file before the page sees it (Chromium: create it, or truncate it when it exists), so the page reads the original whole just before the dialog, and when the picked file is the original and is now empty, writes those bytes back and reads them back | "That is the original. GEDCOM Viewer never writes over it. Pick another name." and, when it was emptied, "Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte." The stamps are taken back; no copy is written. If the put-back fails, the page says so loudly and offers the original as a download |
+| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's). Chrome empties the picked file before the page sees it (Chromium: create it, or truncate it when it exists), so the page reads the original whole just before the dialog, and when the picked file is the original and is now empty, writes those bytes back and reads them back | "That is the original. It is unchanged. Pick another name." The stamps are taken back; no copy is written; the put-back, when there was one, is silent. If the put-back fails: "That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.", said loudly, with the original offered as a download |
 | 7 | Write the bytes; read them back; the hash equals step 4's | say so loudly and name the file; the original stands regardless |
 | 8 | The copy is the last copy: ● goes, Save turns off until the next change. The facts still name the original and its sha256 as opened; the page stays on the original | — |
 
@@ -956,7 +956,7 @@ The box remembers how it was left: tick it again before a save that should stamp
 
 | # | Do | Expect |
 |---|---|---|
-| 33 | Edit any line, then **Save**; in the computer's dialog type the original's name, `RAW.ged`, in `walk`, and confirm Replace | refused: "That is the original. GEDCOM Viewer never writes over it. Pick another name. Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte." No copy; `shasum` of RAW.ged unchanged; its modified time is new |
+| 33 | Edit any line, then **Save**; in the computer's dialog type the original's name, `RAW.ged`, in `walk`, and confirm Replace | refused: "That is the original. It is unchanged. Pick another name." No copy; `shasum` of RAW.ged unchanged; its modified time is new, since Chrome emptied it and the page put it back |
 
 **I. What must refuse, and a clean fix**
 
