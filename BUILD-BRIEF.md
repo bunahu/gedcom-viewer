@@ -449,7 +449,7 @@ For each changed record whose tag may carry one (section 2), at the moment of th
 |---|---|
 | Date | day without a leading zero, month as `JAN` … `DEC`, four-digit year |
 | Time | `HH:MM:SS`, 24-hour, local; in a file whose version starts with 7, UTC with a closing `Z` |
-| The note | what was typed for this save; if nothing, what changed in that record, by tag: `Changed: NAME`, or `Changed: NAME, SEX. Added: BIRT. Removed: FAMS.`, tags in file order, each once (2026-10-09; R7's default retired: no product name, nothing about hands). One line, 200 characters at most |
+| The note | what was typed for this save; if nothing, what changed in that record, by tag: `Changed: NAME`, or `Changed: NAME, SEX. Added: BIRT. Removed: FAMS` (then `Moved:`), the groups in that order, no period at the end, tags in file order, each once; past 200 characters it ends `, and more` (2026-10-09; R7's default retired: no product name, nothing about hands). One line, 200 characters at most |
 | A deleted record | has nothing to stamp; the Changes tab alone records it |
 | `HEAD`, `TRLR`, records under other tags | never stamped; the Changes tab alone records the change |
 | A record changed only by an earlier stamp | is not stamped again |
@@ -998,7 +998,7 @@ The box remembers how it was left: tick it again before a save that should stamp
 | 34 | `printf '0 NOTE changed from outside\n' >> local/walk/<file>.ged`; in the viewer, edit any line; **Save**, keep the offered name | a dated copy is written from the page's lines: the outside line is not in it (`tail -1` of the copy is `0 TRLR`); the facts' sha256 is still the file as opened |
 | 35 | With a further edit unsaved, reload the tab (⌘R) | Chrome asks first; leave |
 | 36 | Reopen the walk copy | one line more than the file had; Checks: 1 error, **No HEAD first / TRLR last**; the counts bar gains Notes 1 |
-| 37 | Edit on; Go to Line… the line after the last; ⌫; **Save** | the dialog: 1 line removed, **Change stamps, none needed**; no folder is asked for. Keep the offered name. The copy's sha256 is `<sha256>` again |
+| 37 | Edit on; Go to Line… the line after the last; ⌫; **Save**, with **Note the date in the header** unticked | the dialog: 1 line removed; under Add change stamps, "no record to stamp"; no folder is asked for. Keep the offered name. The copy's sha256 is `<sha256>` again |
 
 **J. Real use**
 
@@ -1545,7 +1545,7 @@ His findings, in his words, and what each became.
 | 7 | "After saving, the green dots appear; how do they go away?... the fact that I'm confused about which file we're 'editing' is evidence we need to simplify or clarify something... let's scope it out after this push." | section 18, with the P5 note |
 | 8 | "Not sure how to check the shasum in Terminal; can you do this?" | done from the main session: the file he opened last modified in September, untouched; the dated copy 72 bytes longer than it, one edit and one stamp block; the copy he saved under another name into Downloads a different file again |
 | 9 | "Instead of the whole ceremony of saving with no changes from the original, let's just gray out the Save button again and not allow it at all." | 10.2, the definition and step 1; walk step 24; built in 0.5.6 |
-| 10 | "Something looks to be off with the rows' setting when I collapse with unsaved changes." | the type rows' first character hidden under a seven-character number column; fixed in 0.5.6 |
+| 10 | "Something looks to be off with the rows' setting when I collapse with unsaved changes." | not the rows' geometry: the lines had been scrolled sideways by about one character, which hid every row's first character under the number column, a type row's first letter among them; fixed in 0.5.6, a type row's name now in the part of the row that stays at the left edge, and a file opening with the lines at their left edge; a walk step on a seven-digit file holds it |
 | 11 | "I made a change to the FAM header; I would want a red squiggly line underneath... I also didn't see any warnings/issues appear in the left sidebar." | section 18, with the tag table |
 | 12 | "Saving RAW.ged into Downloads, undoing changes, and Saving RAW.ged into Downloads gave me the typical Mac replace or cancel option; I didn't see any issues or errors pop up within the software itself." | as designed: a file in Downloads under another name is not the original, so nothing refuses it and the computer's Replace prompt is the guard; step 33 now says to pick the original file itself |
 
