@@ -42,12 +42,12 @@ describe('the name (10.1)', () => {
   });
 
   it('a stem that already ends in a timestamp has it replaced, not stacked', () => {
-    assert.equal(save.datedName('RAW.2026-10-08T151200.ged', LATER), 'RAW.2026-10-08T160500.ged');
-    assert.equal(save.datedName('RAW.2026-10-08T151200.GEDCOM', LATER), 'RAW.2026-10-08T160500.GEDCOM');
-    assert.equal(save.datedName('RAW.2026-09-28T154200-2.ged', LATER), 'RAW.2026-10-08T160500.ged', 'a -2 from before 0.5.6 goes with it');
-    assert.equal(save.datedName('RAW.2026-10-08T151200.cleaned.ged', LATER), 'RAW.2026-10-08T151200.cleaned.2026-10-08T160500.ged',
+    assert.equal(save.datedName('family.2026-10-08T151200.ged', LATER), 'family.2026-10-08T160500.ged');
+    assert.equal(save.datedName('family.2026-10-08T151200.GEDCOM', LATER), 'family.2026-10-08T160500.GEDCOM');
+    assert.equal(save.datedName('family.2026-09-28T154200-2.ged', LATER), 'family.2026-10-08T160500.ged', 'a -2 from before 0.5.6 goes with it');
+    assert.equal(save.datedName('family.2026-10-08T151200.cleaned.ged', LATER), 'family.2026-10-08T151200.cleaned.2026-10-08T160500.ged',
       'a timestamp that does not end the stem stays');
-    assert.equal(save.datedName('RAW-2026-10-08T151200.ged', LATER), 'RAW-2026-10-08T151200.2026-10-08T160500.ged', 'only after a dot');
+    assert.equal(save.datedName('family-2026-10-08T151200.ged', LATER), 'family-2026-10-08T151200.2026-10-08T160500.ged', 'only after a dot');
   });
 
   it('the timestamp is local time; the Changes text\'s time has its offset from UTC', () => {
@@ -123,14 +123,15 @@ describe('Save (10.2)', () => {
     assert.deepEqual(dir.at(COPY).bytes, core.saveBytes(doc), 'the copy is the document, stamps and all');
     assert.equal(r.sha256, await hash(dir.at(COPY).bytes));
     assert.deepEqual(dir.at(NAME).bytes, bytes, 'the original is never written');
-    assert.ok(text(dir.at(COPY).bytes).includes('1 NAME Jane /Fixtures/\n1 SEX F\n1 BIRT\n2 DATE 1 JAN 1900\n1 FAMC @F1@\n1 FAMS @F2@\n1 CHAN\n2 DATE 8 OCT 2026\n3 TIME 15:12:00\n2 NOTE Edited by hand in GEDCOM Viewer.\n'));
+    assert.ok(text(dir.at(COPY).bytes).includes('1 NAME Jane /Fixtures/\n1 SEX F\n1 BIRT\n2 DATE 1 JAN 1900\n1 FAMC @F1@\n1 FAMS @F2@\n1 CHAN\n2 DATE 8 OCT 2026\n3 TIME 15:12:00\n2 NOTE Changed: NAME\n'));
+    assert.ok(!text(dir.at(COPY).bytes).includes('Last updated'), 'the header\'s date only when it is asked for');
     // 8: the copy is the last copy; the page stays on the original
     assert.equal(core.changedSinceCopy(doc), false, 'the dot goes, and Save turns off');
     assert.equal(core.isChanged(doc), true, 'the changes are still counted from the original');
     assert.deepEqual(core.changeRuns(doc).map((run) => [run.kind, run.stamp]), [['changed', false], ['added', true]]);
   });
 
-  it('nothing changed since the open, or since the last copy: says so, writes nothing, asks nothing', async () => {
+  it('nothing to save, the lines being the original\'s, the last copy\'s or an earlier copy\'s: says which, writes nothing, asks nothing', async () => {
     const { dir, doc, original } = setUp();
     const pick = saveDialog(dir);
     let r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick });
@@ -140,8 +141,35 @@ describe('Save (10.2)', () => {
     dir.journal.length = 0;
     r = await save.save({ doc, original, when: LATER, note: '', stamps: true, hash, pick });
     assert.deepEqual([r.done, r.step, r.say], [false, 1, 'Nothing has changed since the last copy. Nothing was written.']);
-    assert.deepEqual(dir.journal, []);
-    assert.equal(pick.offered.length, 1, 'the Save dialog was not opened again');
+    core.editLine(doc, 23, '1 NAME Joe /Fixtures/');
+    assert.ok((await save.save({ doc, original, when: LATER, note: '', stamps: false, hash, pick })).done);
+    core.undo(doc);                                                   // Joe's edit: back to the first copy's lines
+    r = await save.save({ doc, original, when: LATER, note: '', stamps: true, hash, pick });
+    assert.deepEqual([r.step, r.say], [1, 'These lines are already in an earlier copy. Nothing was written.']);
+    core.undo(doc);
+    core.undo(doc);                                                   // the stamps, then the edit: the original
+    r = await save.save({ doc, original, when: LATER, note: '', stamps: false, hash, pick });
+    assert.deepEqual([r.step, r.say], [1, 'Nothing has changed since the file was opened. Nothing was written.'], 'so no copy of the original\'s bytes');
+    assert.equal(pick.offered.length, 2, 'the Save dialog was asked only for the two copies');
+  });
+
+  it('the date in the header: in the copy\'s HEAD when asked for, with the stamps\' moment; taken back with them when nothing is written', async () => {
+    const { dir, doc, bytes, original } = setUp();
+    core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
+    let r = await save.save({ doc, original, when: AT, note: '', stamps: true, header: true, hash, pick: saveDialog(dir) });
+    assert.ok(r.done, r.say);
+    const lines = text(dir.at(r.name).bytes).split('\n');
+    assert.deepEqual(lines.slice(0, 7), ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 SUBM @U1@', '1 NOTE Last updated: 8 OCT 2026 15:12:00', '0 @U1@ SUBM']);
+    assert.ok(lines.includes('3 TIME 15:12:00'));
+    const doc2 = setUp().doc;
+    core.editLine(doc2, 16, '1 NAME Jane /Fixtures/');
+    const before = { order: doc2.order.slice(), done: doc2.done.slice(), undone: doc2.undone.slice() };
+    r = await save.save({ doc: doc2, original, when: AT, note: '', stamps: true, header: true, hash, pick: saveDialog(dir, null) });
+    assert.equal(r.step, 5);
+    assert.deepEqual({ order: doc2.order, done: doc2.done, undone: doc2.undone }, before, 'cancelled: the stamps and the header\'s date taken back, together');
+    r = await save.save({ doc: doc2, original, when: AT, note: '', stamps: false, header: true, hash, pick: null });
+    assert.ok(text(r.bytes).includes('1 NOTE Last updated: 8 OCT 2026 15:12:00\n') && !text(r.bytes).includes('1 CHAN'), 'the header\'s date without the stamps, downloaded');
+    assert.deepEqual(dir.at(NAME).bytes, bytes, 'the original as it was');
   });
 
   it('the original picked: refused at step 6 in the brief\'s words; the browser emptied it, and it is put back byte for byte, saying nothing of it; no copy; the stamps taken back', async () => {
@@ -269,60 +297,65 @@ describe('Save (10.2)', () => {
 });
 
 describe("the phase-5 walk's saving steps, every one but the person's clicks in the computer's Save dialog", () => {
-  it('20 to 24, 33, 34 and 37: a dated copy with its stamp; the original untouched; back to the original; the original refused; a change from outside left out; the outside line removed', async () => {
+  it('20 to 24, 33, 34 and 37: a dated copy with its stamp and the header\'s date; the original untouched; back to the original, nothing to save; the original refused; a change from outside left out; the outside line removed', async () => {
     const { dir, doc, bytes, original } = setUp();
     const sha = h.sha256(bytes);
 
-    // 20: an edit; the dialog lists 1 change and Change stamps, 1 record; Save; the dated name kept
+    // 20: an edit; the dialog lists 1 change, the stamp @I42@ gains and the header's date, both ticked; Save; the dated name kept
     core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
     assert.equal(core.changeRuns(doc).length, 1);
-    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I42@', 'adds']]);
-    let pick = saveDialog(dir);
-    let r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick });
+    assert.deepEqual(core.stampPlan(doc, AT, '').map((p) => [p.id, p.how, p.lines.map((l) => l.text)]),
+      [['@I42@', 'adds', ['1 CHAN', '2 DATE 8 OCT 2026', '3 TIME 15:12:00', '2 NOTE Changed: NAME']]]);
+    assert.deepEqual(core.headerPlan(doc, AT).lines.map((l) => l.text), ['1 NOTE Last updated: 8 OCT 2026 15:12:00']);
+    const pick = saveDialog(dir);
+    let r = await save.save({ doc, original, when: AT, note: '', stamps: true, header: true, hash, pick });
     assert.ok(r.done, r.say);
     assert.equal(r.name, COPY);
 
     // 21: the record ends with the stamp; nothing changed since the copy; the changes still counted from the original
     const v = doc.view;
     const at = v.definedAt.get('@I42@')[0];
-    assert.deepEqual(v.texts.slice(at + 7, at + 11), ['1 CHAN', '2 DATE 8 OCT 2026', '3 TIME 15:12:00', '2 NOTE Edited by hand in GEDCOM Viewer.']);
-    assert.equal(core.changedSinceCopy(doc), false);
-    assert.equal(core.changeRuns(doc).length, 2, 'the name, and the stamp: both are changes from the original');
+    assert.deepEqual(v.texts.slice(at + 7, at + 11), ['1 CHAN', '2 DATE 8 OCT 2026', '3 TIME 15:12:00', '2 NOTE Changed: NAME']);
+    assert.equal(core.unsaved(doc), false);
+    assert.equal(core.changeRuns(doc).length, 3, 'the header\'s date, the name, and the stamp: all changes from the original');
 
     // 22: the original is the file as opened; the copy differs
     assert.equal(await hash(dir.at(NAME).bytes), sha);
     assert.notEqual(await hash(dir.at(COPY).bytes), sha);
 
-    // 23: the copy differs from the original only in that record; the Changes text names the original and lists the change and the stamp
+    // 23: the copy differs from the original in HEAD's last line and in that record alone; the Changes text names the original and lists them
     const m = doc.m;
+    const head = m.start[5];                                         // where HEAD ends: 0 @U1@ SUBM
     const from = m.start[15];                                        // 0 @I42@ INDI
     const to = m.start[22];                                          // 0 @I43@ INDI
     const copy = dir.at(COPY).bytes;
-    assert.deepEqual(copy.subarray(0, from), bytes.subarray(0, from));
+    const dated = Buffer.from('1 NOTE Last updated: 8 OCT 2026 15:12:00\n');
+    assert.deepEqual(copy.subarray(0, head), bytes.subarray(0, head));
+    assert.deepEqual(copy.subarray(head, head + dated.length), new Uint8Array(dated));
+    assert.deepEqual(copy.subarray(head + dated.length, head + dated.length + (from - head)), bytes.subarray(head, from));
     assert.deepEqual(copy.subarray(copy.length - (bytes.length - to)), bytes.subarray(to));
     const pasted = save.changesText({ when: AT, file: NAME, original: { sha256: sha, bytes: bytes.length, lines: m.n }, runs: core.changeRuns(doc) }).split('\n');
     assert.equal(pasted[0], `GEDCOM Viewer  changes to Fixture_Family.ged  as of ${save.localTime(AT)}`);
     assert.equal(pasted[1], `original  sha256 ${sha}  465 bytes  37 lines`);
-    assert.deepEqual(pasted.slice(2, 10), ['changed  17 -> 17     @I42@ INDI', '  - 1 NAME Jane /Fixture/', '  + 1 NAME Jane /Fixtures/',
-      'added          23-26  @I42@ INDI  (change stamp)', '  + 1 CHAN', '  + 2 DATE 8 OCT 2026', '  + 3 TIME 15:12:00', '  + 2 NOTE Edited by hand in GEDCOM Viewer.']);
+    assert.deepEqual(pasted.slice(2, 13), ['added          6      HEAD  (the date in the header)', '  + 1 NOTE Last updated: 8 OCT 2026 15:12:00',
+      'changed  17 -> 18     @I42@ INDI', '  - 1 NAME Jane /Fixture/', '  + 1 NAME Jane /Fixtures/',
+      'added          24-27  @I42@ INDI  (change stamp)', '  + 1 CHAN', '  + 2 DATE 8 OCT 2026', '  + 3 TIME 15:12:00', '  + 2 NOTE Changed: NAME', '']);
 
-    // 24: Undo twice (the stamp, then the edit); Save with the stamps unticked: the original's bytes again (I1)
-    assert.equal(core.undo(doc).label, 'Change stamps');
+    // 24: Undo twice (the stamp and the header's date, one step; then the edit): back to the original, there is nothing to save
+    assert.equal(core.undo(doc).label, 'Change stamps and the date in the header');
     assert.equal(core.undo(doc).label, 'Edit line 17');
     assert.equal(core.isChanged(doc), false, 'no change from the original');
-    assert.equal(core.changedSinceCopy(doc), true, 'but a change since the last copy, so Save is on');
-    assert.deepEqual(core.stampPlan(doc), [], 'no new stamp');
-    pick = saveDialog(dir);
-    r = await save.save({ doc, original, when: LATER, note: '', stamps: false, hash, pick });
-    assert.ok(r.done, r.say);
-    assert.equal(await hash(dir.at(r.name).bytes), sha);
+    assert.equal(core.unsaved(doc), false, 'so Save is off: no save writes the original\'s bytes again');
+    r = await save.save({ doc, original, when: LATER, note: '', stamps: false, header: true, hash, pick });
+    assert.deepEqual([r.step, r.say], [1, 'Nothing has changed since the file was opened. Nothing was written.']);
+    assert.equal(pick.offered.length, 1);
 
-    // 33: (after an edit, since nothing has changed since the copy of 24) the original's own name typed: refused, and the original as it was
-    assert.equal((await save.save({ doc, original, when: LATER, note: '', stamps: false, hash, pick })).step, 1);
+    // 33: an edit, then the original's own name typed: refused, and the original as it was
     core.editLine(doc, 8, '1 NAME Ada /Fixtures/');
-    r = await save.save({ doc, original, when: LATER, note: '', stamps: false, hash, pick: saveDialog(dir, NAME) });
+    r = await save.save({ doc, original, when: LATER, note: '', stamps: false, header: true, hash, pick: saveDialog(dir, NAME) });
     assert.equal(r.step, 6);
     assert.equal(await hash(dir.at(NAME).bytes), sha);
+    assert.ok(!doc.view.texts.some((t) => /Last updated/.test(t)), 'the header\'s date taken back with the refusal');
 
     // 34: a line appended from outside; an edit; Save, the offered name: the copy is the page's lines, without the outside line
     dir.at(NAME).bytes = new Uint8Array([...dir.at(NAME).bytes, ...Buffer.from('0 NOTE changed from outside\n')]);
@@ -331,12 +364,12 @@ describe("the phase-5 walk's saving steps, every one but the person's clicks in 
     assert.ok(text(dir.at(r.name).bytes).endsWith('0 TRLR\n'), 'the copy\'s last line is 0 TRLR');
     assert.ok(text(dir.at(NAME).bytes).endsWith('0 NOTE changed from outside\n'), 'the original keeps what was done to it from outside');
 
-    // 36 and 37: the original opened again, one line more; that line removed; no stamp needed; the copy's sha256 is the first one's
+    // 36 and 37: the original opened again, one line more; that line removed; no stamp needed; with the header's date unticked, the copy's sha256 is the first one's
     const again = core.openDocument(dir.at(NAME).bytes.slice());
     assert.equal(again.m.n, 38);
     assert.ok(core.deleteLine(again, 37).ok);
-    assert.deepEqual(core.stampPlan(again), [], 'Change stamps, none needed');
-    r = await save.save({ doc: again, original: { name: NAME, handle: dir.at(NAME) }, when: new Date(2026, 9, 8, 16, 45, 0), note: '', stamps: true, hash, pick: saveDialog(dir) });
+    assert.deepEqual(core.stampPlan(again), [], 'no record to stamp');
+    r = await save.save({ doc: again, original: { name: NAME, handle: dir.at(NAME) }, when: new Date(2026, 9, 8, 16, 45, 0), note: '', stamps: true, header: false, hash, pick: saveDialog(dir) });
     assert.ok(r.done, r.say);
     assert.equal(await hash(dir.at(r.name).bytes), sha);
   });

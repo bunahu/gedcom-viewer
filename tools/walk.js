@@ -347,6 +347,23 @@ async function restOfThePage(page, dir, shots) {
   check(ms < BUDGET_MS, `it opens in ${fmt(ms)} ms`);
   await shot('top');
 
+  // 0.5.6: the lines scrolled sideways by one character slide under the number column, as 3.1 has
+  // it; a type's row keeps its whole name beside the column (it read UBM Submitters on the owner's
+  // walk, with line numbers 7 characters wide)
+  const FIRST_CHARS = `(() => { const at = (r) => { const tx = r.querySelector('.tx'); const n = tx.querySelector('.tg') || tx;
+      const t = n.firstChild.nodeType === 3 ? n.firstChild : n.firstChild.firstChild; const g = document.createRange(); g.setStart(t, 0); g.setEnd(t, 1);
+      const c = g.getBoundingClientRect(); return { text: tx.textContent.slice(0, 4), left: c.left, width: c.width, column: r.querySelector('.ln').getBoundingClientRect().right }; };
+    const rows = [...document.querySelectorAll('#grid .row')];
+    return { types: rows.filter((r) => r.classList.contains('is-section')).slice(0, 2).map(at), line: at(rows.find((r) => !r.classList.contains('is-section'))) }; })()`;
+  const flush = await page.ev(FIRST_CHARS);
+  await page.ev(`document.getElementById('grid').scrollLeft = ${Math.ceil(flush.line.width)}; true`);
+  await page.ev('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
+  const aside = await page.ev(FIRST_CHARS);
+  await page.ev("document.getElementById('grid').scrollLeft = 0; true");
+  check(flush.types.length === 2 && aside.types.every((t, k) => t.text === flush.types[k].text && Math.abs(t.left - flush.types[k].left) < 0.5 && t.left > t.column)
+    && aside.line.left < flush.line.left - flush.line.width / 2,
+  `scrolled sideways by one character, with line numbers ${fmt(m.n).length} characters wide: the type rows still read ${aside.types.map((t) => t.text).join(' and ')} from the same place, beside the number column, while a line slides under it`);
+
   // 0.5.4: the boxes that take the file's words turn spell check and the grammar helpers off; what
   // shows the file's words is marked not to be translated
   const helpers = await page.ev(`['search-box', 'records-filter', 'goto'].filter((id) => { const b = document.getElementById(id);
@@ -1248,11 +1265,11 @@ async function fourthDrags(page, dir, shots) {
   await page.waitFor("document.getElementById('changes-count').textContent === '1'");
   await page.key('s', 'KeyS', 83, 4);                                // ⌘S: the Save dialog, to read, then Cancel
   await page.waitFor("document.getElementById('dialog').open");
-  const dialogSays = await page.ev("({ lines: [...document.querySelectorAll('#dialog .chg, #dialog .chg-line')].map((x) => x.textContent), stamps: (document.querySelector('#dialog .dialog-check span') || {}).textContent })");
+  const dialogSays = await page.ev("({ lines: [...document.querySelectorAll('#dialog .chg, #dialog .chg-line')].map((x) => x.textContent), stamps: document.querySelectorAll('#save-stamp-lines .dialog-rec').length })");
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(dialogSays.lines[0].startsWith('moved') && dialogSays.lines[1] === 'NAME · 1 line · among its 2 NAME lines the first is read as preferred' && dialogSays.stamps === 'Change stamps, 1 record',
-    `the second NAME dragged first: the Save dialog says "${dialogSays.lines[1]}", and the record is stamped (${dialogSays.stamps})`);
+  check(dialogSays.lines[0].startsWith('moved') && dialogSays.lines[1] === 'NAME · 1 line · among its 2 NAME lines the first is read as preferred' && dialogSays.stamps === 1,
+    `the second NAME dragged first: the Save dialog says "${dialogSays.lines[1]}", and the record is stamped (${dialogSays.stamps} record under Add change stamps)`);
   await page.key('z', 'KeyZ', 90, 4);
   await page.waitFor("document.getElementById('changes-count').textContent === ''");
 
@@ -1265,10 +1282,10 @@ async function fourthDrags(page, dir, shots) {
   const section = await page.ev(`({ order: [...document.querySelectorAll('#grid .row.is-section')].map((r) => r.querySelector('.tg').textContent), changes: ${CHANGES}, first: (${SELECTED}).id })`);
   await page.key('s', 'KeyS', 83, 4);                                // ⌘S: the Save dialog, to read, then Cancel
   await page.waitFor("document.getElementById('dialog').open");
-  const secDialog = await page.ev("(document.querySelector('#dialog .dialog-check span') || {}).textContent");
+  const secDialog = await page.ev("document.getElementById('save-stamps').disabled ? (document.querySelector('#dialog .dialog-off') || {}).textContent : 'stamps to make'");
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(secMid.line && secMid.dim >= 1 && JSON.stringify(section.order.slice(0, 4)) === '["SUBM","FAM","INDI","OBJE"]' && section.changes[0] === 'moved: section FAM · 2 records · 6 lines' && secDialog === 'Change stamps, none needed',
+  check(secMid.line && secMid.dim >= 1 && JSON.stringify(section.order.slice(0, 4)) === '["SUBM","FAM","INDI","OBJE"]' && section.changes[0] === 'moved: section FAM · 2 records · 6 lines' && secDialog === 'no record to stamp',
     `the FAM row dragged to the INDI row's edge: the 2 families now stand before the people (${section.order.join(' · ')}); Changes reads "${section.changes[0]}"; ${secDialog}`);
   await shot('section-moved');
   await page.key('z', 'KeyZ', 90, 4);
@@ -1389,15 +1406,19 @@ async function retype(page, n, text) {
 
 // What the Save dialog shows: its title, the lines of the changes, the change-stamp box and the
 // stamps to come, the note box, and its buttons.
-const SAVE_DIALOG = `({ title: document.querySelector('#dialog .dialog-title').textContent,
-  sum: (document.querySelector('#dialog .dialog-sum') || {}).textContent,
-  lines: [...document.querySelectorAll('#dialog .chg-line')].map((l) => l.textContent),
-  check: document.querySelector('#dialog .dialog-check span').textContent,
-  ticked: document.querySelector('#dialog input[type=checkbox]').checked,
-  stamps: [...document.querySelectorAll('#dialog .dialog-stamps > div')].map((d) => d.textContent),
-  noteOff: document.querySelector('#dialog .dialog-note input').disabled,
-  noteDim: document.querySelector('#dialog .dialog-note').classList.contains('is-off'),
-  buttons: [...document.querySelectorAll('#dialog .dialog-buttons button')].map((b) => b.textContent) })`;
+const SAVE_DIALOG = `(() => { const q = (x) => document.querySelector(x);
+  const rows = (id) => [...document.querySelectorAll('#' + id + ' > div')].map((d) => ({ rec: d.classList.contains('dialog-rec'), kept: d.classList.contains('is-kept'),
+    text: d.textContent, lv: d.style.getPropertyValue('--lv'), pad: parseFloat(getComputedStyle(d).paddingLeft), left: d.getBoundingClientRect().left }));
+  const note = q('#save-stamp-lines .dialog-note');
+  return { title: q('#dialog .dialog-title').textContent, sum: (q('#dialog .dialog-sum') || {}).textContent,
+    lines: [...document.querySelectorAll('#dialog .chg-line')].map((l) => l.textContent),
+    checks: [...document.querySelectorAll('#dialog .dialog-check span')].map((x) => x.textContent),
+    stampsTicked: q('#save-stamps').checked, stampsOff: q('#save-stamps').disabled, headerTicked: q('#save-header').checked,
+    offs: [...document.querySelectorAll('#dialog .dialog-off')].map((x) => x.textContent),
+    stamps: rows('save-stamp-lines'), stampsHidden: q('#save-stamp-lines').hidden, header: rows('save-header-lines'), headerHidden: q('#save-header-lines').hidden,
+    noteLeft: note && !q('#save-stamp-lines').hidden ? note.getBoundingClientRect().left : null,
+    buttons: [...document.querySelectorAll('#dialog .dialog-buttons button')].map((b) => b.textContent) }; })()`;
+const DATE_TIME = (t) => t.replace(/\d{1,2} [A-Z]{3} \d{4}/, 'D').replace(/\d\d:\d\d:\d\d/, 'T');
 const DIALOG_SAYS = "({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.querySelector('#dialog .dialog-body').textContent })";
 
 async function saveWithDialog(page) {
@@ -1417,20 +1438,28 @@ async function saveWithDialog(page) {
   check(await page.ev(`!document.getElementById('dirty').hidden && !document.getElementById('save').disabled && ${LEAVE_ASKS}`),
     'an edit: ●, Save on, and leaving would ask first');
 
-  // 20: Save; the page's dialog; the stamps unticked turn the note box off; ticked again, a note; Save
+  // 20: Save; the page's dialog: the change; under Add change stamps the lines @I2@ will gain, indented by level, and the Note box
+  // aligned with the record; under Note the date in the header, HEAD's new line; unticked, hidden; a note typed shows in the stamp at once
   await page.click("document.getElementById('save')");
   await page.waitFor("document.getElementById('dialog').open");
   const shows = await page.ev(SAVE_DIALOG);
+  const gains = shows.stamps.slice(1);
   check(shows.title === 'Save a copy of small.ged' && JSON.stringify(shows.lines) === JSON.stringify(['−1 NAME Joe /Fixture/', '+1 NAME Joe /Fixtures/'])
-    && shows.check === 'Change stamps, 1 record' && shows.ticked && shows.stamps.length === 1 && shows.stamps[0].startsWith('@I2@ INDI') && !shows.noteOff
+    && JSON.stringify(shows.checks) === JSON.stringify(['Add change stamps', 'Note the date in the header']) && shows.stampsTicked && shows.headerTicked
+    && shows.stamps[0].rec && shows.stamps[0].text === '@I2@ INDI Joe /Fixtures/'
+    && JSON.stringify(gains.map((r) => DATE_TIME(r.text))) === JSON.stringify(['1 CHAN', '2 DATE D', '3 TIME T', '2 NOTE Changed: NAME'])
+    && JSON.stringify(shows.header.map((r) => DATE_TIME(r.text))) === JSON.stringify(['HEAD', '1 NOTE Last updated: D T'])
     && JSON.stringify(shows.buttons) === JSON.stringify(['Cancel', 'Save']),
-  `the Save dialog: "${shows.title}", the change, "${shows.check}" (${shows.stamps[0]}), a note box, Cancel and Save`);
-  await page.click("document.querySelector('#dialog input[type=checkbox]')");
+  `the Save dialog: "${shows.title}", the change; "${shows.checks[0]}": ${shows.stamps.map((r) => r.text).join(' / ')}; "${shows.checks[1]}": ${shows.header.map((r) => r.text).join(' / ')}`);
+  check(gains[0].pad < gains[1].pad && gains[1].pad < gains[2].pad && gains[3].pad === gains[1].pad && Math.abs(shows.noteLeft - shows.stamps[0].left) < 1,
+    `the lines indented as the file indents them (${gains.map((r) => Math.round(r.pad)).join(', ')} px for levels ${gains.map((r) => r.lv).join(', ')}); the Note box aligned with the record row`);
+  await page.click("document.getElementById('save-stamps')");
   const unticked = await page.ev(SAVE_DIALOG);
-  check(unticked.noteOff && unticked.noteDim && !unticked.ticked, 'the change stamps unticked: the note box is off, for there is nowhere for a note to go');
-  await page.click("document.querySelector('#dialog input[type=checkbox]')");
-  check(!(await page.ev(SAVE_DIALOG)).noteOff, 'ticked again: the note box is on');
-  await page.ev("document.querySelector('#dialog .dialog-note input').value = 'Walked.'; true");
+  check(!unticked.stampsTicked && unticked.stampsHidden && unticked.noteLeft === null && !unticked.headerHidden, 'Add change stamps unticked: the record rows and the Note box are hidden, not dimmed; the header\'s line still shows');
+  await page.click("document.getElementById('save-stamps')");
+  await page.ev("(() => { const n = document.querySelector('#dialog .dialog-note input'); n.value = 'Walked.'; n.dispatchEvent(new Event('input')); return true; })()");
+  const typed = await page.ev(SAVE_DIALOG);
+  check(!typed.stampsHidden && typed.stamps[4].text === '2 NOTE Walked.', `ticked again, the rows are back; a note typed shows at once in the stamp: "${typed.stamps[4].text}"`);
   await page.click(BUTTON('#dialog', 'Save'));
   await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
   const asked = await page.ev('window.__asked');
@@ -1440,8 +1469,9 @@ async function saveWithDialog(page) {
     `the computer's Save dialog, asked once: ${copyName} offered, opening at the original, for .ged and .gedcom`);
   check(said === `Saved as ${copyName}.`, `then "${said}"`);
   const copy = Buffer.from(await page.ev(IN_FOLDER(copyName)), 'base64').toString('utf8').split('\n');
-  check(copy.slice(10, 13).join(' | ') === '0 @I2@ INDI | 1 NAME Joe /Fixtures/ | 1 CHAN' && /^2 DATE \d{1,2} [A-Z]{3} \d{4}$/.test(copy[13]) && /^3 TIME \d\d:\d\d:\d\d$/.test(copy[14])
-    && copy[15] === '2 NOTE Walked.' && copy[16] === '0 TRLR', `the copy: the edit, and @I2@'s change stamp with the note typed (${copy.slice(12, 16).join(', ')})`);
+  check(copy[7] === typed.header[1].text && copy.slice(11, 14).join(' | ') === '0 @I2@ INDI | 1 NAME Joe /Fixtures/ | 1 CHAN' && copy[14] === typed.stamps[2].text && copy[15] === typed.stamps[3].text
+    && copy[16] === '2 NOTE Walked.' && copy[17] === '0 TRLR',
+  `the copy holds what the dialog showed, to the second: "${copy[7]}" in HEAD; the edit, and @I2@'s stamp with the note typed (${copy.slice(13, 17).join(', ')})`);
   check(Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8') === SMALL, 'the original is not written: byte for byte as it was opened');
 
   // 21: the copy is the last copy; the page stays on the original
@@ -1451,8 +1481,8 @@ async function saveWithDialog(page) {
   if (await page.ev("document.getElementById('facts').hidden")) await page.click("document.getElementById('file-name')");
   await page.click("document.querySelector('#facts .sha')");
   const shown = await page.ev("(document.querySelector('#facts .hash') || {}).textContent");
-  check(after.changes === '2' && after.name === 'small.ged' && after.facts.includes(`${Buffer.byteLength(SMALL)} B`) && shown === sha,
-    `the page stays on the original: Changes ${after.changes} (the name and the stamp, counted from the original); the facts name small.ged, its size as opened and its sha256 (${shown.slice(0, 12)}…)`);
+  check(after.changes === '3' && after.name === 'small.ged' && after.facts.includes(`${Buffer.byteLength(SMALL)} B`) && shown === sha,
+    `the page stays on the original: Changes ${after.changes} (the header's date, the name and the stamp, counted from the original); the facts name small.ged, its size as opened and its sha256 (${shown.slice(0, 12)}…)`);
 
   // 23: the Changes tab's copy button
   await page.ev("navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }; true");
@@ -1462,9 +1492,10 @@ async function saveWithDialog(page) {
   const pasted = (await page.ev('window.__copied')).split('\n');
   check(/^GEDCOM Viewer {2}changes to small\.ged {2}as of \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(pasted[0])
     && pasted[1] === `original  sha256 ${sha}  ${Buffer.byteLength(SMALL)} bytes  13 lines`
-    && /^changed {2}12 -> 12 +@I2@ INDI$/.test(pasted[2]) && pasted[3] === '  - 1 NAME Joe /Fixture/' && pasted[4] === '  + 1 NAME Joe /Fixtures/'
-    && /^added +13-16 {2}@I2@ INDI {2}\(change stamp\)$/.test(pasted[5]) && pasted[9] === '  + 2 NOTE Walked.',
-  `the Changes tab's copy button: the original's name and sha256, then the change and the stamp, as text ("${pasted[1].slice(0, 26)}…", "${pasted[2]}", "${pasted[5]}")`);
+    && /^added +8 +HEAD {2}\(the date in the header\)$/.test(pasted[2]) && pasted[3] === `  + ${copy[7]}`
+    && /^changed {2}12 -> 13 +@I2@ INDI$/.test(pasted[4]) && pasted[5] === '  - 1 NAME Joe /Fixture/' && pasted[6] === '  + 1 NAME Joe /Fixtures/'
+    && /^added +14-17 {2}@I2@ INDI {2}\(change stamp\)$/.test(pasted[7]) && pasted[11] === '  + 2 NOTE Walked.',
+  `the Changes tab's copy button: the original's name and sha256, then the header's date, the change and the stamp, as text ("${pasted[1].slice(0, 26)}…", "${pasted[2]}", "${pasted[4]}", "${pasted[7]}")`);
   await page.click("document.querySelector('.tab[data-panel=records]')");
 
   // nothing changed since the copy: Save is off, and ⌘S says so; ⇧⌘S is no key of the page's
@@ -1472,7 +1503,7 @@ async function saveWithDialog(page) {
   await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent.startsWith('Nothing')");
   check((await page.ev("document.getElementById('notice').textContent")) === 'Nothing has changed since the last copy. Nothing was written.' && !(await page.ev("document.getElementById('dialog').open")),
     '⌘S with nothing changed since the copy: "Nothing has changed since the last copy. Nothing was written."');
-  await retype(page, 9, '1 NAME Jane /Fixtures/');
+  await retype(page, 10, '1 NAME Jane /Fixtures/');                // line 10: HEAD holds the date now, one line more
   await page.key('S', 'KeyS', 83, 12);
   await sleep(300);
   check(!(await page.ev("document.getElementById('dialog').open")), '⇧⌘S opens nothing: Save a copy and its key are gone');
@@ -1482,8 +1513,9 @@ async function saveWithDialog(page) {
   await page.key('s', 'KeyS', 83, 4);
   await page.waitFor("document.getElementById('dialog').open");
   const second = await page.ev(SAVE_DIALOG);
-  check(second.check === 'Change stamps, 1 record' && second.stamps.length === 1 && second.stamps[0].startsWith('@I1@ INDI') && second.stamps[0].includes('gains 1 CHAN'),
-    `⌘S: the Save dialog's stamps name @I1@ alone, changed since the copy; @I2@'s stamp from the copy is left as it was ("${second.stamps.join('; ')}")`);
+  check(second.stamps.filter((r) => r.rec).length === 1 && second.stamps[0].text.startsWith('@I1@ INDI') && JSON.stringify(second.stamps.slice(1).map((r) => r.kept)) === '[false,false,false,false]'
+    && JSON.stringify(second.header.map((r) => DATE_TIME(r.text))) === JSON.stringify(['HEAD', '1 NOTE Last updated: D T']),
+  `⌘S: the Save dialog's stamps name @I1@ alone, changed since the copy, gaining a whole CHAN; @I2@'s stamp from the copy is left as it was; HEAD's date to be set anew (${second.stamps.map((r) => r.text).join(' / ')})`);
   const before = await page.ev("({ changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })");
   await page.click(BUTTON('#dialog', 'Save'));
   await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'No copy was written'");
@@ -1531,16 +1563,31 @@ async function saveWithDialog(page) {
   await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
   const secondName = (await page.ev('window.__asked'))[0].name;
   const two = Buffer.from(await page.ev(IN_FOLDER(secondName)), 'base64').toString('utf8').split('\n');
-  check(two[8] === '1 NAME Jane /Fixtures/' && two[10] === '1 CHAN' && two[13] === '2 NOTE Second.' && two.slice(14, 21).join(' | ') === copy.slice(10, 17).join(' | '),
-    `a second copy, ${secondName}: @I1@ stamped with its note, and @I2@'s record, stamp and all, as the first copy wrote it`);
+  check(two[9] === '1 NAME Jane /Fixtures/' && two[11] === '1 CHAN' && two[14] === '2 NOTE Second.' && two.slice(15, 22).join(' | ') === copy.slice(11, 18).join(' | ')
+    && two.filter((l) => /Last updated/.test(l)).length === 1 && two[7] !== copy[7],
+  `a second copy, ${secondName}: @I1@ stamped with its note; @I2@'s record, stamp and all, as the first copy wrote it; HEAD's date set anew, one line ("${two[7]}")`);
   await retype(page, two.indexOf('0 @I2@ INDI') + 2, '1 NAME Joseph /Fixtures/');
   await page.click("document.getElementById('save')");
   await page.waitFor("document.getElementById('dialog').open");
   const third = await page.ev(SAVE_DIALOG);
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(third.stamps.length === 1 && third.stamps[0].startsWith('@I2@ INDI') && third.stamps[0].endsWith('its stamp from an earlier copy, set anew'),
-    `@I2@ changed again: the dialog's stamp is "${third.stamps[0]}"`);
+  check(third.stamps.filter((r) => r.rec).length === 1 && third.stamps[0].text.startsWith('@I2@ INDI')
+    && JSON.stringify(third.stamps.slice(1).map((r) => [DATE_TIME(r.text), r.kept])) === JSON.stringify([['1 CHAN', true], ['2 DATE D', false], ['3 TIME T', false], ['2 NOTE Changed: NAME', false]]),
+  `@I2@ changed again: its CHAN, kept, and the lines it sets anew: ${third.stamps.slice(1).map((r) => r.text).join(' / ')}`);
+
+  // undone step by step: Save, and the dot, only for lines no file holds, the original's and a copy's not among them
+  const states = [];
+  for (let k = 0; k < 5; k += 1) {
+    await page.click("document.getElementById('undo')");
+    await page.ev('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    states.push(await page.ev("({ save: !document.getElementById('save').disabled, dot: !document.getElementById('dirty').hidden, changes: document.getElementById('changes-count').textContent })"));
+  }
+  check(JSON.stringify(states.map((x) => [x.save, x.dot])) === JSON.stringify([[false, false], [true, true], [false, false], [true, true], [false, false]]) && states[4].changes === '',
+    'undone one step at a time: the second copy\'s lines, Save off; then lines in no copy, on; the first copy\'s, off; in none, on; the original, off and no dot: no save writes the original\'s bytes again');
+  await page.key('s', 'KeyS', 83, 4);
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent.startsWith('Nothing')");
+  check((await page.ev("document.getElementById('notice').textContent")) === 'Nothing has changed since the file was opened. Nothing was written.', '⌘S there: "Nothing has changed since the file was opened. Nothing was written."');
 }
 
 // Download a copy, in a browser with no file pickers (10.2): the button says so and ⌘S does the
@@ -1567,11 +1614,14 @@ async function copyWithoutPickers(page, dir, shots) {
   await page.waitFor("document.getElementById('dialog').open");
   const shows = await page.ev(SAVE_DIALOG);
   check(shows.title === 'Download a copy of small.ged' && JSON.stringify(shows.lines) === JSON.stringify(['−1 NAME Jane /Fixture/', '+1 NAME Jane /Fixtures/'])
-    && shows.check === 'Change stamps, 1 record' && shows.stamps[0].startsWith('@I1@ INDI') && JSON.stringify(shows.buttons) === JSON.stringify(['Cancel', 'Download']),
-  `⌘S: "${shows.title}", the change, "${shows.check}", Cancel and Download`);
+    && JSON.stringify(shows.checks) === JSON.stringify(['Add change stamps', 'Note the date in the header']) && shows.stamps[0].text.startsWith('@I1@ INDI')
+    && JSON.stringify(shows.buttons) === JSON.stringify(['Cancel', 'Download']),
+  `⌘S: "${shows.title}", the change, "${shows.checks.join('" and "')}", Cancel and Download`);
   if (shots) await page.screenshot(path.join(shots, 'small-save-dialog.png'));
-  await page.click("document.querySelector('#dialog input[type=checkbox]')");         // unticked, for bytes that can be foretold
-  check((await page.ev(SAVE_DIALOG)).noteOff, 'the stamps unticked: the note box is off');
+  await page.click("document.getElementById('save-stamps')");                // both unticked, for bytes that can be foretold
+  await page.click("document.getElementById('save-header')");
+  const off = await page.ev(SAVE_DIALOG);
+  check(off.stampsHidden && off.headerHidden && off.noteLeft === null, 'both unticked: the stamps\' lines, the Note box and the header\'s line hidden');
   await page.click(BUTTON('#dialog', 'Download'));
   const copy = await waitForFile(downloads, /^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/);
   const doc = core.openDocument(new Uint8Array(Buffer.from(SMALL)));

@@ -340,16 +340,42 @@ describe('change stamps (10.4)', () => {
     assert.equal(doc.view.texts.filter((t) => t === '1 CHAN').length, 2, 'one undo takes every stamp back');
   });
 
-  it('the note: typed, or the standing one; one line, 200 characters at most', () => {
-    assert.equal(core.stampNote(open('chan.ged'), '   ').text, core.STAMP_NOTE);
-    assert.equal(core.STAMP_NOTE, 'Edited by hand in GEDCOM Viewer.');
+  it('the note: typed, the same in every record, one line, 200 characters at most; nothing typed, each record says what changed in it', () => {
+    assert.equal(core.stampNote(open('chan.ged'), '   ').text, null, 'nothing typed: each record its own');
     assert.match(core.stampNote(open('chan.ged'), 'x'.repeat(201)).reason, /201 characters; 200 at most/);
     assert.equal(core.stampNote(open('chan.ged'), 'x'.repeat(200)).text.length, 200);
     const doc = open('chan.ged');
-    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));          // @I2@
+    ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));          // @I1@
     assert.match(core.applyStamps(doc, AT, 'two\nlines').reason, /one line/);
     ok(core.applyStamps(doc, AT, ''));
-    assert.ok(doc.view.texts.includes('2 NOTE Edited by hand in GEDCOM Viewer.'));
+    assert.deepEqual(doc.view.texts.filter((t) => t.startsWith('2 NOTE ')), ['2 NOTE an earlier change', '2 NOTE Changed: NAME', '2 NOTE Changed: NAME']);
+    assert.ok(!doc.view.texts.some((t) => /GEDCOM Viewer|by hand/.test(t)), 'no product name, and no "by hand", in what is written');
+  });
+
+  it('a record\'s own note: Changed, Added, Removed and Moved, each tag once, in file order; a CONC or CONT as the line it continues', () => {
+    const doc = openText('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n0 @I1@ INDI\n1 NAME Jane /Fixture/\n1 SEX F\n1 FAMS @F1@\n' +
+      '1 NOTE a note\n2 CONC that goes on\n1 BIRT\n2 DATE 1900\n1 DEAT\n2 DATE 1980\n0 @F1@ FAM\n1 WIFE @I1@\n0 TRLR\n');
+    ok(core.editLine(doc, 6, '1 SEX M'));                           // SEX first in the file, NAME after: file order, not the order typed
+    ok(core.editLine(doc, 5, '1 NAME Jane /Fixtures/'));
+    ok(core.editLine(doc, 9, '2 CONC that went on'));               // a CONC: its line, the NOTE
+    ok(core.deleteLine(doc, 7));                                     // 1 FAMS @F1@
+    ok(core.addSibling(doc, 6, '1 OCCU fixture maker'));
+    ok(core.addSibling(doc, 6, '1 RESI'));
+    ok(core.moveLines(doc, 13, 15, 11));                             // the DEAT block before the BIRT block
+    const note = core.recordNote(core.recordChanges(doc).get(doc.view.recOf[4]));
+    assert.equal(note, 'Changed: NAME, SEX, NOTE. Added: RESI, OCCU. Removed: FAMS. Moved: DEAT, DATE');
+    ok(core.applyStamps(doc, AT, ''));
+    assert.equal(block(doc, '@I1@').slice(-1)[0], `2 NOTE ${note}`);
+    assert.ok(!block(doc, '@F1@').includes('1 CHAN'), 'the family is as it was, so it gains no stamp');
+  });
+
+  it('a record\'s own note is one line of 200 characters at most: the list in hand ends ", and more"', () => {
+    const many = Array.from({ length: 60 }, (_, k) => ({ place: k, tag: `_TAG${k}` }));
+    const note = core.recordNote({ Changed: many, Added: [{ place: 1, tag: 'BIRT' }], Removed: [], Moved: [] });
+    assert.ok(note.length <= 200 && note.endsWith(', and more') && note.startsWith('Changed: _TAG0, _TAG1, '), note);
+    assert.equal(core.recordNote({ Changed: [{ place: 2, tag: 'NAME' }, { place: 1, tag: 'SEX' }, { place: 3, tag: 'NAME' }], Added: [], Removed: [], Moved: [] }),
+      'Changed: SEX, NAME', 'file order, each tag once');
   });
 
   it('version 7: the time is UTC, with a closing Z', () => {
@@ -358,7 +384,8 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 5, '0 @N1@ SNOTE a shared note, edited'));
     ok(core.applyStamps(doc, new Date(Date.UTC(2026, 8, 28, 23, 30, 5)), ''));
     assert.deepEqual(block(doc, '@I1@'), ['0 @I1@ INDI', '1 NAME Jane /Fixtures/', '1 CHAN', '2 DATE 28 SEP 2026',
-      '3 TIME 23:30:05Z', '2 NOTE Edited by hand in GEDCOM Viewer.']);
+      '3 TIME 23:30:05Z', '2 NOTE Changed: NAME']);
+    assert.equal(block(doc, '@N1@').slice(-1)[0], '2 NOTE Changed: SNOTE', 'a record whose own line changed');
     assert.equal(doc.view.texts.filter((t) => t === '1 CHAN').length, 2, 'the SNOTE record is stamped too');
     assert.deepEqual(core.stampTime(new Date(Date.UTC(2026, 11, 31, 23, 59, 59)), true), { date: '31 DEC 2026', time: '23:59:59Z' });
     assert.deepEqual(core.stampTime(new Date(2026, 0, 5, 7, 8, 9), false), { date: '5 JAN 2026', time: '07:08:09' });
@@ -370,7 +397,7 @@ describe('change stamps (10.4)', () => {
     assert.deepEqual(core.stampTargets(doc).map((r) => doc.view.tag[doc.view.records[r]]), ['FAM']);
     ok(core.applyStamps(doc, AT, ''));
     assert.deepEqual(block(doc, '@F1@'), ['0 @F1@ FAM', '1 WIFE @I1@', '1 CHAN', '2 DATE 28 SEP 2026', '3 TIME 15:42:00',
-      '2 NOTE Edited by hand in GEDCOM Viewer.']);
+      '2 NOTE Removed: HUSB']);
     sameAsFreshRead(doc);
   });
 
@@ -455,8 +482,139 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 5, '1 NAME Jane /Fixtures/'));
     ok(core.applyStamps(doc, AT, ''));
     const out = Buffer.from(core.saveBytes(doc)).toString('utf8');
-    assert.ok(out.endsWith('1 NAME Jane /Fixtures/\n1 CHAN\n2 DATE 28 SEP 2026\n3 TIME 15:42:00\n2 NOTE Edited by hand in GEDCOM Viewer.'));
+    assert.ok(out.endsWith('1 NAME Jane /Fixtures/\n1 CHAN\n2 DATE 28 SEP 2026\n3 TIME 15:42:00\n2 NOTE Changed: NAME'));
     sameAsFreshRead(doc);
+  });
+
+  // The Save dialog shows each record's stamp before the save as the lines it will gain or have
+  // set; those lines must be the ones the save writes, in the file's order
+  // A record's CHAN block as written; records keep their order through the stamps, so a plan's
+  // record number still names it after them
+  const written = (doc, record) => {
+    const v = doc.view;
+    const chan = core.blocksUnder(v, v.records[record]).blocks.map((b) => b[0]).find((p) => v.tag[p] === 'CHAN');
+    return v.texts.slice(chan, core.subtreeEnd(v, chan));
+  };
+
+  it('the Save dialog\'s plan: each record\'s lines as they will be written, in file order, at the moment shown', () => {
+    const doc = open('chan.ged');
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@: no CHAN
+    ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));            // @I1@: a CHAN with DATE, TIME and a NOTE
+    ok(core.deleteLine(doc, 18));                                    // @F1@: a CHAN with a DATE and no TIME; it lost its HUSB
+    const plan = core.stampPlan(doc, AT, '');
+    assert.deepEqual(plan.map((p) => [p.id, p.how, p.note]), [['@I1@', 'sets', 'Changed: NAME'], ['@I2@', 'adds', 'Changed: NAME'], ['@F1@', 'sets', 'Removed: HUSB']]);
+    assert.deepEqual(plan[0].lines, [{ level: 1, text: '1 CHAN', how: 'kept' }, { level: 2, text: '2 DATE 28 SEP 2026', how: 'set' },
+      { level: 3, text: '3 TIME 15:42:00', how: 'set' }, { level: 2, text: '2 NOTE Changed: NAME', how: 'added' }]);
+    assert.deepEqual(plan[1].lines.map((l) => [l.level, l.text, l.how]), [[1, '1 CHAN', 'added'], [2, '2 DATE 28 SEP 2026', 'added'],
+      [3, '3 TIME 15:42:00', 'added'], [2, '2 NOTE Changed: NAME', 'added']]);
+    assert.deepEqual(plan[2].lines.map((l) => l.text), ['1 CHAN', '2 DATE 28 SEP 2026', '3 TIME 15:42:00', '2 NOTE Removed: HUSB'],
+      'a TIME added after a DATE that is set lands before the NOTE added at the block\'s end, as in the file');
+    assert.deepEqual(core.stampPlan(doc, AT, 'Typed.').map((p) => p.note), ['Typed.', 'Typed.', 'Typed.'], 'a typed note in every record');
+    ok(core.applyStamps(doc, AT, ''));
+    for (const p of plan) {
+      const lines = written(doc, p.record);
+      assert.deepEqual(p.lines.map((l) => l.text), lines.filter((t) => p.lines.some((l) => l.text === t)), `${p.id}: the dialog's lines are the file's, in its order`);
+    }
+  });
+
+  it('the plan is what the stamps write, over every written file, at random', () => {
+    for (const file of h.gedFiles(h.SYNTHETIC)) {
+      const doc = core.openDocument(h.bytesOfFile(file));
+      const rnd = prng(5);
+      for (let k = 0; k < 25; k += 1) {
+        const pos = Math.floor(rnd() * doc.order.length);
+        const lv = Math.max(doc.view.level[pos], 0);
+        if (rnd() < 0.5) core.editLine(doc, pos, `${lv} NOTE edited ${k}`); else core.addSibling(doc, pos, `${lv} NOTE added ${k}`);
+      }
+      const plan = core.stampPlan(doc, AT, '');
+      const r = core.applyStamps(doc, AT, '');
+      if (!r.ok) continue;                                           // refused, the same as it would be at the save
+      for (const p of plan) {
+        const lines = written(doc, p.record);
+        const shown = p.lines.map((l) => l.text);
+        assert.deepEqual(shown, lines.filter((t) => shown.includes(t)), `${path.basename(file)} ${p.id}`);
+        assert.ok(p.lines.every((l) => l.how === 'kept' || lines.includes(l.text)), `${path.basename(file)} ${p.id}: every line shown is written`);
+      }
+    }
+  });
+
+  it('the date in the header, three ways: a NOTE at HEAD\'s end; a CONT at the end of HEAD\'s NOTE; a line of that form set anew, never a second', () => {
+    const at = new Date(2026, 9, 9, 9, 33, 45);
+    const head = (doc) => doc.view.texts.slice(0, core.recordEnd(doc.view, 0));
+    // no NOTE in HEAD
+    let doc = openText('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n1 DATE 1 JAN 2020\n2 TIME 10:00:00\n0 @I1@ INDI\n1 NAME Jane /Fixture/\n0 TRLR\n');
+    assert.deepEqual(core.headerPlan(doc, at).lines, [{ level: 1, text: '1 NOTE Last updated: 9 OCT 2026 09:33:45', how: 'added' }]);
+    ok(core.saveActs(doc, at, { stamps: false, typed: '', header: true }));
+    assert.deepEqual(head(doc), ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 DATE 1 JAN 2020', '2 TIME 10:00:00',
+      '1 NOTE Last updated: 9 OCT 2026 09:33:45'], 'at HEAD\'s end; the header\'s own DATE and TIME untouched');
+    sameAsFreshRead(doc);
+    // a NOTE in HEAD, with a CONT of its own
+    doc = openText('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n1 NOTE Exported for the family\n2 CONT second line\n1 SUBM @U1@\n0 @U1@ SUBM\n1 NAME Jane /Fixture/\n0 TRLR\n');
+    assert.deepEqual(core.headerPlan(doc, at).lines, [{ level: 1, text: '1 NOTE Exported for the family', how: 'kept' },
+      { level: 2, text: '2 CONT Last updated: 9 OCT 2026 09:33:45', how: 'added' }]);
+    ok(core.saveActs(doc, at, { stamps: false, typed: '', header: true }));
+    assert.deepEqual(head(doc), ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 NOTE Exported for the family', '2 CONT second line',
+      '2 CONT Last updated: 9 OCT 2026 09:33:45', '1 SUBM @U1@']);
+    // saved again: the line set anew, in its place
+    const later = new Date(2026, 9, 9, 11, 0, 1);
+    assert.deepEqual(core.headerPlan(doc, later).lines.map((l) => [l.text, l.how]), [['1 NOTE Exported for the family', 'kept'],
+      ['2 CONT Last updated: 9 OCT 2026 11:00:01', 'set']]);
+    ok(core.saveActs(doc, later, { stamps: false, typed: '', header: true }));
+    assert.deepEqual(head(doc).filter((t) => /Last updated/.test(t)), ['2 CONT Last updated: 9 OCT 2026 11:00:01'], 'one, not two');
+    // a file whose HEAD holds one already, from an earlier save, as a NOTE of its own
+    doc = openText('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n1 NOTE Last updated: 8 OCT 2026 15:12:00\n0 TRLR\n');
+    ok(core.saveActs(doc, at, { stamps: false, typed: '', header: true }));
+    assert.deepEqual(head(doc), ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 NOTE Last updated: 9 OCT 2026 09:33:45']);
+    sameAsFreshRead(doc);
+    // a NOTE that only begins with the words, by someone's hand, is not ours: the date goes under it
+    doc = openText('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n1 NOTE Last updated: whenever\n0 TRLR\n');
+    ok(core.saveActs(doc, at, { stamps: false, typed: '', header: true }));
+    assert.deepEqual(head(doc).slice(4), ['1 NOTE Last updated: whenever', '2 CONT Last updated: 9 OCT 2026 09:33:45']);
+  });
+
+  it('the date in the header in a version 7 file: UTC, with a closing Z, the date being UTC\'s too; no HEAD, nothing', () => {
+    const doc = openText('0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Jane /Fixture/\n0 TRLR\n');
+    const at = new Date(Date.UTC(2026, 9, 9, 23, 59, 59));
+    ok(core.editLine(doc, 4, '1 NAME Jane /Fixtures/'));
+    ok(core.saveActs(doc, at, { stamps: true, typed: '', header: true }));
+    assert.deepEqual(doc.view.texts.slice(0, 4), ['0 HEAD', '1 GEDC', '2 VERS 7.0', '1 NOTE Last updated: 9 OCT 2026 23:59:59Z']);
+    assert.ok(doc.view.texts.includes('3 TIME 23:59:59Z'), 'the same moment as the stamps, in their forms');
+    sameAsFreshRead(doc);
+    assert.equal(core.headerPlan(openText('0 @I1@ INDI\n1 NAME Jane /Fixture/\n0 TRLR\n'), at), null, 'a file that does not open with HEAD');
+  });
+
+  it('the stamps and the header\'s date are one step: one Undo takes both back, and a save that writes nothing takes both back; they show among the changes', () => {
+    const doc = open('chan.ged');
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
+    const before = hash(doc);
+    const undone = doc.undone.slice();
+    const r = ok(core.saveActs(doc, AT, { stamps: true, typed: '', header: true }));
+    assert.equal(r.step.label, 'Change stamps and the date in the header');
+    const runs = core.changeRuns(doc);
+    assert.deepEqual(runs.filter((run) => run.header).map((run) => [run.kind, run.lines[0].now]), [['added', '1 NOTE Last updated: 28 SEP 2026 15:42:00']]);
+    assert.ok(runs.some((run) => run.stamp && !run.header), 'the stamp, a run of its own');
+    assert.equal(core.undo(doc).label, 'Change stamps and the date in the header');
+    assert.equal(hash(doc), before);
+    core.redo(doc);
+    assert.equal(core.takeBack(doc, r.step, undone), true);
+    assert.equal(hash(doc), before);
+    assert.equal(ok(core.saveActs(open('chan.ged'), AT, { stamps: false, typed: '', header: true })).step.label, 'The date in the header');
+  });
+
+  it('nothing to save when the lines are the original\'s, or any copy\'s: so no save writes the original\'s bytes again', () => {
+    const doc = open('chan.ged');
+    assert.equal(core.unsaved(doc), false, 'as opened');
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
+    assert.equal(core.unsaved(doc), true);
+    core.markCopied(doc);                                            // the first copy
+    assert.equal(core.unsaved(doc), false, 'the lines of the copy');
+    ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));
+    core.markCopied(doc);                                            // the second
+    core.undo(doc);                                                  // back to the first copy's lines
+    assert.equal(core.unsaved(doc), false, 'an earlier copy\'s lines');
+    core.undo(doc);                                                  // back to the original
+    assert.equal(core.unsaved(doc), false, 'the original: nothing to save');
+    assert.equal(core.isChanged(doc), false);
   });
 });
 

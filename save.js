@@ -47,8 +47,8 @@
   const DATED = /\.\d{4}-\d\d-\d\dT\d{6}(?:-\d+)?$/;
 
   // The name of a copy saved at `when`: <stem>.<timestamp><ext>. A stem that already ends in a
-  // timestamp has it replaced, not stacked: RAW.2026-10-08T151200.ged saved again is
-  // RAW.2026-10-08T160500.ged. The name is offered; the person may change it.
+  // timestamp has it replaced, not stacked: family.2026-10-08T151200.ged saved again is
+  // family.2026-10-08T160500.ged. The name is offered; the person may change it.
   function datedName(fileName, when) {
     const { stem, ext } = split(fileName);
     return `${stem.replace(DATED, '')}.${timestamp(when)}${ext}`;
@@ -97,7 +97,7 @@
       const record = r.record ? `${r.record.id ? `${r.record.id} ` : ''}${r.record.tag || ''}` : '';
       const places = r.kind === 'changed' || r.kind === 'moved' ? `${b} -> ${a}` : `${b.padEnd(wb)}    ${a}`;
       const head = `${r.kind.padEnd(7)}  ${places.padEnd(wb + 4 + wa)}`;
-      const tail = r.kind === 'moved' ? `(${movedText(r)})` : r.stamp ? '(change stamp)' : '';
+      const tail = r.kind === 'moved' ? `(${movedText(r)})` : r.header ? '(the date in the header)' : r.stamp ? '(change stamp)' : '';
       out.push([head, record, tail].filter((x) => x).join('  ').trimEnd());
       for (const l of r.lines) {
         if (l.was !== null) out.push(`  - ${l.was}`);
@@ -140,18 +140,22 @@
   const REFUSED = 'That is the original. It is unchanged. Pick another name.';
   const NOT_RESTORED = 'That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.';
 
-  // Step 1's words: since the last copy, or since the open when none has been written.
+  // Step 1's words, when there is nothing to save (core.unsaved): the lines are the original's, or
+  // the last copy's, or an earlier copy's.
   function nothingSince(doc) {
-    return `Nothing has changed since ${doc.copiedOrder ? 'the last copy' : 'the file was opened'}. Nothing was written.`;
+    if (!core.isChanged(doc)) return 'Nothing has changed since the file was opened. Nothing was written.';
+    if (!core.changedSinceCopy(doc)) return 'Nothing has changed since the last copy. Nothing was written.';
+    return 'These lines are already in an earlier copy. Nothing was written.';
   }
 
-  // Steps 3 and 4: the change stamps, when they are ticked, as one step of the history, with the
-  // note for them; then the bytes. Unticked, the note goes nowhere and is not read.
-  function prepare(doc, { when, note, stamps }) {
+  // Steps 3 and 4: the change stamps, when they are ticked, with the note for them, and the date
+  // in the header, when that is, as one step of the history; then the bytes. Unticked, the note
+  // goes nowhere and is not read.
+  function prepare(doc, { when, note, stamps, header }) {
     const undone = doc.undone.slice();
     let step = null;
-    if (stamps) {
-      const r = core.applyStamps(doc, when, note);
+    if (stamps || header) {
+      const r = core.saveActs(doc, when, { stamps: !!stamps, typed: stamps ? note : '', header: !!header });
       if (!r.ok) return { reason: r.reason };
       step = r.step;
     }
@@ -190,14 +194,15 @@
   // is the computer's Save dialog, given the dated name to offer (the page's showSaveFilePicker,
   // opening at the original); with none, in a browser without the pickers, the copy comes back to
   // be downloaded. `stamps` says whether the change stamps are ticked and `note` is what was typed
-  // for them; `when` is the moment of the save. What happened comes back for the page to say:
+  // for them; `header`, whether the date goes in the header; `when` is the moment of the save, the
+  // one the page's dialog showed. What happened comes back for the page to say:
   // `done`, or the step that stopped it and why. Whatever stops it after step 3 takes the stamps
   // back, so the document is as it was before the attempt.
-  async function save({ doc, original, when, note, stamps, hash, pick }) {
-    // 1. nothing changed since the last copy: say so, write nothing
-    if (!core.changedSinceCopy(doc)) return failed(1, nothingSince(doc));
-    // 3. the change stamps; 4. the bytes, and their hash
-    const ready = prepare(doc, { when, note, stamps });
+  async function save({ doc, original, when, note, stamps, header, hash, pick }) {
+    // 1. nothing to save, the lines being the original's or a copy's: say so, write nothing
+    if (!core.unsaved(doc)) return failed(1, nothingSince(doc));
+    // 3. the change stamps and the header's date; 4. the bytes, and their hash
+    const ready = prepare(doc, { when, note, stamps, header });
     if (ready.reason) return failed(3, ready.reason);
     const name = datedName(original.name, when);
     const sha256 = await hash(ready.bytes);

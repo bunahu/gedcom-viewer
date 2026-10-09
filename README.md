@@ -20,7 +20,7 @@ page, no server, no account. Nothing is installed, and nothing leaves the machin
 | 0.5.3 | Report a problem, in Settings: a report of counts and codes, never a line of the file, in a box to read, change or cut; What happened, in your own words; Copy. The page sends nothing, and the original is kept nowhere. Its last line is a checksum, so a changed report reads as changed; `tools/report-check.js` reads one back |
 | 0.5.4 | six small fixes: the lines no longer scroll sideways when one opens for typing; the tab's title no longer holds the file's name, unless File name in the tab is turned on in Settings; spell check and page translation are off where the file's words show; the privacy page says plainly what the page sends, what it cannot control, and how to check it yourself; a notice that says why Chrome may refuse a folder for Save, and what to do; the README no longer names a path on one disk |
 | 0.5.5 | easier to read: text and borders reach the contrast the web's accessibility guidelines ask for (WCAG 2.2 AA) in all three looks; larger type (16 px) and rows (24 px), and a Text choice in Settings, Normal or Larger; a System choice for the theme, which follows the computer's light or dark and is what a new visitor gets, and Sunset is now called Dusk (a choice already kept still works); feedback@gedcom-viewer.net, an address that needs no GitHub account, beside the issue route for a report or a question; the line under Open GEDCOM now reads "The file does not leave your computer.", with a Privacy Policy link; less motion when the computer asks for it, and the system's own colors when it forces them; fold arrows at least 24 by 24 pixels to click; the content-security policy no longer allows inline styles; page translation is off for the file's name, facts and counts |
-| 0.5.6 | saving rewritten, so the original is never written: Save, the one button (⌘S), writes a dated copy through the computer's own Save dialog, which opens beside the original; no folder is asked for, and there is no backup and no log. The copy is read back once written. Picking the original itself in the Save dialog is refused, and the original put back as it was if the browser emptied it. In a browser without that dialog, Save is Download a copy. Changes count from the original, and the Changes tab has a copy button that puts them on the clipboard as text. The dot and Save mean changed since the last copy, and so does the warning on leaving. Save a copy and ⇧⌘S are gone |
+| 0.5.6 | saving rewritten, so the original is never written: Save, the one button (⌘S), writes a dated copy through the computer's own Save dialog, which opens beside the original; no folder is asked for, and there is no backup and no log. The copy is read back once written. Picking the original itself in the Save dialog is refused, and the original put back as it was if the browser emptied it. In a browser without that dialog, Save is Download a copy. Changes count from the original, and the Changes tab has a copy button that puts them on the clipboard as text. The dot and Save show only while the lines hold what no file holds yet, the original's and every copy's lines aside, and so does the warning on leaving. A change stamp's note says what changed in its record, unless one is typed; the Save dialog shows each stamp's lines as they will be written; the header can carry the date of the save. Save a copy and ⇧⌘S are gone |
 | 1.0 | when my own walk of the whole page passes |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -96,7 +96,7 @@ change and of a finding are drawn in the system's colors.
 
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the text size, the two
 panel widths and whether each side frame is hidden, Bold surnames, File name in the tab, the Tags list's order,
-whether the change stamps are ticked, and whether the file's facts show. Never a file's name,
+whether the change stamps are ticked, whether the date is noted in the header, and whether the file's facts show. Never a file's name,
 content or place. Edit is off whenever a file opens.
 
 ## Edit and save
@@ -141,8 +141,9 @@ shows:
 through the computer's own Save dialog, which opens beside the original and offers
 `<name>.<YYYY-MM-DDTHHMMSS>.ged`; the name can be changed there, or the file renamed after. No
 folder is asked for. A copy opened and saved again has its timestamp replaced, not added to. The
-copy is read back and compared once it is written. Then the ● goes and Save turns off until the
-next change, while **Changes** goes on counting from the original, and the facts still name it.
+copy is read back and compared once it is written. Then the ● goes and Save turns off: both show
+only while the lines hold what no file holds yet, so undoing back to the original, or to a copy's
+lines, turns them off too. **Changes** goes on counting from the original, and the facts still name it.
 
 | Written | Where |
 |---|---|
@@ -158,9 +159,15 @@ In a browser without the Save dialog (Safari, Firefox), the button reads **Downl
 ⌘S does the same: the copy goes wherever the browser keeps downloads, under the same dated name. A
 download counts as the last copy, so leaving the page warns only for changes made since.
 
-**Change stamps**, ticked unless unticked, give each changed record a `1 CHAN` with the date, time
-and note of the save; unticked, the note box is off. A record stamped for an earlier copy is
-stamped again only when it changes again. **Changes** has a **copy** button at its top: it puts
+**Add change stamps**, ticked unless unticked, gives each changed record a `1 CHAN` with the date
+and time of the save and a `2 NOTE`: what is typed in the Note box, or, left empty, what changed in
+that record, by tag (`Changed: NAME, SEX. Added: BIRT. Removed: FAMS`). Under it the dialog lists
+each record's lines as they will be written; unticked, they and the Note box are hidden. A record
+stamped for an earlier copy is stamped again only when it changes again. **Note the date in the
+header**, ticked unless unticked, writes `Last updated: 9 OCT 2026 09:33:45`, the stamps' date and
+time, as a `NOTE` under `HEAD`, or a `CONT` of `HEAD`'s own `NOTE` when it has one, and sets that
+line anew at the next save instead of adding another; the header's own `DATE` is never touched.
+Both are one act: one Undo takes them back. **Changes** has a **copy** button at its top: it puts
 the list of changes on the clipboard as text, opening with the original's name and sha256, and
 writes it nowhere. `diff <original> <copy>` in Terminal shows every line that differs. The list
 holds what the file holds, living people included, and belongs beside the file, never in a
@@ -327,7 +334,8 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--report-height` | the Report a problem box |
 | `--meta-max-height`, `--table-border` | a `_META`'s story before it scrolls; the tables in a story and its persons |
 | `--edit-bg` | the box a line is typed in |
-| `--off-opacity` | how faint the note box is while Change stamps are unticked |
+| `--off-opacity` | how faint a button is that cannot be pressed |
+| `--dialog-indent`, `--dialog-level-step` | the Save dialog: how far under its checkbox a record and the Note box sit, and how much further each level of a line it will write |
 | `--left-width`, `--right-width` | the left bar and the right frame (also dragged, and remembered) |
 | `--split-width`, `--split-color` | the bars between them |
 | `--list-row-height` | the rows of Records, Checks, Changes and Tags (26 px at the least) |

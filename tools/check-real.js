@@ -5,7 +5,7 @@
 // prints them — counts, tags, ids and hashes only, never a value — with its timings and its
 // identity.
 //
-//     node tools/check-real.js RAW CLEANED
+//     node tools/check-real.js FILE [FILE ...]
 //
 // A file whose sha256 is in local/measured.json (section 3's table, kept beside the real files and
 // never in the repo) is held to that table, number for number. Any other file is held to what the
@@ -79,7 +79,7 @@ function tableView(expected) {
 
 const files = process.argv.slice(2);
 if (!files.length) {
-  console.error('usage: node tools/check-real.js RAW CLEANED');
+  console.error('usage: node tools/check-real.js FILE [FILE ...]');
   process.exit(2);
 }
 

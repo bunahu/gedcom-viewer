@@ -807,7 +807,8 @@
   // a place, others put in — and its undo is the same splices run backwards. `savedOrder` is
   // `order` at open: the original, which nothing writes over (I6). What changed is the one against
   // the other (9.4). `copiedOrder` is `order` when the last copy was written (10.2, step 8), or null
-  // before the first; the dot in the top bar and the Save button mean a change since then.
+  // before the first, and `copies` every copy's; the dot in the top bar and the Save button mean
+  // lines that differ from the original and from every copy (unsaved).
   //
   // An added line keeps its text, its terminator, its lineage, and — when the viewer wrote it for a
   // change stamp — its part in the stamp. Its lineage is the line it stands for: the original line
@@ -830,6 +831,7 @@
       order,
       savedOrder: order.slice(),
       copiedOrder: null,                                             // `order` at the last copy written
+      copies: [],                                                    // `order` at each copy written in this visit
       done: [],                                                      // Undo takes the last of these
       undone: [],                                                    // Redo takes the last of these
       common: commonTerm(m),
@@ -1189,7 +1191,10 @@
 
   // A copy is written: the lines as they now are are the last copy (10.2, step 8). The original
   // stays what the changes are counted from.
-  function markCopied(doc) { doc.copiedOrder = doc.order.slice(); }
+  function markCopied(doc) {
+    doc.copiedOrder = doc.order.slice();
+    doc.copies.push(doc.copiedOrder);
+  }
 
   // An act taken back as if it had not been made: a save that wrote nothing takes its stamps back
   // (10.2). The step runs backwards and leaves the history, and Redo holds again what it held
@@ -1215,6 +1220,12 @@
 
   // Whether the lines differ from the last copy written, or from the original before the first.
   function changedSinceCopy(doc) { return !sameOrder(doc.order, doc.copiedOrder || doc.savedOrder); }
+
+  // Whether the lines hold what no file holds yet (the owner, 2026-10-09): they differ from the
+  // original, and from every copy written in this visit. Undone back to the original, or to the
+  // lines of any copy, there is nothing to save, and no save writes the original's bytes again.
+  // The stamps and the header's date are not counted: they are made at the save.
+  function unsaved(doc) { return isChanged(doc) && !doc.copies.some((c) => sameOrder(c, doc.order)); }
 
   // Which numbers a list holds, and at what place.
   function placesIn(doc, list) {
@@ -1409,7 +1420,7 @@
       if (kind === 'moved') {
         const last = moves[moves.length - 1];
         if (last && it.before === last.before + last.lines.length && it.after === last.after + last.lines.length) last.lines.push({ was: null, now: null });
-        else moves.push({ kind: 'moved', before: it.before, after: it.after, at: it.at, record: null, stamp: false, lines: [{ was: null, now: null }] });
+        else moves.push({ kind: 'moved', before: it.before, after: it.after, at: it.at, record: null, stamp: false, header: false, lines: [{ was: null, now: null }] });
         if (!it.changed) continue;
         kind = 'changed';
       }
@@ -1421,7 +1432,9 @@
         const line = v.records[v.recOf[it.after]];
         record = { id: v.xref[line], tag: v.tag[line], key: `now ${line}` };
       }
-      const stamp = it.after >= 0 && stampOf(doc, O[it.after]) !== null;
+      const role = it.after >= 0 ? stampOf(doc, O[it.after]) : null;
+      const stamp = role !== null;                                   // written by a stamp, or as the header's date
+      const header = role === 'header';
       const line = { was: it.before >= 0 ? textOf(doc, S[it.before]) : null, now: it.after >= 0 ? textOf(doc, O[it.after]) : null };
       if (kind === 'changed') {                                      // a line can change in its ending alone (9.2)
         const tw = termOf(doc, S[it.before]);
@@ -1429,14 +1442,14 @@
         if (tw !== tn) line.ending = [TERM_NAMES[tw], TERM_NAMES[tn]];
       }
       const last = runs[runs.length - 1];
-      const joins = last && last.kind === kind && last.stamp === stamp &&
+      const joins = last && last.kind === kind && last.stamp === stamp && last.header === header &&
         (last.record && last.record.key) === (record && record.key) &&
         (it.before < 0 || it.before === last.before + last.lines.length) &&
         (it.after < 0 || it.after === last.after + last.lines.length);
       if (joins) last.lines.push(line);
       else {
         runs.push({ kind, before: it.before, after: it.after, at: kind === 'removed' ? it.at : it.after,
-          record, stamp, lines: [line] });
+          record, stamp, header, lines: [line] });
       }
     }
     if (!moves.length) return runs;
@@ -1573,8 +1586,9 @@
   const STAMP_TAGS = new Set(['FAM', 'INDI', 'OBJE', 'NOTE', 'REPO', 'SOUR', 'SUBM']);
   const STAMP_TAGS_7 = new Set(['FAM', 'INDI', 'OBJE', 'SNOTE', 'REPO', 'SOUR', 'SUBM']);
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-  const STAMP_NOTE = 'Edited by hand in GEDCOM Viewer.';
   const STAMP_NOTE_MAX = 200;
+  const KINDS = ['Changed', 'Added', 'Removed', 'Moved'];
+  const AND_MORE = ', and more';
 
   // A stamp's date and time, for a save made at `when`: the day without a leading zero, the month
   // as JAN … DEC, the year in four digits; HH:MM:SS on a 24-hour clock, local — and in a file whose
@@ -1587,15 +1601,111 @@
     return { date: `${d} ${MONTHS[mo]} ${y}`, time: `${two(h)}:${two(mi)}:${two(s)}${v7 ? 'Z' : ''}` };
   }
 
-  // A stamp's note: what the owner typed for this save, or, when he typed nothing, the standing
-  // note. One line, 200 characters at most, nothing the file's encoding cannot hold.
+  // A stamp's note when one is typed for the save: the same in every record it stamps. One line,
+  // 200 characters at most, nothing the file's encoding cannot hold. Nothing typed, the text is
+  // null, and each record's stamp says what changed in it (recordNote).
   function stampNote(doc, typed) {
-    const text = String(typed || '').trim() || STAMP_NOTE;
+    const text = String(typed || '').trim();
+    if (!text) return { text: null };
     if (/[\r\n]/.test(text)) return { reason: 'The note must be one line.' };
     const length = codePoints(text);
     if (length > STAMP_NOTE_MAX) return { reason: `The note is ${num(length)} characters; ${STAMP_NOTE_MAX} at most.` };
     const why = textRefusal(doc, text);
     return why ? { reason: why } : { text };
+  }
+
+  // What changed inside each record the net change touched, for its stamp's note: the tags of the
+  // lines changed, added, removed and moved in it, as four lists, each line with its place (in the
+  // lines now; a removed line, in the original). A CONC or CONT line counts as the line it
+  // continues; a line that does not parse has no tag and is left out; the lines a stamp or the
+  // header's date wrote are not the person's changes; a record moved whole, or with its section,
+  // moved nothing inside it. A map from record numbers of the view.
+  function recordChanges(doc, items) {
+    const list = items || netChange(doc);
+    const v = doc.view;
+    const S = doc.savedOrder;
+    const O = doc.order;
+    const out = new Map();
+    const add = (r, kind, place, tag) => {
+      if (r < 0 || tag === null) return;
+      if (!out.has(r)) out.set(r, { Changed: [], Added: [], Removed: [], Moved: [] });
+      out.get(r)[kind].push({ place, tag });
+    };
+    const tagNow = (b) => {
+      const t = v.tag[b];
+      if (t !== 'CONC' && t !== 'CONT') return t;
+      const p = parentOf(v, b);
+      return p >= 0 ? v.tag[p] : null;
+    };
+    const tagThen = (a) => {
+      const s = shapeOf(doc, S[a]);
+      if (s.tag !== 'CONC' && s.tag !== 'CONT') return s.tag;
+      for (let p = a - 1; p >= 0; p -= 1) {
+        const q = shapeOf(doc, S[p]);
+        if (q.level >= 0 && q.level < s.level) return q.tag;
+      }
+      return null;
+    };
+    const placeNow = placesIn(doc, O);
+    const changedTo = new Map();                                     // place before → place after
+    for (const it of list) if (it.kind === 'changed' || it.kind === 'moved') changedTo.set(it.before, it.after);
+    const memo = { a: -2, r: -1 };
+    for (const it of list) {
+      if (it.kind === 'removed') {
+        const r = savedRecordOf(doc, it.before, memo);
+        if (r < 0) continue;
+        let b = placeNow(S[r]);
+        if (b < 0 && changedTo.has(r)) b = changedTo.get(r);
+        if (b >= 0) add(v.recOf[b], 'Removed', it.before, tagThen(it.before));   // its record was deleted otherwise
+      } else if (stampOf(doc, O[it.after]) === null) {
+        if (it.kind === 'added') add(v.recOf[it.after], 'Added', it.after, tagNow(it.after));
+        else if (it.kind === 'changed' || it.changed) add(v.recOf[it.after], 'Changed', it.after, tagNow(it.after));
+      }
+    }
+    if (list.some((it) => it.kind === 'moved')) {
+      for (const run of changeRuns(doc, list)) {
+        if (run.kind !== 'moved' || run.moved.what !== 'block') continue;
+        for (let k = 0; k < run.lines.length; k += 1) add(v.recOf[run.after + k], 'Moved', run.after + k, tagNow(run.after + k));
+      }
+    }
+    return out;
+  }
+
+  // A record's own note, from what changed in it (the owner, 2026-10-09: what changed, not who
+  // changed it): "Changed: NAME, SEX. Added: BIRT. Removed: FAMS", each tag once in its list, in
+  // file order. One line, 200 characters at most: when the rest would not fit, the list in hand
+  // ends ", and more". Tags are letters, digits and underscores, so every encoding holds it.
+  function recordNote(changes) {
+    const lists = [];
+    for (const kind of KINDS) {
+      const seen = new Set();
+      const tags = [];
+      for (const x of ((changes && changes[kind]) || []).slice().sort((p, q) => p.place - q.place)) {
+        if (!seen.has(x.tag)) { seen.add(x.tag); tags.push(x.tag); }
+      }
+      if (tags.length) lists.push([kind, tags]);
+    }
+    if (!lists.length) return 'Changed: a line that does not parse';
+    const whole = lists.map(([kind, tags]) => `${kind}: ${tags.join(', ')}`).join('. ');
+    if (whole.length <= STAMP_NOTE_MAX) return whole;
+    let text = '';
+    for (const [kind, tags] of lists) {
+      for (let k = 0; k < tags.length; k += 1) {
+        const piece = k === 0 ? `${text ? '. ' : ''}${kind}: ${tags[k]}` : `, ${tags[k]}`;
+        if (text.length + piece.length + AND_MORE.length > STAMP_NOTE_MAX) {
+          return `${text || piece.slice(0, STAMP_NOTE_MAX - AND_MORE.length)}${AND_MORE}`;
+        }
+        text += piece;
+      }
+    }
+    return text;
+  }
+
+  // Each record's note, as stampOps asks for it: the note typed for the save, or the record's own.
+  function noteFor(doc, typed, items) {
+    if (typed.text !== null) return () => typed.text;
+    const changes = recordChanges(doc, items);
+    return (r) => recordNote(changes.get(r));
   }
 
   // The records a save stamps: every record the net change touched — a line changed or added in
@@ -1658,52 +1768,26 @@
     return hit;
   }
 
-  // What the stamps of a save will do, record by record, for the Save dialog to show before the
-  // save makes them. 'adds': a `1 CHAN` block at the record's end. 'sets': its CHAN's DATE and TIME
-  // set, and a NOTE added. 'resets': the stamp the viewer added for an earlier copy in this visit,
-  // set anew because the record changed again. First record first.
-  function stampPlan(doc) {
+  // What the stamps of a save made at `when` will do (10.4), record by record, last record first:
+  // for each target, its ops, each a place in the lines now and the lines put there, either added
+  // before that place or set in its stead. One plan, which the Save dialog shows before the save
+  // and applyStamps makes. A record with no `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`,
+  // `3 TIME`, `2 NOTE`. A record with one has its `2 DATE` and `3 TIME` set (either added when
+  // missing) and a `2 NOTE` added at the end of the block; notes already there stay. A note the
+  // viewer added for an earlier copy in this visit is set anew instead, never added to.
+  function stampOps(doc, when, noteOf) {
     const v = doc.view;
-    const inSaved = placesIn(doc, doc.savedOrder);
-    return stampTargets(doc).reverse().map((r) => {
-      const from = v.records[r];
-      const chan = firstChild(v, from + 1, recordEnd(v, r), 1, 'CHAN');
-      let how = chan < 0 ? 'adds' : 'sets';
-      for (let p = chan + 1; chan >= 0 && p < subtreeEnd(v, chan); p += 1) {
-        const e = doc.order[p];
-        if (stampOf(doc, e) === 'note' && inSaved(e) < 0) { how = 'resets'; break; }
-      }
-      return { record: r, line: from, id: v.xref[from], tag: v.tag[from], how };
-    });
-  }
-
-  // 10.4 — the stamps of a save made at `when`, as one step of the history. A record with no
-  // `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`, `3 TIME`, `2 NOTE`. A record with one has
-  // its `2 DATE` and `3 TIME` set (either added when missing) and a `2 NOTE` added at the end of
-  // the block; notes already there stay. A note the viewer added for an earlier copy in this visit
-  // is set anew instead, never added to.
-  function applyStamps(doc, when, typed) {
-    const note = stampNote(doc, typed);
-    if (note.reason) return refuse(note.reason);
-    const v = doc.view;
-    const targets = stampTargets(doc);
     const { date, time } = stampTime(when, v.v7);
     const inSaved = placesIn(doc, doc.savedOrder);
-    const done = [];
-    const set = (at, text, role) => {                                // line `at` set to `text`, in its place
-      const e = doc.order[at];
-      if (textOf(doc, e) !== text) cut(doc, done, at, 1, [newLine(doc, text, termOf(doc, e), lineageOf(doc, e), role)]);
-      return null;
-    };
-    for (const r of targets) {
+    const line = (level, tag, value, role) => ({ level, text: `${level} ${tag} ${value}`.trimEnd(), role });
+    return stampTargets(doc).map((r) => {
       const from = v.records[r];
       const to = recordEnd(v, r);
+      const note = noteOf(r);
       const chan = firstChild(v, from + 1, to, 1, 'CHAN');
-      const ops = [];                                                // [place, act], made last place first
+      const ops = [];
       if (chan < 0) {
-        ops.push([to, () => insert(doc, done, to, [{ text: '1 CHAN', stamp: 'chan' },
-          { text: `2 DATE ${date}`, stamp: 'date' }, { text: `3 TIME ${time}`, stamp: 'time' },
-          { text: `2 NOTE ${note.text}`, stamp: 'note' }])]);
+        ops.push({ at: to, set: false, lines: [line(1, 'CHAN', '', 'chan'), line(2, 'DATE', date, 'date'), line(3, 'TIME', time, 'time'), line(2, 'NOTE', note, 'note')] });
       } else {
         const end = subtreeEnd(v, chan);
         let fresh = -1;
@@ -1711,26 +1795,141 @@
           const e = doc.order[p];
           if (stampOf(doc, e) === 'note' && inSaved(e) < 0) fresh = p;
         }
-        if (fresh >= 0) ops.push([fresh, () => set(fresh, `2 NOTE ${note.text}`, 'note')]);
-        else ops.push([end, () => insert(doc, done, end, [{ text: `2 NOTE ${note.text}`, stamp: 'note' }])]);
+        ops.push({ at: fresh >= 0 ? fresh : end, set: fresh >= 0, lines: [line(2, 'NOTE', note, 'note')] });
         const dt = firstChild(v, chan + 1, end, 2, 'DATE');
-        if (dt < 0) {
-          ops.push([chan + 1, () => insert(doc, done, chan + 1, [{ text: `2 DATE ${date}`, stamp: 'date' },
-            { text: `3 TIME ${time}`, stamp: 'time' }])]);
-        } else {
+        if (dt < 0) ops.push({ at: chan + 1, set: false, lines: [line(2, 'DATE', date, 'date'), line(3, 'TIME', time, 'time')] });
+        else {
           const tm = firstChild(v, dt + 1, subtreeEnd(v, dt), 3, 'TIME');
-          if (tm < 0) ops.push([dt + 1, () => insert(doc, done, dt + 1, [{ text: `3 TIME ${time}`, stamp: 'time' }])]);
-          else ops.push([tm, () => set(tm, `3 TIME ${time}`, 'time')]);
-          ops.push([dt, () => set(dt, `2 DATE ${date}`, 'date')]);
+          if (tm < 0) ops.push({ at: dt + 1, set: false, lines: [line(3, 'TIME', time, 'time')] });
+          else ops.push({ at: tm, set: true, lines: [line(3, 'TIME', time, 'time')] });
+          ops.push({ at: dt, set: true, lines: [line(2, 'DATE', date, 'date')] });
         }
       }
-      ops.sort((x, y) => y[0] - x[0]);                               // stable: at one place, in the order above
-      for (const [, act] of ops) {
-        const refused = act();
-        if (refused) { unmake(doc, done); return refuse(refused); }
+      return { record: r, from, chan, note, ops };
+    });
+  }
+
+  // The lines a plan's ops leave, in file order, for the Save dialog: `kept`, a line already there
+  // (a CHAN, or a NOTE a CONT goes under) that the ops sit under; then each line `set` or `added`,
+  // its level, and its text as it will be written. The ops are made on a list of the places they
+  // touch, in the order stampCuts makes them (last place first; at one place, the one planned later
+  // lands first), so the dialog shows the lines as the file will hold them.
+  function planLines(v, kept, ops) {
+    const lo = Math.min(...kept, ...ops.map((o) => o.at));
+    const hi = Math.max(...kept, ...ops.map((o) => o.at));
+    const seq = [];
+    for (let p = lo; p <= hi; p += 1) seq.push(kept.includes(p) ? { level: v.level[p], text: v.texts[p].replace(/^[ \t]+/, ''), how: 'kept' } : null);
+    for (const op of ops.slice().sort((x, y) => y.at - x.at)) {
+      const lines = op.lines.map((l) => ({ level: l.level, text: l.text, how: op.set ? 'set' : 'added' }));
+      seq.splice(op.at - lo, op.set ? 1 : 0, ...lines);
+    }
+    return seq.filter((x) => x);
+  }
+
+  // What the stamps of a save will do, record by record, for the Save dialog to show before the
+  // save makes them: the lines each record gains or has set, as they will be written at `when`,
+  // with the note typed or each record's own. `how`: 'adds', a `1 CHAN` block at the record's end;
+  // 'sets', its CHAN's DATE and TIME set and a NOTE added; 'resets', the stamp the viewer added for
+  // an earlier copy in this visit, set anew because the record changed again. First record first.
+  function stampPlan(doc, when, typed) {
+    const v = doc.view;
+    const note = stampNote(doc, typed);
+    const noteOf = note.reason ? () => '' : noteFor(doc, note);
+    return stampOps(doc, when || new Date(), noteOf).reverse().map((t) => ({
+      record: t.record, line: t.from, id: v.xref[t.from], tag: v.tag[t.from], note: t.note,
+      how: t.chan < 0 ? 'adds' : t.ops.some((op) => op.set && op.lines[0].role === 'note') ? 'resets' : 'sets',
+      lines: planLines(v, t.chan < 0 ? [] : [t.chan], t.ops),
+    }));
+  }
+
+  // The cuts of an op: lines added before its place, or one line set in its stead (set to what it
+  // already holds, it is left as it is). A reason when the lines cannot be added.
+  function makeOp(doc, done, op) {
+    if (!op.set) return insert(doc, done, op.at, op.lines.map((l) => ({ text: l.text, stamp: l.role })));
+    const e = doc.order[op.at];
+    const l = op.lines[0];
+    if (textOf(doc, e) !== l.text) cut(doc, done, op.at, 1, [newLine(doc, l.text, termOf(doc, e), lineageOf(doc, e), l.role)]);
+    return null;
+  }
+
+  // The stamps' cuts, last place first, so that every place the plan names still holds; a reason
+  // when they cannot be made, and then none is.
+  function stampCuts(doc, done, when, typed) {
+    const note = stampNote(doc, typed);
+    if (note.reason) return note.reason;
+    for (const t of stampOps(doc, when, noteFor(doc, note))) {
+      for (const op of t.ops.slice().sort((x, y) => y.at - x.at)) {    // stable: at one place, in the plan's order
+        const refused = makeOp(doc, done, op);
+        if (refused) { unmake(doc, done); done.length = 0; return refused; }
       }
     }
+    return null;
+  }
+
+  // 10.4: the stamps of a save made at `when`, as one step of the history.
+  function applyStamps(doc, when, typed) {
+    const done = [];
+    const refused = stampCuts(doc, done, when, typed);
+    if (refused) return refuse(refused);
     return finish(doc, 'Change stamps', done);
+  }
+
+  // The header's date (the owner's ask of 2026-10-09): "Last updated: 9 OCT 2026 09:33:45", the
+  // date and time of the stamps in their forms, as a NOTE under HEAD, never under the header's
+  // DATE, which may hold nothing but TIME; the header's own DATE and TIME are never touched. A
+  // line of this form already in HEAD, a NOTE of its own or a CONT of one of HEAD's NOTEs, is set
+  // anew, so saves do not pile them up; else it is a CONT at the end of HEAD's first NOTE; else a
+  // NOTE at HEAD's end. The op, with the NOTE it goes under (-1: none); null for a file that does
+  // not open with HEAD.
+  const LAST_UPDATED = /^Last updated: \d{1,2} (?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC) \d{4} \d\d:\d\d:\d\dZ?$/;
+  function headerOp(doc, when) {
+    const v = doc.view;
+    if (!v.records.length || v.tag[v.records[0]] !== 'HEAD') return null;
+    const from = v.records[0];
+    const to = recordEnd(v, 0);
+    const { date, time } = stampTime(when, v.v7);
+    const words = `Last updated: ${date} ${time}`;
+    const op = (at, set, under, level, tag) => ({ at, set, under, from, lines: [{ level, text: `${level} ${tag} ${words}`, role: 'header' }] });
+    let first = -1;
+    for (let p = from + 1; p < to; p += 1) {
+      if (v.level[p] !== 1 || v.tag[p] !== 'NOTE') continue;
+      if (first < 0) first = p;
+      if (LAST_UPDATED.test(valueOf(v, p))) return op(p, true, -1, 1, 'NOTE');
+      for (let q = p + 1; q < subtreeEnd(v, p); q += 1) {
+        if (v.level[q] === 2 && v.tag[q] === 'CONT' && LAST_UPDATED.test(valueOf(v, q))) return op(q, true, p, 2, 'CONT');
+      }
+    }
+    if (first >= 0) return op(subtreeEnd(v, first), false, first, 2, 'CONT');
+    return op(to, false, -1, 1, 'NOTE');
+  }
+
+  // What the header's date will do, for the Save dialog: HEAD's line, and the lines as they will
+  // be written at `when` (planLines); null for a file that does not open with HEAD.
+  function headerPlan(doc, when) {
+    const op = headerOp(doc, when || new Date());
+    if (!op) return null;
+    return { line: op.from, lines: planLines(doc.view, op.under >= 0 ? [op.under] : [], [op]) };
+  }
+
+  // The acts a save makes at its moment (10.2 step 3), as one step of the history: the change
+  // stamps, when they are ticked, and the header's date, when that is. One step, so one Undo takes
+  // both back, and so does a save that writes nothing (takeBack). HEAD comes before every record a
+  // stamp goes to, so the header's place, read before the stamps' cuts, still holds after them.
+  function saveActs(doc, when, { stamps, typed, header }) {
+    const done = [];
+    if (stamps) {
+      const refused = stampCuts(doc, done, when, typed);
+      if (refused) return refuse(refused);
+    }
+    const stamped = done.length;
+    const op = header ? headerOp(doc, when) : null;
+    if (op) {
+      const refused = makeOp(doc, done, op);
+      if (refused) { unmake(doc, done); return refuse(refused); }
+    }
+    const dated = done.length > stamped;
+    const label = stamped && dated ? 'Change stamps and the date in the header' : stamped ? 'Change stamps' : 'The date in the header';
+    return finish(doc, label, done);
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1978,15 +2177,15 @@
 
 
   return {
-    TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE, STAMP_NOTE_MAX,
+    TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE_MAX,
     read, detect, bytesOf, summary,
     recordEnd, subtreeEnd, parentOf, blocksUnder, valueOf, isPointerLine, joinedValue,
     search, searchTag, recordCounts, codePoints,
     openDocument, saveBytes, textOf, termOf,
     editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
     moveRefusal, moveLines, landings,
-    markCopied, takeBack, isChanged, changedSinceCopy, netChange, changeRuns, lineMarks, restoreLines,
-    stampTime, stampNote, stampTargets, stampPlan, applyStamps,
+    markCopied, takeBack, isChanged, changedSinceCopy, unsaved, netChange, changeRuns, lineMarks, restoreLines,
+    stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
     nameParts, nameShown, linkAt, clip, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,
   };

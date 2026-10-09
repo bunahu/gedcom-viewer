@@ -88,6 +88,7 @@
     theme: storedTheme(),
     textSize: TEXT_SIZES.includes(store.get('textSize', 'normal')) ? store.get('textSize', 'normal') : 'normal',
     stamps: store.get('stamps', true) !== false,   // F1, V1: on unless unticked
+    headerNote: store.get('headerNote', true) !== false,   // the date in the header: on unless unticked
     showFacts: store.get('facts', false) === true,  // the file's facts, shown under its name
     boldSurnames: store.get('surnames', false) === true,   // 3.8: surnames in bold wherever a record is named
     nameInTab: store.get('tabName', false) === true,       // the file's name in the tab's title: off unless asked for
@@ -661,15 +662,18 @@
   function paintExtra(row, x) {
     row.textContent = '';
     if (x.kind === 'section') {
+      // A type's row has nothing to scroll for, so its name sits in the part that stays at the left
+      // edge: with the lines scrolled sideways it still reads SUBM, never UBM
       const sec = x.sec;
       const shut = state.shutSections.has(sec.tag);
-      row.appendChild(fixedPart('', 'mk', 0, true, shut, ''));
+      const fx = fixedPart('', 'mk', 0, true, shut, '');
       const tx = el('span', 'tx');
       tx.appendChild(el('span', 'tg', sec.tag));
       if (RECORD_NAMES[sec.tag]) tx.appendChild(el('span', 'sec-name', ` ${RECORD_NAMES[sec.tag]}`));
       if (sec.tag !== 'HEAD' && sec.tag !== 'TRLR') tx.appendChild(el('span', 'sec-count', ` ${fmt(sec.records)}`));
       if (shut) tx.appendChild(el('span', 'sec-name', ` · ${plural(sec.to - sec.from, 'line', 'lines')}`));
-      row.appendChild(tx);
+      fx.appendChild(tx);
+      row.appendChild(fx);
       return;
     }
     const was = x.run.lines[x.k].was;                                // a removed line: its number as saved, and its words
@@ -1181,7 +1185,7 @@
 
   function updateBar() {
     const doc = state.doc;
-    const changed = !!doc && C.changedSinceCopy(doc);               // since the last copy, or since the open (10.2)
+    const changed = !!doc && C.unsaved(doc);                        // what no file holds yet: not the original, nor any copy (10.2)
     $('edit').disabled = !doc;
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
     $('fold-all').hidden = !doc;
@@ -1189,7 +1193,7 @@
     $('file-name').setAttribute('aria-expanded', String(state.showFacts));
     $('facts').hidden = !doc || !state.showFacts;
     $('dirty').hidden = !changed;
-    $('dirty').title = doc && doc.copiedOrder ? 'Changed since the last copy' : 'Changed since it was opened';
+    $('dirty').title = doc && doc.copies.length ? 'Changes in no copy yet' : 'Changed since it was opened';
     $('save').disabled = !changed;
     $('save').textContent = canPick() ? 'Save' : 'Download a copy';
     $('save').title = canPick() ? 'Save a dated copy, where you choose; the original is never written (⌘S)'
@@ -1729,11 +1733,11 @@
     row.appendChild(main);
     const more = run.kind !== 'moved' && run.lines.length > 1 ? `+${fmt(run.lines.length - 1)}` : '';
     const where = run.record ? run.record.id || run.record.tag || '' : run.kind === 'moved' && run.moved.tag ? run.moved.tag : '';
-    row.appendChild(el('span', 'end', [more, run.stamp ? 'stamp' : '', where].filter((x) => x).join(' · ')));
+    row.appendChild(el('span', 'end', run.header ? 'header' : [more, run.stamp ? 'stamp' : '', where].filter((x) => x).join(' · ')));   // the header's date: one line, in HEAD
     const span = (first0) => (run.lines.length > 1 ? `${fmt(first0 + 1)}–${fmt(first0 + run.lines.length)}` : fmt(first0 + 1));
     const before = run.kind === 'moved' ? `; lines ${span(run.before)} as saved, now ${span(run.after)}`
       : run.before >= 0 ? `; line ${fmt(run.before + 1)} as saved` : '';
-    row.title = `${run.kind}${run.stamp ? ' by a change stamp' : ''}: ${plural(run.lines.length, 'line', 'lines')}${before}`;
+    row.title = `${run.kind}${run.header ? ' as the date in the header' : run.stamp ? ' by a change stamp' : ''}: ${plural(run.lines.length, 'line', 'lines')}${before}`;
   });
 
   function changeCounts(runs) {
@@ -1900,13 +1904,13 @@
   async function reportProblem() {
     const version = ($('version') || document.querySelector('.version') || {}).textContent || '';
     const where = location.protocol === 'file:' ? 'opened from disk' : location.host;
-    const settings = `theme ${state.theme} · Text size ${state.textSize} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'}`;
+    const settings = `theme ${state.theme} · Text size ${state.textSize} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'} · Date in the header ${state.headerNote ? 'on' : 'off'}`;
     const info = {
       version, where, browser: browserName(),
       bytes: state.disk ? state.disk.bytes : null,
       sha256: state.disk ? (state.disk.sha256 || await state.hashing) : null,
       editing: !!state.editing, settings,
-      unsaved: state.doc ? C.changeRuns(state.doc, null, state.doc.copiedOrder).length : 0,   // not in any copy yet
+      unsaved: state.doc && C.unsaved(state.doc) ? C.changeRuns(state.doc, null, state.doc.copiedOrder).length : 0,   // in no copy yet
     };
     const encoder = new TextEncoder();
     const text = C.report(state.m, info);
@@ -1998,7 +2002,7 @@
   function putRuns(list, runs) {
     for (const run of runs) {
       const head = el('div', `chg is-${run.kind}`);
-      head.appendChild(el('span', 'chg-kind', run.stamp ? `${run.kind} · stamp` : run.kind));
+      head.appendChild(el('span', 'chg-kind', run.header ? `${run.kind}, the date in the header` : run.stamp ? `${run.kind} · stamp` : run.kind));
       const n = run.lines.length;
       const span = (first) => (n > 1 ? `${fmt(first + 1)}–${fmt(first + n)}` : fmt(first + 1));
       const where = run.kind === 'changed' ? `line ${span(run.after)}` : run.kind === 'added' ? `line ${span(run.after)}`
@@ -2024,70 +2028,117 @@
     }
   }
 
-  const STAMP_HOW = {
-    adds: 'gains 1 CHAN · 2 DATE · 3 TIME · 2 NOTE',
-    sets: 'its CHAN: DATE and TIME set, a NOTE added',
-    resets: 'its stamp from an earlier copy, set anew',
-  };
+  // A checkbox of the Save dialog, with its words; `off` says why it cannot be ticked, under it.
+  function checkRow(body, id, words, checked, off) {
+    const label = el('label', 'dialog-check');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.id = id;
+    box.checked = checked;
+    label.appendChild(box);
+    label.appendChild(el('span', null, words));
+    body.appendChild(label);
+    if (off) {
+      box.disabled = true;
+      body.appendChild(el('div', 'dialog-off', off));
+    }
+    return box;
+  }
 
-  // 10.2 step 2: every change since the original, the change stamps to come (F1: ticked unless
-  // unticked, and remembered), and the note for them. With the stamps unticked the note box is
-  // off: there is nowhere for a note to go. `picks` says whether the computer's Save dialog comes
-  // next, or a download. Resolves with { note, stamps }, or null.
+  // A record, as the Save dialog names it: its id and tag, then its label where that says more.
+  function recordRow(line) {
+    const m = state.m;
+    const row = el('div', 'dialog-rec');
+    row.appendChild(el('span', 'mono', recordName(m.xref[line], m.tag[line])));
+    const label = m.labels[m.recOf[line]];
+    if (label && label !== m.texts[line].slice(m.lead[line])) {
+      row.appendChild(document.createTextNode(' '));
+      putLabel(row, label);
+    }
+    return row;
+  }
+
+  // A line the save will write, indented as the file indents it; a line already there, quiet.
+  function planRow(l) {
+    const row = el('div', `dialog-line${l.how === 'kept' ? ' is-kept' : ''}`);
+    row.style.setProperty('--lv', String(Math.max(0, l.level)));
+    putText(row, l.text);
+    return row;
+  }
+
+  // 10.2 step 2: every change since the original; under Add change stamps (F1: ticked unless
+  // unticked, and remembered) each record that gains a stamp, as the lines it gains or has set,
+  // indented as the file indents them, with the values they will be written with, and the Note box
+  // among them; under Note the date in the header (ticked unless unticked, and remembered) the line
+  // HEAD gains or has set. Unticked, a box's lines are hidden, the Note box with the stamps'. The
+  // moment shown is the moment the save is made at, so what the dialog shows is what is written.
+  // `picks` says whether the computer's Save dialog comes next, or a download. Resolves with
+  // { note, stamps, header, when }, or null.
   async function saveDialog(picks) {
     const doc = state.doc;
+    const when = new Date();
+    const plan = C.stampPlan(doc, when, '');
+    const head = C.headerPlan(doc, when);
     let note;
-    let box;
+    let stampBox;
+    let headerBox;
     const go = await dialog(`${picks ? 'Save' : 'Download'} a copy of ${state.fileName}`, (body) => {
-      body.appendChild(el('div', 'dialog-sum', state.runs.length ? changeCounts(state.runs)
-        : 'No change from the original: the copy is the original, byte for byte'));
-      if (state.runs.length) {
-        const list = el('div', 'dialog-list');
-        putRuns(list, state.runs);
-        body.appendChild(list);
-      }
-      const plan = C.stampPlan(doc);
-      const label = el('label', 'dialog-check');
-      box = el('input');
-      box.type = 'checkbox';
-      box.checked = state.stamps;
-      label.appendChild(box);
-      label.appendChild(el('span', null, `Change stamps, ${plan.length ? plural(plan.length, 'record', 'records') : 'none needed'}`));
-      body.appendChild(label);
-      const stamps = el('div', 'dialog-stamps');
+      body.appendChild(el('div', 'dialog-sum', changeCounts(state.runs)));
+      const list = el('div', 'dialog-list');
+      putRuns(list, state.runs);
+      body.appendChild(list);
+      stampBox = checkRow(body, 'save-stamps', 'Add change stamps', state.stamps, plan.length ? '' : 'no record to stamp');
+      const stamps = el('div', 'dialog-block');
+      stamps.id = 'save-stamp-lines';
+      const notes = [];                                              // each stamp's NOTE, to show the note typed, or the record's own
       for (const p of plan) {
-        const row = el('div');
-        row.appendChild(el('span', 'mono', recordName(p.id, p.tag)));
-        const label = state.m.labels[p.record];
-        if (label !== state.m.texts[p.line].slice(state.m.lead[p.line])) {
-          row.appendChild(document.createTextNode(' '));
-          putLabel(row, label);
+        stamps.appendChild(recordRow(p.line));
+        for (const l of p.lines) {
+          const row = planRow(l);
+          if (l.how !== 'kept' && l.text.startsWith(`${l.level} NOTE `)) notes.push({ row, level: l.level, own: p.note });
+          stamps.appendChild(row);
         }
-        row.appendChild(el('span', 'muted', `  ${STAMP_HOW[p.how]}`));
-        stamps.appendChild(row);
       }
-      body.appendChild(stamps);
       const noteRow = el('label', 'dialog-note');
       noteRow.appendChild(el('span', null, 'Note'));
       note = el('input', 'input');
       note.type = 'text';
       note.maxLength = C.STAMP_NOTE_MAX;
-      note.placeholder = C.STAMP_NOTE;                               // what is written when nothing is typed
-      note.title = 'For the change stamps; one line, 200 characters at most';
+      note.title = 'One line, 200 characters at most, the same in every record stamped. Left empty, each record\'s note says what changed in it';
+      note.addEventListener('input', () => {
+        const typed = note.value.trim();
+        for (const n of notes) n.row.textContent = `${n.level} NOTE ${typed || n.own}`;
+      });
       noteRow.appendChild(note);
-      body.appendChild(noteRow);
-      const ticked = () => {
-        stamps.hidden = !box.checked;
-        note.disabled = !box.checked;
-        noteRow.classList.toggle('is-off', !box.checked);
+      stamps.appendChild(noteRow);
+      body.appendChild(stamps);
+      headerBox = checkRow(body, 'save-header', 'Note the date in the header', state.headerNote, head ? '' : 'no header in this file');
+      const dated = el('div', 'dialog-block');
+      dated.id = 'save-header-lines';
+      if (head) {
+        dated.appendChild(recordRow(head.line));
+        for (const l of head.lines) dated.appendChild(planRow(l));
+      }
+      body.appendChild(dated);
+      const shown = () => {
+        stamps.hidden = stampBox.disabled || !stampBox.checked;
+        dated.hidden = headerBox.disabled || !headerBox.checked;
       };
-      ticked();
-      box.addEventListener('change', ticked);
+      shown();
+      stampBox.addEventListener('change', shown);
+      headerBox.addEventListener('change', shown);
     }, [CANCEL, { label: picks ? 'Save' : 'Download', value: 'go', primary: true }]);
     if (!go) return null;
-    state.stamps = box.checked;
-    store.set('stamps', state.stamps);
-    return { note: box.checked ? note.value : '', stamps: box.checked };
+    if (!stampBox.disabled) {
+      state.stamps = stampBox.checked;
+      store.set('stamps', state.stamps);
+    }
+    if (!headerBox.disabled) {
+      state.headerNote = headerBox.checked;
+      store.set('headerNote', state.headerNote);
+    }
+    const stamps = !stampBox.disabled && stampBox.checked;
+    return { note: stamps ? note.value : '', stamps, header: !headerBox.disabled && headerBox.checked, when };
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -2106,8 +2157,8 @@
 
   async function saveNow() {
     if (state.edit && !commitEdit(false)) return;
-    // 1. nothing changed since the last copy: say so, write nothing
-    if (!C.changedSinceCopy(state.doc)) {
+    // 1. nothing to save, the lines being the original's or a copy's: say so, write nothing
+    if (!C.unsaved(state.doc)) {
       notice(S.nothingSince(state.doc));
       return;
     }
@@ -2118,7 +2169,7 @@
     // 3 to 8: the stamps, the bytes, where, not the original, written and read back, the last copy
     const pick = picks ? (name) => window.showSaveFilePicker({ suggestedName: name, startIn: state.handle, types: GEDCOM_TYPES }) : null;
     const r = await S.save({ doc: state.doc, original: { name: state.fileName, handle: state.handle },
-      when: new Date(), note: choice.note, stamps: choice.stamps, hash: sha256, pick });
+      when: choice.when, note: choice.note, stamps: choice.stamps, header: choice.header, hash: sha256, pick });
     afterAct(state.sel);
     if (r.done && r.download) {
       download(r.bytes, r.name);
@@ -2207,7 +2258,7 @@
   // Changes not in any copy yet are dropped only when the owner says so.
   async function mayDropChanges() {
     if (state.edit && !commitEdit(false)) return false;
-    if (!state.doc || !C.changedSinceCopy(state.doc)) return true;
+    if (!state.doc || !C.unsaved(state.doc)) return true;
     const go = await dialog(`${state.fileName} has changes that are not saved`, (body) => {
       body.appendChild(el('div', null, 'Opening another file drops them.'));
     }, [CANCEL, { label: 'Drop them, and open', value: 'go', primary: true }]);
@@ -2267,6 +2318,7 @@
     state.gotoApplied = '';
     updateGoto();
     $('file-name').textContent = file.name;
+    $('grid').scrollLeft = 0;                                        // a file opens at the lines' left edge
     $('grid').style.setProperty('--ln-width', `${fmt(doc.m.n).length + 1}ch`);
     updateGridWidth();
     updateMarks();
@@ -2349,7 +2401,7 @@
   // Leaving with changes not in any copy yet: the browser asks first. A copy written, or downloaded,
   // holds the changes made before it (10.2, step 8).
   window.addEventListener('beforeunload', (e) => {
-    if (state.doc && C.changedSinceCopy(state.doc)) {
+    if (state.doc && C.unsaved(state.doc)) {
       e.preventDefault();
       e.returnValue = '';
     }

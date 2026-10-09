@@ -114,7 +114,7 @@ describe('the page', () => {
     // each key the page stores, and the words privacy.html uses for it
     const named = { theme: 'the theme (System, Light, Dusk or Dark)', textSize: 'the text size (Normal or Larger)', indent: 'Indent', indentWidth: 'its width', surnames: 'Bold surnames',
       tabName: 'File name in the tab', hideLeft: 'whether each is hidden', hideRight: 'whether each is hidden',
-      tagsOrder: 'Tags list\'s order', stamps: 'change stamps', facts: 'file\'s facts show' };
+      tagsOrder: 'Tags list\'s order', stamps: 'change stamps', headerNote: 'date is noted in the header', facts: 'file\'s facts show' };
     const keys = [...new Set([...read('ui.js').matchAll(/store\.(?:get|set)\('(\w+)'/g)].map((m) => m[1]))].sort();
     assert.deepEqual(keys, Object.keys(named).sort(), 'a key the page stores is not in this list: add it here and to privacy.html');
     const privacy = read('privacy.html').replace(/\s+/g, ' ');
@@ -157,16 +157,27 @@ describe('the page', () => {
     assert.ok(read('save.js').includes('original.handle.isSameEntry(handle)'), 'step 6 asks the browser whether the file picked is the original');
   });
 
-  it('the Save dialog: with the change stamps unticked the note box is off; the dot and Save mean a change since the last copy, and so does leaving', () => {
+  it('the Save dialog: Add change stamps and Note the date in the header, each with the lines it will write under it, hidden when unticked; the Note box among the stamps\' lines; the dot, Save and leaving mean lines that no file holds yet', () => {
     const ui = read('ui.js');
     const dlg = ui.slice(ui.indexOf('async function saveDialog'), ui.indexOf('// Saving (10.2)'));
-    assert.ok(dlg.includes('note.disabled = !box.checked;') && dlg.includes("noteRow.classList.toggle('is-off', !box.checked);"));
-    assert.ok(dlg.includes("return { note: box.checked ? note.value : '', stamps: box.checked };"), 'unticked, the note goes nowhere');
-    assert.ok(dlg.includes('`Change stamps, ${plan.length ?'), 'Change stamps, 1 record; Change stamps, none needed');
-    assert.ok(!/\blog\b/.test(dlg), 'the dialog says nothing of a log');
-    assert.ok(/const changed = !!doc && C\.changedSinceCopy\(doc\);/.test(ui));
-    assert.ok(/window\.addEventListener\('beforeunload', \(e\) => \{\s+if \(state\.doc && C\.changedSinceCopy\(state\.doc\)\)/.test(ui), 'leaving warns only for changes made since the last copy');
-    assert.ok(/\.dialog-note\.is-off \{ opacity: var\(--off-opacity\); \}/.test(read('style.css')));
+    assert.ok(dlg.includes("checkRow(body, 'save-stamps', 'Add change stamps', state.stamps, plan.length ? '' : 'no record to stamp')"), 'Add change stamps, no count; disabled, with a line, when no record can carry one');
+    assert.ok(dlg.includes("checkRow(body, 'save-header', 'Note the date in the header', state.headerNote, head ? '' : 'no header in this file')"));
+    assert.ok(dlg.includes('stamps.appendChild(noteRow);'), 'the Note box sits in the stamps\' block, with the records');
+    assert.ok(dlg.includes('stamps.hidden = stampBox.disabled || !stampBox.checked;') && dlg.includes('dated.hidden = headerBox.disabled || !headerBox.checked;'), 'unticked: hidden, not dimmed');
+    assert.ok(dlg.includes("return { note: stamps ? note.value : '', stamps, header: !headerBox.disabled && headerBox.checked, when };"), 'unticked, the note goes nowhere; the moment shown is the save\'s');
+    assert.ok(dlg.includes("store.set('headerNote', state.headerNote);") && ui.includes("headerNote: store.get('headerNote', true) !== false,"), 'ticked unless unticked, and remembered');
+    assert.ok(!/\blog\b/.test(dlg) && !dlg.includes('No change from the original'), 'nothing of a log, and no dialog for nothing');
+    assert.ok(/const changed = !!doc && C\.unsaved\(doc\);/.test(ui));
+    assert.ok(/window\.addEventListener\('beforeunload', \(e\) => \{\s+if \(state\.doc && C\.unsaved\(state\.doc\)\)/.test(ui), 'leaving warns only for lines no file holds');
+    assert.ok(/\.dialog-line \{\s+padding-left: calc\(\(var\(--lv\) \+ 1\) \* var\(--dialog-level-step\)\);/.test(read('style.css')), 'each line indented by its level');
+    assert.ok(/Date in the header \$\{state\.headerNote \? 'on' : 'off'\}`/.test(ui), 'the report\'s settings line carries it');
+  });
+
+  it('what a save writes into a file names no product and says nothing of hands: the stamp\'s note says what changed', () => {
+    for (const name of ['core.js', 'save.js']) {
+      assert.ok(!/Edited by hand|by hand in GEDCOM Viewer/.test(read(name)), `${name} still writes the old note`);
+    }
+    assert.ok(read('core.js').includes("const KINDS = ['Changed', 'Added', 'Removed', 'Moved'];"));
   });
 
   it('the Changes tab has a copy button at its top, like every box\'s, that puts the list on the clipboard as text and writes it nowhere', () => {

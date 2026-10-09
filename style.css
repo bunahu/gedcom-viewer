@@ -169,7 +169,10 @@
   --menu-width: 19em;                 /* the Settings menu */
   --copy-color: var(--color-text-muted);   /* the copy button at a box's top right */
   --copy-done: var(--color-success);       /* …once it has copied */
-  --off-opacity: 0.4;                 /* a control that is off: a button that cannot be pressed, the Save dialog's note box with the change stamps unticked */
+  --off-opacity: 0.4;                 /* a control that is off: a button that cannot be pressed */
+  --dialog-indent: 24px;              /* the Save dialog: how far under its checkbox a record and its Note box sit */
+  --dialog-level-step: 2ch;           /* …and how much further each level of a line it will write */
+  --lv: 1;                            /* a line's level there; each line sets its own */
   --surname-weight: 700;              /* Bold surnames */
   --help-max-width: 40em;             /* what a check means, in the right frame */
   --prose-max-width: 38em;            /* the privacy page's column of text */
@@ -655,6 +658,8 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   background: linear-gradient(to right, var(--aside-shade), transparent);
   pointer-events: none;
 }
+/* a type's row keeps its name in that column, so nothing goes under it, and it casts no shade */
+.grid.is-aside .row.is-section .fx::after { content: none; }
 
 .lv { color: var(--level-color); }
 .id { color: var(--id-color); }
@@ -858,12 +863,23 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .chg-line.is-now .chg-sign { color: var(--mark-added); }
 .dialog-check { display: flex; align-items: baseline; gap: 8px; }
 .dialog-check .mono { font-family: var(--font-grid); overflow-wrap: anywhere; }
-.dialog-stamps { display: flex; flex-direction: column; gap: 2px; padding-left: 24px; font-size: var(--font-size-small); }
-.dialog-stamps[hidden] { display: none; }
+/* under a checkbox, what it will write: each record by its id, tag and label, then the lines it
+   gains or has set, indented by level as the file indents them; the Note box among them. Unticked,
+   hidden. A line already there is quiet */
+.dialog-block { display: flex; flex-direction: column; gap: 2px; padding-left: var(--dialog-indent); font-size: var(--font-size-small); }
+.dialog-block[hidden] { display: none; }
+.dialog-rec .mono { font-family: var(--font-grid); }
+.dialog-line {
+  padding-left: calc((var(--lv) + 1) * var(--dialog-level-step));
+  font-family: var(--font-grid);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dialog-line.is-kept { color: var(--color-text-muted); }
+.dialog-off { padding-left: var(--dialog-indent); font-size: var(--font-size-small); color: var(--color-text-muted); }
 .dialog-note { display: flex; align-items: center; gap: 8px; }
-/* the change stamps unticked: the note has nowhere to go, so its box is off */
-.dialog-note.is-off { opacity: var(--off-opacity); }
-.dialog-note .input:disabled { cursor: default; }
+.dialog-block .dialog-note { margin-top: 4px; font-size: var(--font-size-body); }
 /* P8 — Report a problem: the report in a box of its own, to read, change or cut; What happened under it */
 .report {
   width: 100%;
