@@ -142,7 +142,7 @@ These are the rules the build must not break. A change that breaks one is wrong,
 | I3 | **Nothing is normalized.** No trimming, no re-wrapping of `CONC`/`CONT`, no change of case, line ending, encoding or spacing. |
 | I4 | **The indent is on the screen only.** It is never written to a file. |
 | I5 | **Nothing leaves the machine.** No network request of any kind — no CDN, no web font, no analytics. |
-| I6 | **The original is never written.** A save writes a new dated file; a save that resolves to the original's own file is refused (10.2 step 6). Restated 2026-10-08; before it: every write in place preceded by a backup, read back and compared. |
+| I6 | **The original is never written.** A save writes a new dated file; a save that resolves to the original's own file is refused (10.2 step 6). One exception, found in the 0.5.6 build: Chrome empties a file picked in the Save dialog before the page sees it, so when the original itself is picked, the page puts it back from the bytes it read just before the dialog, read back and compared; that is the only write the original ever gets. Restated 2026-10-08; before it: every write in place preceded by a backup, read back and compared. |
 | I7 | **A copy that does not read back as written is said loudly**, and the original stands regardless (10.2 step 7). Restated 2026-10-08; before it: a file that changed on disk was never overwritten, which nothing now does. |
 | I8 | **The only change gedview makes on its own is the change stamp** (F1). It is listed before the save and in the Changes tab, like any other change. |
 | I9 | **The repo never holds a real GEDCOM, a log or a backup.** Test files are public or written for the test. |
@@ -384,7 +384,7 @@ written); the Changes tab counts from the original throughout.
 | 3 | Apply the change stamps (10.4) as one undo step | — |
 | 4 | Build the bytes; hash them | — |
 | 5 | Ask where: `showSaveFilePicker`, the dated name offered, opening at the original (`startIn` its handle), accepting `.ged` and `.gedcom` | Cancel: the stamps are taken back; "No copy was written." |
-| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's) | "That is the original. GEDCOM Viewer never writes over it. Pick another name." The stamps are taken back; nothing is written |
+| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's). Chrome empties the picked file before the page sees it (Chromium: create it, or truncate it when it exists), so the page reads the original whole just before the dialog, and when the picked file is the original and is now empty, writes those bytes back and reads them back | "That is the original. GEDCOM Viewer never writes over it. Pick another name." and, when it was emptied, "Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte." The stamps are taken back; no copy is written. If the put-back fails, the page says so loudly and offers the original as a download |
 | 7 | Write the bytes; read them back; the hash equals step 4's | say so loudly and name the file; the original stands regardless |
 | 8 | The copy is the last copy: ● goes, Save turns off until the next change. The facts still name the original and its sha256 as opened; the page stays on the original | — |
 
@@ -647,8 +647,8 @@ findings it expects, by code and line number.
 | Net change | changed / removed / added, with the right line numbers before and after |
 | Stamps | both rows of 10.4; the version-7 time; a deleted record gets none; a second save with no edit writes nothing |
 | Save, fake handles | the order of 10.2: the original's own handle refused at step 6 and nothing written; a copy that reads back wrong said loudly, the original untouched; the stamps taken back on a cancel; the dated name, and a stem's old timestamp replaced; the Changes text of 10.3 |
-| Changed on disk | step 3 refuses |
-| Names | the three names of 10.1, with `.GED`, `.cleaned.ged`, and a taken name |
+| The original picked in the Save dialog | step 6 refuses, and puts the file back when the browser emptied it (10.2) |
+| Names | the dated name of 10.1, with `.GED`, `.cleaned.ged`, and a stem's old timestamp replaced |
 | No network | the five files of the page (`index.html`, `style.css`, `core.js`, `save.js`, `ui.js`) hold no `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `import(`, `@import`, `url(http`, `http://` or `https://` — no exceptions; an inline SVG in HTML needs no namespace; `index.html` and `privacy.html` each carry a content-security policy — `default-src 'none'`, `connect-src 'none'`, scripts the page's own alone; styles may be inline in `index.html`, since Chrome styles its own XML parse-error block inline in the inert document a malformed `_META` is read in, and a style can reach nothing outside the page — ahead of anything they load, which the browser enforces and the test reads (0.5.2) |
 
 ### Gates — all of them, before a phase is called done
@@ -707,6 +707,7 @@ refuses.
 | One full re-check per edit is fast enough in the page | the grid stalls after an edit on the raw export | time it in the page; the budget is 0.3 s |
 | Fixed-height rows reach the last line | the file has more than about 1.4 million lines (a page's height limit) | refuse such a file with a plain message; do not show it wrongly |
 | The two implementations agree | `compare.js` reports a difference | read the rule in section 6 or 7 and fix the one that departs from it |
+| The original is never written | a moved or renamed original is picked at its new place in the Save dialog, which `isSameEntry` may not recognise, and Chrome empties the picked file first | the Replace prompt of the computer's dialog is the only guard there; the page's put-back covers the original at the place it was opened from; walk it with a moved copy before calling it closed |
 | The stamp's place, a record's end, is where other programs expect it | a program the owner uses rejects it | the standard fixes no order; ask him which program |
 
 ---
@@ -921,7 +922,7 @@ is, beside the four files it loads.
 | # | Do | Expect |
 |---|---|---|
 | 20 | **Save** (⌘S) | the dialog lists 1 change and **Change stamps, 1 record**, with a note box (left empty; the note is *Edited by hand in GEDCOM Viewer.*). Save. The computer's Save dialog opens in `walk`, offering `RAW.<today>T<now>.ged`; keep the name; Save |
-| 21 | Go to that person's record | it ends with `1 CHAN`, `2 DATE` today, `3 TIME` now, `2 NOTE` the note; ● gone; Save off; Changes 1 still (counted from the original); the facts still name RAW.ged and its sha256 |
+| 21 | Go to that person's record | it ends with `1 CHAN`, `2 DATE` today, `3 TIME` now, `2 NOTE` the note; ● gone; Save off; Changes 2, the edit and the stamp, counted from the original; the facts still name RAW.ged and its sha256 |
 | 22 | `shasum -a 256 local/walk/RAW.ged local/walk/RAW.*.ged` | RAW.ged is `<sha256>`, the file as opened, untouched; the copy differs |
 | 23 | `diff local/walk/RAW.ged local/walk/RAW.<stamp>.ged`; then, in the viewer, Changes, **copy**, and paste into TextEdit | the diff shows the NAME line before and after and the four stamp lines; the pasted text opens with the original's name and sha256 and lists the same change and the stamp |
 
@@ -929,7 +930,7 @@ is, beside the four files it loads.
 
 | # | Do | Expect |
 |---|---|---|
-| 24 | **Undo** twice (the stamp, then the edit); **Save** with **Change stamps** unticked | the dialog lists the name back and the four stamp lines removed, and no new stamp; the note box is disabled. Save; keep the offered name. The new copy's sha256 is `<sha256>`: an edit undone saves the original's bytes again (I1) |
+| 24 | **Undo** twice (the stamp, then the edit); **Save** with **Change stamps** unticked | the dialog says there is no change from the original, since the two undos leave the lines as opened, and the note box is dimmed. Save; keep the offered name. The new copy's sha256 is `<sha256>`: an edit undone saves the original's bytes again (I1) |
 
 The box remembers how it was left: tick it again before a save that should stamp.
 
@@ -955,7 +956,7 @@ The box remembers how it was left: tick it again before a save that should stamp
 
 | # | Do | Expect |
 |---|---|---|
-| 33 | **Save**, and in the computer's dialog type the original's name, `RAW.ged`, in `walk` | refused: "That is the original. GEDCOM Viewer never writes over it. Pick another name." Nothing written; `shasum` of RAW.ged unchanged |
+| 33 | Edit any line, then **Save**; in the computer's dialog type the original's name, `RAW.ged`, in `walk`, and confirm Replace | refused: "That is the original. GEDCOM Viewer never writes over it. Pick another name. Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte." No copy; `shasum` of RAW.ged unchanged; its modified time is new |
 
 **I. What must refuse, and a clean fix**
 

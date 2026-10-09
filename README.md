@@ -1,8 +1,8 @@
 # GEDCOM Viewer
 
 One web page, at gedcom-viewer.net or opened from disk in Chrome, that opens a GEDCOM file, shows it readably, checks it
-for obviously malformed lines, counts what it holds, and lets clean hand edits be made and saved,
-in place with a dated backup or as a dated copy, with a log of what changed. It is standalone: one
+for obviously malformed lines, counts what it holds, and lets clean hand edits be made and saved
+as a dated copy beside the original, which is never written. It is standalone: one
 page, no server, no account. Nothing is installed, and nothing leaves the machine.
 [BUILD-BRIEF.md](BUILD-BRIEF.md) is the design log, written with Claude Code as the work went; see
 [How this was made](#how-this-was-made).
@@ -29,7 +29,7 @@ keep traces of that.
 
 | The frames | What is in them |
 |---|---|
-| the top bar | an icon that hides the left bar; the name; the file's name (a click shows its facts under it); Edit, Undo, Redo, Save, Save a copy; Go to Line…; Settings; an icon that hides the right frame |
+| the top bar | an icon that hides the left bar; the name; the file's name (a click shows its facts under it); Edit, Undo, Redo, Save; Go to Line…; Settings; an icon that hides the right frame |
 | the counts bar | People 2,345, Families, and so on; a click lists that type in Records |
 | the left bar | Records, Checks, Changes, Search and Tags |
 | the main frame | a strip (**↑ Top**, **← Back to …** while there is somewhere to go back to, **Collapse all** or **Expand all**) and the lines under it |
@@ -46,8 +46,8 @@ keep traces of that.
   from beside it, and anywhere else it opens as a bare page.
 - Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
   opened with ⌘O, by dropping it, or with **Open another GEDCOM…** among the file's facts.
-- Other browsers can read, check and edit a file too. Save, in place, needs Chrome; elsewhere Save
-  a copy downloads the copy and its log.
+- Other browsers can read, check and edit a file too. In Chrome and Edge, Save opens the computer's
+  Save dialog; in Safari and Firefox the same button reads Download a copy, and the dated copy is a download.
 
 | Key | Does |
 |---|---|
@@ -109,8 +109,8 @@ block (**Add after**, at its level), or delete the line or its whole record. Del
 first shows what goes: the record, and each line elsewhere that points at it, ticked; untick what
 should stay.
 
-With Edit on, a line removed since the last save stays where it was, struck through in red, under
-its line number as saved; click it, and the right frame offers **Restore**, which puts back it and
+With Edit on, a line removed since the file was opened stays where it was, struck through in red, under
+its line number in the original; click it, and the right frame offers **Restore**, which puts back it and
 the removed lines beside it. With Edit off the lines are the file as it will be saved, and a red
 rule marks where lines were removed.
 
@@ -131,7 +131,7 @@ shows:
 | Where | Changed line | Added line | Removed lines | Moved lines |
 |---|---|---|---|---|
 | its row | tinted, a bar at its left edge, a dot in the mark column | tinted another colour, a bar, a dot | Edit on: struck through, in red; Edit off: a red rule where they were | tinted a third colour, a bar, a dot; Edit on: a rule where they were taken from |
-| the right frame | **Was**, and the line as last saved | **Added** | **Removed**, and **Restore** | **Moved**, and the line's number as saved |
+| the right frame | **Was**, and the line as in the original | **Added** | **Removed**, and **Restore** | **Moved**, and the line's number in the original |
 | Changes | the line, before → after | the line | the lines | what moved (a block by its tag, a record, a type and its count) and how many lines; never their text |
 | a shut block | its count of lines takes the colour when it holds a change | | |
 | the top bar | ● after the file's name; Save turns on | | |
@@ -228,7 +228,10 @@ One tag per push: GitHub makes no event for a push of more than three tags at on
 `git push --tags` after a rewrite publishes nothing, and **Run workflow** on the tag does it by hand.
 `.github/workflows/publish.yml` then runs the tests and, when they pass, uploads the page's files
 alone (`index.html`, `style.css`, `core.js`, `save.js`, `ui.js`, `privacy.html`, the three
-icons and `LICENSE`), never the tests, the tools, the brief, or anything in `local/`. **Run workflow**, on the
+icons and `LICENSE`), never the tests, the tools, the brief, or anything in `local/`. Once the page is live, the same run makes a GitHub release for the tag,
+whose notes carry the tag's message and the SHA-256 of each file served, so anyone can download a
+file from the site, hash it, and see that it is the one the tag holds, while that release is the
+newest. **Run workflow**, on the
 Actions tab, publishes what `main` holds, by hand. The domain is registered at Name.com, whose
 nameservers answer for it: four A and four AAAA records at the bare name point at GitHub Pages,
 and `www` is a CNAME to `bunahu.github.io`, which GitHub redirects to the bare name; HTTPS is
@@ -324,6 +327,7 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--report-height` | the Report a problem box |
 | `--meta-max-height`, `--table-border` | a `_META`'s story before it scrolls; the tables in a story and its persons |
 | `--edit-bg` | the box a line is typed in |
+| `--off-opacity` | how faint the note box is while Change stamps are unticked |
 | `--left-width`, `--right-width` | the left bar and the right frame (also dragged, and remembered) |
 | `--split-width`, `--split-color` | the bars between them |
 | `--list-row-height` | the rows of Records, Checks, Changes and Tags (26 px at the least) |
@@ -331,7 +335,7 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--radius`, `--input-padding`, `--focus-ring` | boxes and buttons |
 | `--pressed-bg`, `--hover-bg` | a pressed button; anything under the pointer |
 | `--drop-bg` | the wash over the page while a file is dragged over it |
-| `--dialog-width`, `--shadow`, `--backdrop` | the dialogs (Save, Save a copy, deleting): their width, their shadow, the wash behind them |
+| `--dialog-width`, `--shadow`, `--backdrop` | the dialogs (Save, deleting): their width, their shadow, the wash behind them |
 
 ## How this was made
 
