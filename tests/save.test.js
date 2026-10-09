@@ -144,14 +144,13 @@ describe('Save (10.2)', () => {
     assert.equal(pick.offered.length, 1, 'the Save dialog was not opened again');
   });
 
-  it('the original picked: refused at step 6 in the brief\'s words; the browser emptied it, and it is put back byte for byte; no copy; the stamps taken back', async () => {
+  it('the original picked: refused at step 6 in the brief\'s words; the browser emptied it, and it is put back byte for byte, saying nothing of it; no copy; the stamps taken back', async () => {
     const { dir, doc, bytes, original } = setUp();
     core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
     const before = history(doc);
     const r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick: saveDialog(dir, NAME) });
     assert.deepEqual([r.done, r.step, r.original], [false, 6, true]);
-    assert.equal(r.say, 'That is the original. GEDCOM Viewer never writes over it. Pick another name. ' +
-      'Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte.');
+    assert.equal(r.say, 'That is the original. It is unchanged. Pick another name.');
     assert.deepEqual(dir.journal, [`read ${NAME}`, `empty ${NAME}`, `read ${NAME}`, `write ${NAME}`, `read ${NAME}`],
       'read whole before the dialog; emptied by it; put back; read back');
     assert.equal(await hash(dir.at(NAME).bytes), h.sha256(bytes), 'the original, byte for byte');
@@ -160,11 +159,11 @@ describe('Save (10.2)', () => {
     assert.equal(core.changedSinceCopy(doc), true, 'the change is still to save');
   });
 
-  it('the original picked, in a browser that leaves the file as it is: refused, and nothing written at all', async () => {
+  it('the original picked, in a browser that leaves the file as it is: refused in the same words, and nothing written at all', async () => {
     const { dir, doc, bytes, original } = setUp();
     core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
     const r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick: saveDialog(dir, NAME, { empties: false }) });
-    assert.deepEqual([r.step, r.say], [6, 'That is the original. GEDCOM Viewer never writes over it. Pick another name.']);
+    assert.deepEqual([r.step, r.say], [6, 'That is the original. It is unchanged. Pick another name.']);
     assert.ok(!dir.journal.some((j) => j.startsWith('write')), 'not one write');
     assert.deepEqual(dir.at(NAME).bytes, bytes);
   });
@@ -185,7 +184,7 @@ describe('Save (10.2)', () => {
     dir.at(NAME).fail = 'open';
     const r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick: saveDialog(dir, NAME) });
     assert.deepEqual([r.step, r.loud, r.original], [6, true, true]);
-    assert.match(r.say, /^That is the original, Fixture_Family\.ged\. GEDCOM Viewer never writes over it, but your browser emptied it as it was picked, and GEDCOM Viewer could not put it back \(NotAllowedError: /);
+    assert.equal(r.say, 'That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.');
     assert.deepEqual(r.restore, bytes);
     assert.equal(core.changedSinceCopy(doc), true);
   });

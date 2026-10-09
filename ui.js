@@ -2130,7 +2130,7 @@
   }
 
   // 10.2 step 6: the original was picked, and nothing was saved into it. If the browser had emptied
-  // it, save.js put it back, and the dialog says so; if it could not, the original's bytes as they
+  // it, save.js put it back, and says nothing of it; if it could not, the original's bytes as they
   // were are offered as a download, to put in place of the empty file.
   async function refusedOriginal(r) {
     if (!r.restore) {

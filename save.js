@@ -135,7 +135,10 @@
   // 10.2 Save
   // ---------------------------------------------------------------------------------------------
 
-  const REFUSED = 'That is the original. GEDCOM Viewer never writes over it. Pick another name.';
+  // Step 6's words: the original picked, whether or not the browser had emptied it (the put-back is
+  // silent); and the put-back that failed.
+  const REFUSED = 'That is the original. It is unchanged. Pick another name.';
+  const NOT_RESTORED = 'That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.';
 
   // Step 1's words: since the last copy, or since the open when none has been written.
   function nothingSince(doc) {
@@ -168,8 +171,8 @@
   // The original, picked in the Save dialog, may have been emptied by the browser before the page
   // could refuse it: Chromium creates the picked file, or truncates it to nothing when it exists,
   // before it hands the page its handle. Emptied, it is put back from `bytes`, the file as it was
-  // read just before the dialog, and read back. A file that is not empty was left as it was, and
-  // nothing is written into it.
+  // read just before the dialog, and read back, and nothing on the screen says so. A file that is
+  // not empty was left as it was, and nothing is written into it.
   async function putBack(handle, bytes, hash) {
     try {
       if ((await handle.getFile()).size > 0 || bytes.length === 0) return { emptied: false, ok: true };
@@ -219,12 +222,8 @@
       ready.back();
       const bytes = before || doc.m.bytes;
       const back = await putBack(handle, bytes, hash);
-      if (back.ok) {
-        return failed(6, back.emptied ? `${REFUSED} Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte.` : REFUSED, { original: true });
-      }
-      return failed(6, `That is the original, ${original.name}. GEDCOM Viewer never writes over it, but your browser emptied it as it was picked, ` +
-        `and GEDCOM Viewer could not put it back (${back.why}). Download it as it was, and put it in place of the empty one.`,
-      { original: true, loud: true, restore: bytes });
+      if (back.ok) return failed(6, REFUSED, { original: true });
+      return failed(6, NOT_RESTORED, { original: true, loud: true, restore: bytes });
     }
     // 7. the bytes; read back; the hash equals step 4's
     let read;
