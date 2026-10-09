@@ -514,7 +514,7 @@ the save is cancelled or fails (I8).
 | Search | any text in the line as written; a count; next and previous; an id typed whole (`@I42@`) goes to its record first |
 | Go to Line… | a number goes to that line; two (`105-117`) show those lines alone, with a Go button while something is typed and × to show every line again (the owner, 2026-09-28: nothing on the screen points the range out) |
 | The file's name | a chip after the name GEDCOM Viewer; a click shows the file's facts under it, and hides them (remembered). Each fact that comes from a header line goes to it when clicked: the version to `GEDC`'s `VERS`, the encoding to `CHAR`, the date to `DATE`, the exporter to `SOUR`. Open GEDCOM leaves the top bar while a file is open: ⌘O, a drop, or Open another GEDCOM… among the facts |
-| Edit | off whenever a file opens: the file is read, and a double-click highlights a word (a click redraws the rows' looks only, so a highlight holds, to copy). On (E): Enter or a double-click types over a line; the right frame offers Edit line · Add inside · Add after · Delete line · Delete record; ⌫ deletes; a press on a row moved a few pixels drags its block among its siblings (3.4a); and each line removed since the last save stays where it was, struck through in red under its line number as saved — a click on it offers Restore, which puts its run of removed lines back as one step |
+| Edit | on whenever a file opens (P10, 2026-10-09; off before it), and the main frame takes its editing look while it is on; turned off, a double-click highlights a word (a click redraws the rows' looks only, so a highlight holds, to copy). On (E): Enter or a double-click types over a line; the right frame offers Edit line · Add inside · Add after · Delete line · Delete record; ⌫ deletes; a press on a row moved a few pixels drags its block among its siblings (3.4a); and each line removed since the last save stays where it was, struck through in red under its line number as saved — a click on it offers Restore, which puts its run of removed lines back as one step |
 | Types | in a file bunched by record type — each type's records in one run — a row between two types (`▾ INDI People 2,345`); a click shuts or opens every record of that type, ⌥-click every type; dragged, it takes its type past another (3.4a). A file not bunched has none. **Collapse all** shuts every record to its `0` line, then reads **Expand all** (3.5) |
 | Bold surnames | a toggle beside Indent: wherever a record's label shows, the name between slashes in bold and without them; never a line as written (3.8) |
 | Leaving with unsaved changes | the browser asks first |
@@ -545,7 +545,7 @@ jumps to a hidden line opens the blocks around it. Display only (I4), and never 
 
 **Remembered between visits** (`localStorage`): indent on/off and width, theme, panel widths and
 whether each side frame is hidden, Bold surnames, the change-stamp checkbox, whether the file's
-facts show. Never a file's name, content or handle; and Edit is off whenever a file opens.
+facts show. Never a file's name, content or handle. Edit is on whenever a file opens (P10).
 
 ---
 
@@ -907,7 +907,7 @@ where the dated copies will go. Open the page with
 `open -a "Google Chrome" ~/Desktop/claude/gedcom-viewer/index.html` — `index.html` stays where it
 is, beside the four files it loads.
 
-**A. Open and read** — Edit stays off.
+**A. Open and read** — Edit is on when the file opens (P10); press E once first, so part A reads with it off.
 
 | # | Do | Expect |
 |---|---|---|
@@ -1530,6 +1530,10 @@ after 0.5.6 is tagged, since both touch `index.html`, `style.css` and `ui.js`; t
 that name the top bar (Open GEDCOM leaving it, Edit in it, the icons at its ends) are rewritten
 with it, and `tests/page.test.js` pins the hidden-until-loaded rule.
 
+Picked 2026-10-09: **A1** and **B1**, the title reading `Lines 23-31` when more than one line is in
+hand: a selected line whose block is shut stands for its lines, and a Go to Line range for its range.
+Built in 0.6.
+
 ### 0.5.6, the owner's walk (2026-10-09)
 
 His findings, in his words, and what each became.
@@ -1562,3 +1566,20 @@ can address it with the UI/UX concerns). Default Edit Mode, and the central scre
 text-editor-like color?" Held lightly, like P9, for his later pick; it bears on section 9's rule that
 Edit is off whenever a file opens, and on the review's item 13 (a Viewing and Editing control with a
 second cue). No variants yet.
+
+Picked 2026-10-09: editing is on whenever a file opens, the Edit button and E turning it off and on
+as before; while it is on the main frame takes a darker, editor's look, a colour of its own in each
+theme that keeps the lines' contrast (his question mark taken as a yes; the review's item 13 wanted
+the same cue). Section 11's Edit row and the walk's part A are restated. Built in 0.6.
+
+### 0.6 and 0.6.1: the bars, editing on, the small cleanups; then the first screen (2026-10-09)
+
+0.6 builds P9 (A1, B1) and P10 as picked, and from the review's item 21: a delete question that
+names what goes (a record by its id, tag and name; another line by its number and its own text),
+the Tags list's order button labelled Sort with the icon kept and the current order in its hover
+text (his 0.5.1 word stands: the orders are not named on the face), and the version out of the
+title bar into the foot of the Settings menu. Not taken from item 21: Open in the top bar, which he
+removed in 0.5.1, and the file's facts in a status bar, since the facts under the name are his
+design; both wait for his word. 0.6.1, after his walk of 0.6: the first screen with a baked-in
+sample file (item 5) and the side frames as drawers at narrow widths (item 8). Opus, from this
+entry, section 11, P9 and P10.
