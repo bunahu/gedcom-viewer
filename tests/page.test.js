@@ -6,11 +6,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const h = require('./helpers.js');
+const K = require('./contrast.js');
 
 const PAGE = ['index.html', 'style.css', 'core.js', 'save.js', 'ui.js'];
 const FORBIDDEN = ['fetch(', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'sendBeacon', 'import(', '@import',
   'url(http', 'http://', 'https://'];
 const read = (name) => fs.readFileSync(path.join(h.ROOT, name), 'utf8');
+const FEEDBACK = 'feedback@gedcom-viewer.net';
 const loads = (page) => [...page.matchAll(/\b(?:src|href)="([^"]*)"/g)].map((m) => m[1]);
 
 describe('the page', () => {
@@ -38,22 +40,22 @@ describe('the page', () => {
       const policy = m[1];
       assert.ok(policy.startsWith("default-src 'none'"), `${name}: the policy must start by refusing everything: ${policy}`);
       assert.ok(policy.includes("connect-src 'none'"), `${name}: the policy must refuse every connection: ${policy}`);
-      // the one allowance: index.html lets styles be inline, since Chrome styles its own XML parse-error block
-      // inline in the inert document a malformed _META is read in; a style can reach nothing outside the page
-      const allowed = name === 'index.html' ? policy.replace("style-src 'self' 'unsafe-inline';", "style-src 'self';") : policy;
-      assert.ok(!/unsafe|http|data:|blob:|\*/.test(allowed), `${name}: a hole in the policy: ${policy}`);
+      assert.ok(!/unsafe|http|data:|blob:|\*/.test(policy), `${name}: a hole in the policy: ${policy}`);
+      assert.ok(/style-src 'self';/.test(policy), `${name}: styles must be the page's own file alone, none inline: ${policy}`);
       if (name === 'index.html') assert.ok(/script-src 'self';/.test(policy), `${name}: scripts must be the page's own alone: ${policy}`);
       else assert.ok(!/script-src/.test(policy), `${name}: no script at all, so no script-src: ${policy}`);
       assert.ok(page.indexOf('<meta http-equiv="Content-Security-Policy"') < page.indexOf('<link'), `${name}: the policy must come before anything the page loads`);
     }
   });
 
-  it('privacy.html holds no script and loads only style.css and the icons; its links out go to GitHub alone; favicon.svg holds nothing but shapes', () => {
+  it('privacy.html holds no script and loads only style.css and the icons; its links out go to GitHub alone, bar one mailto to the feedback address; favicon.svg holds nothing but shapes', () => {
     const privacy = read('privacy.html');
     assert.equal(privacy.match(/<script\b/g), null, 'a script in privacy.html');
     const out = loads(privacy).filter((u) => u.includes('://'));
     assert.ok(out.length > 0 && out.every((u) => /^https:\/\/(docs\.)?github\.com\//.test(u)), `a link out that is not GitHub's: ${out}`);
-    assert.deepEqual(loads(privacy).filter((u) => !u.includes('://')),
+    // the one other way out is an email, which the browser hands to the person's own mail program: a navigation, not a request
+    assert.deepEqual(loads(privacy).filter((u) => u.startsWith('mailto:')), [`mailto:${FEEDBACK}`], 'exactly one mailto link, to the feedback address');
+    assert.deepEqual(loads(privacy).filter((u) => !u.includes('://') && !u.startsWith('mailto:')),
       ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'index.html']);
     const svg = read('favicon.svg').replace('xmlns="http://www.w3.org/2000/svg"', '');
     for (const word of [...FORBIDDEN, '<script', 'href', '<image', '<use', '<foreignObject', 'url(']) {
@@ -88,9 +90,9 @@ describe('the page', () => {
     }
   });
 
-  it('what shows the file is marked translate="no": the lines, the right frame, the records list, and the Checks, Changes, Search and Tags panels', () => {
+  it('what shows the file is marked translate="no": the lines, the right frame, the records list, the Checks, Changes, Search and Tags panels, the file\'s name, its facts and its counts', () => {
     const page = read('index.html');
-    for (const id of ['grid', 'detail', 'records-list', 'panel-checks', 'panel-changes', 'panel-search', 'panel-tags']) {
+    for (const id of ['grid', 'detail', 'records-list', 'panel-checks', 'panel-changes', 'panel-search', 'panel-tags', 'file-name', 'facts', 'counts']) {
       assert.ok(/\btranslate="no"/.test(tagOf(page, id)), `#${id} can be translated: ${tagOf(page, id)}`);
     }
   });
@@ -110,7 +112,7 @@ describe('the page', () => {
 
   it('privacy.html names every setting the page stores, so a new one cannot go unlisted', () => {
     // each key the page stores, and the words privacy.html uses for it
-    const named = { theme: 'the theme', indent: 'Indent', indentWidth: 'its width', surnames: 'Bold surnames',
+    const named = { theme: 'the theme (System, Light, Dusk or Dark)', textSize: 'the text size (Normal or Larger)', indent: 'Indent', indentWidth: 'its width', surnames: 'Bold surnames',
       tabName: 'File name in the tab', hideLeft: 'whether each is hidden', hideRight: 'whether each is hidden',
       tagsOrder: 'Tags list\'s order', stamps: 'change stamps', facts: 'file\'s facts show' };
     const keys = [...new Set([...read('ui.js').matchAll(/store\.(?:get|set)\('(\w+)'/g)].map((m) => m[1]))].sort();
@@ -135,6 +137,116 @@ describe('the page', () => {
     for (const words of ['Downloads', 'Desktop', 'Documents', 'home folder', 'a folder of its own', 'Save a copy']) {
       assert.ok(grant.includes(words), `the refused-folder notice does not say "${words}"`);
     }
+  });
+
+  // 0.5.5: type, the text size, the theme, motion and forced colours, the one console line
+  const ownProps = (css) => K.blocksOf(css).filter((b) => b.selector === ':root').pop().props;
+  const px = (v) => { const m = /^([\d.]+)px$/.exec(v); assert.ok(m, `not a size in px: ${v}`); return Number(m[1]); };
+
+  it('type is 16px, the lines 15px and the small print 14px, with rows 24px high; nothing is under 14px, at either text size', () => {
+    const css = read('style.css');
+    const own = ownProps(css);
+    assert.deepEqual(['--font-size-body', '--font-size-grid', '--font-size-small', '--row-height'].map((k) => own.get(k)), ['16px', '15px', '14px', '24px']);
+    assert.ok(px(own.get('--list-row-height')) >= 26, 'the lists\' rows are at least 26px');
+    const larger = K.blocksOf(css).find((b) => b.selector === '.text-larger').props;
+    for (const [name, value] of [...own, ...larger]) if (/^--font-size-/.test(name)) assert.ok(px(value) >= 14, `${name} is ${value}`);
+    const rules = css.slice(css.indexOf('/* -------'));
+    for (const m of rules.matchAll(/font-size:\s*([\d.]+)(px|em|rem|%)/g)) {
+      const n = Number(m[1]);
+      const ok = m[2] === 'px' ? n >= 14 : m[2] === '%' ? n >= 100 : n >= 1;     // a relative size is never smaller than what it sits in
+      assert.ok(ok, `a font size under 14px: ${m[0]}`);
+    }
+    for (const m of rules.matchAll(/(?<![-\w])font:\s*(?:\d+\s+)?([\d.]+)(px|em|rem|%)/g)) {
+      const n = Number(m[1]);
+      assert.ok(m[2] === 'px' ? n >= 14 : n >= 1, `a font size under 14px: ${m[0]}`);
+    }
+  });
+
+  it('Larger sets the type and both row heights larger than Normal, and no more than that; the fold\'s click area is 24px each way at least', () => {
+    const css = read('style.css');
+    const own = ownProps(css);
+    const larger = K.blocksOf(css).find((b) => b.selector === '.text-larger').props;
+    for (const k of ['--font-size-title', '--font-size-file', '--font-size-body', '--font-size-small', '--font-size-grid', '--row-height', '--list-row-height']) {
+      assert.ok(larger.has(k), `Larger does not set ${k}`);
+      assert.ok(px(larger.get(k)) > px(own.get(k)), `${k} is not larger in Larger: ${larger.get(k)} against ${own.get(k)}`);
+    }
+    assert.ok(css.indexOf('.text-larger {') > css.lastIndexOf(':root {', css.indexOf('/* -------')), 'Larger must come after the block it overrides');
+    assert.ok(px(own.get('--fold-hit')) >= 24, '--fold-hit is at least 24px');
+    assert.ok(px(own.get('--row-height')) >= px(own.get('--fold-hit')), 'a fold is as high as its row');
+    assert.ok(/\.fold \{[^}]*width:\s*max\(2ch, var\(--fold-hit\)\);[^}]*height:\s*var\(--row-height\);/.test(css), 'the grid\'s fold is --fold-hit wide at least, and a row high');
+    assert.ok(/\.item\.is-head \.fold \{[^}]*width:\s*max\(1\.4em, var\(--fold-hit\)\)/.test(css), 'the Checks list\'s fold is --fold-hit wide at least');
+  });
+
+  it('Settings: Theme offers System, Light, Dusk, Dark in that order, and Text offers Normal and Larger; Sunset is gone from the page', () => {
+    const page = read('index.html');
+    const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
+    const ids = [...menu.matchAll(/<button[^>]*\bid="([\w-]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(ids.slice(0, 6), ['theme-system', 'theme-light', 'theme-dusk', 'theme-dark', 'text-normal', 'text-larger']);
+    assert.ok(/id="theme-dusk"[^>]*>Dusk</.test(menu) && /id="text-larger"[^>]*>Larger</.test(menu));
+    assert.ok(!/sunset/i.test(page), 'index.html still says sunset');
+    assert.ok(menu.indexOf('Theme') < menu.indexOf('>Text<') && menu.indexOf('>Text<') < menu.indexOf('>Lines<'), 'Text sits under Theme');
+  });
+
+  it('the theme: System is the default, follows the computer while the page is open, and a stored sunset reads as Dusk; the text size defaults to Normal', () => {
+    const ui = read('ui.js');
+    assert.ok(ui.includes("const THEMES = ['system', 'light', 'dusk', 'dark']"));
+    assert.ok(ui.includes("store.get('theme', 'system')"), 'no stored theme means System');
+    assert.ok(/if \(t === 'sunset'\) return 'dusk';/.test(ui), 'a stored sunset must read as dusk');
+    assert.ok(ui.includes("matchMedia('(prefers-color-scheme: dark)')") && /prefersDark\.addEventListener\('change'/.test(ui), 'System must follow the computer live');
+    assert.ok(ui.includes("root.classList.remove('dark', 'dusk')"));
+    assert.ok(ui.includes("store.get('textSize', 'normal')"), 'the text size defaults to Normal');
+    assert.ok(/`theme \$\{state\.theme\} · Text size \$\{state\.textSize\}/.test(ui), 'the report\'s settings line carries the theme and the text size');
+  });
+
+  it('a change of text size makes every list read its row height again, and a file too long for the taller rows is refused the change', () => {
+    const ui = read('ui.js');
+    assert.ok(/lists\.push\(list\);/.test(ui) && /for \(const list of lists\) list\.remeasure\(\);/.test(ui), 'each list is remeasured');
+    for (const name of ['recordsList', 'checksList', 'changesList', 'tagsList']) assert.ok(new RegExp(`const ${name} = Virtual\\(`).test(ui), `${name} is a Virtual list`);
+    assert.ok(/rowCount\(\) \* grid\.rowHeight\(\) > MAX_PIXELS/.test(ui), 'the guard against a grid taller than a page can be');
+  });
+
+  it('no motion when the computer asks for less, and the colours the browser drops are drawn again in the system\'s own', () => {
+    const css = read('style.css');
+    const reduce = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'), css.indexOf('@media (forced-colors: active)'));
+    assert.ok(/transition:\s*none !important/.test(reduce) && /animation:\s*none !important/.test(reduce), 'reduced motion must stop transitions and animations');
+    const forced = css.slice(css.indexOf('@media (forced-colors: active)'));
+    for (const want of ['.row.is-sel', '.button[aria-pressed="true"]', '.tab[aria-selected="true"]', '.drop-line', '.cg.is-changed::before', '--focus-color',
+      'Highlight', 'HighlightText', 'CanvasText', 'forced-color-adjust: none']) {
+      assert.ok(forced.includes(want), `forced colors: no ${want}`);
+    }
+    assert.equal(forced.match(/#[0-9a-fA-F]{3,8}\b|rgba?\(|var\(--color-/g), null, 'forced colors use the system\'s colors, not the palette\'s');
+    const before = css.slice(0, css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    assert.ok(/transition:/.test(before), 'the side frames still ease when motion is allowed');
+  });
+
+  it('a _META that does not parse costs one line of ours in the console, and the page sends nothing', () => {
+    const ui = read('ui.js');
+    const meta = ui.slice(ui.indexOf('function metaOf'), ui.indexOf('// The rebuilt story as elements'));
+    assert.ok(/getElementsByTagName\('parsererror'\)[^]*console\.info\('GEDCOM Viewer: a _META held XML that does not parse, so nothing is drawn from it\./.test(meta));
+    assert.ok(/Nothing was sent anywhere\.'\);\s*return null;/.test(meta), 'then it draws nothing');
+    assert.equal((ui.match(/console\.\w+\(/g) || []).length, 1, 'the only console line the page writes is that one');
+  });
+
+  it('the feedback address is on the privacy page as a mailto link whose text is the address, in the README, and in the Report a problem dialog, beside the issue route; and the policy is as it was', () => {
+    const privacy = read('privacy.html');
+    assert.ok(privacy.includes(`<a href="mailto:${FEEDBACK}">${FEEDBACK}</a>`), 'the mailto link must read as the address itself');
+    assert.ok(/An issue is public and an email is not\./.test(privacy.replace(/\s+/g, ' ')), 'the privacy page says an issue is public and an email is not');
+    assert.ok(privacy.replace(/\s+/g, ' ').includes('In an issue, write nothing you would not want public.'), 'the warning belongs to the issue');
+    assert.ok(privacy.includes('github.com/bunahu/gedcom-viewer'), 'the GitHub route stays');
+    const readme = read('README.md');
+    assert.ok(readme.includes(FEEDBACK) && readme.includes('github.com/bunahu/gedcom-viewer/issues'), 'the README names both routes');
+    const ui = read('ui.js');
+    assert.equal((ui.match(/or into an email to feedback@gedcom-viewer\.net/g) || []).length, 2, 'the dialog and its Copy notice both offer the email');
+    assert.equal((ui.match(/github\.com\/bunahu\/gedcom-viewer\/issues/g) || []).length, 2, 'and both still name the issue route');
+    const policy = read('index.html').match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)">/)[1];
+    assert.ok(policy.includes("form-action 'none'") && policy.includes("connect-src 'none'") && !/mailto/.test(policy), 'the policy is untouched: a mailto link is a navigation');
+  });
+
+  it('the line under Open GEDCOM reads "The file does not leave your computer." with a Privacy Policy link to privacy.html', () => {
+    const page = read('index.html');
+    const note = page.match(/<p class="empty-note">([^]*?)<\/p>/);
+    assert.ok(note, 'no empty-note paragraph');
+    assert.equal(note[1], 'The file does not leave your computer. <a href="privacy.html">Privacy Policy</a>');
   });
 
   it('the README names no path on anyone\'s disk', () => {

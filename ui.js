@@ -32,7 +32,8 @@
     },
   };
 
-  const THEMES = ['light', 'sunset', 'dark'];
+  const THEMES = ['system', 'light', 'dusk', 'dark'];     // System follows the computer's light or dark
+  const TEXT_SIZES = ['normal', 'larger'];
   const RECORD_NAMES = {
     INDI: 'People', FAM: 'Families', SOUR: 'Sources', OBJE: 'Media', REPO: 'Repositories',
     NOTE: 'Notes', SNOTE: 'Notes', SUBM: 'Submitters',
@@ -84,7 +85,8 @@
     back: [],
     indent: store.get('indent', false) === true,
     indentWidth: clampWidth(store.get('indentWidth', 4)),
-    theme: THEMES.includes(store.get('theme', 'light')) ? store.get('theme', 'light') : 'light',
+    theme: storedTheme(),
+    textSize: TEXT_SIZES.includes(store.get('textSize', 'normal')) ? store.get('textSize', 'normal') : 'normal',
     stamps: store.get('stamps', true) !== false,   // F1, V1: on unless unticked
     showFacts: store.get('facts', false) === true,  // the file's facts, shown under its name
     boldSurnames: store.get('surnames', false) === true,   // 3.8: surnames in bold wherever a record is named
@@ -119,6 +121,14 @@
     hitFlags: null,
     highlight: null,
   };
+
+  // The theme chosen last, or System for anyone who has not chosen. Dusk was called Sunset until
+  // 0.5.5; a Sunset kept in the browser still means it.
+  function storedTheme() {
+    const t = store.get('theme', 'system');
+    if (t === 'sunset') return 'dusk';
+    return THEMES.includes(t) ? t : 'system';
+  }
 
   function clampWidth(w) {
     const n = Number(w);
@@ -257,6 +267,9 @@
   // drag of the scrollbar shows rows, never an empty screen.
   // ---------------------------------------------------------------------------------------------
 
+  // Every list made, so that a change of text size can lay each one out again.
+  const lists = [];
+
   // `paint` draws a row whole; `style`, when given, only its look (Virtual.restyle).
   function Virtual(scroller, paint, style) {
     const layer = el('div', 'v-rows');
@@ -267,7 +280,7 @@
     const pool = [];
     let count = 0;
     let version = 0;
-    const measure = () => parseFloat(getComputedStyle(scroller).getPropertyValue('--row-height')) || 22;
+    const measure = () => parseFloat(getComputedStyle(scroller).getPropertyValue('--row-height')) || 24;
     let h = measure();
 
     function draw() {
@@ -308,7 +321,7 @@
     scroller.addEventListener('scroll', draw, { passive: true });
     new ResizeObserver(layout).observe(scroller);
 
-    return {
+    const list = {
       setCount(n, keepScroll) {
         count = n;
         version += 1;
@@ -316,6 +329,17 @@
         layout();
       },
       refresh() { version += 1; draw(); },
+      // The row height read again from the style, once the text size has changed: the rows are laid
+      // out afresh, and the view stays at the same row.
+      remeasure() {
+        const next = measure();
+        if (next === h) return;
+        const row = scroller.scrollTop / h;
+        version += 1;
+        layout();
+        scroller.scrollTop = row * h;
+        draw();
+      },
       // Each row's look again, its contents kept (a highlight in them holds).
       restyle() {
         for (const r of pool) if (r._i >= 0 && r.style.display !== 'none') (style || paint)(r, r._i);
@@ -343,6 +367,8 @@
         return r && r._i >= 0 ? r._i : -1;
       },
     };
+    lists.push(list);
+    return list;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1296,7 +1322,12 @@
     if (!/^\s*<metadataxml[\s>]/i.test(text)) return null;
     const parser = new DOMParser();
     const xml = parser.parseFromString(text, 'text/xml');
-    if (xml.getElementsByTagName('parsererror').length || !xml.documentElement) return null;
+    if (xml.getElementsByTagName('parsererror').length || !xml.documentElement) {
+      // Chrome adds its own styled error block to this inert document, and refuses that style under the policy
+      // (index.html), with messages of its own in the console. Nothing from the block is ever drawn.
+      console.info('GEDCOM Viewer: a _META held XML that does not parse, so nothing is drawn from it. The policy messages above are Chrome refusing the styles on its own error block. Nothing was sent anywhere.');
+      return null;
+    }
     return C.metaParts(domToTree(xml.documentElement), (html) => domToTree(parser.parseFromString(html, 'text/html').body));
   }
 
@@ -1826,7 +1857,7 @@
   async function reportProblem() {
     const version = ($('version') || document.querySelector('.version') || {}).textContent || '';
     const where = location.protocol === 'file:' ? 'opened from disk' : location.host;
-    const settings = `theme ${state.theme} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'}`;
+    const settings = `theme ${state.theme} · Text size ${state.textSize} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'}`;
     const info = {
       version, where, browser: browserName(),
       bytes: state.disk ? state.disk.bytes : null,
@@ -1850,7 +1881,7 @@
     const composed = () => `${box.value.replace(/\n+$/, '')}\nWhat happened: ${what.value.trim() || '(nothing said)'}\n`;
     await dialog('Report a problem', (body) => {
       body.appendChild(el('div', 'dialog-sum', 'Nothing is sent by this page. The box holds counts and codes only, never a line of the file. ' +
-        'Read it; change or cut anything; then Copy, and paste it into a new issue at github.com/bunahu/gedcom-viewer/issues. The privacy page says more.'));
+        'Read it; change or cut anything; then Copy, and paste it into a new issue at github.com/bunahu/gedcom-viewer/issues, or into an email to feedback@gedcom-viewer.net. The privacy page says more.'));
       box = el('textarea', 'report');
       box.id = 'report-text';
       box.value = built;
@@ -1872,7 +1903,7 @@
       const copy = el('button', 'button is-primary', 'Copy');
       copy.type = 'button';
       copy.id = 'report-copy';
-      copy.addEventListener('click', () => copyPlain(composed(), box, 'Copied: the report, then What happened. Paste it into a new issue at github.com/bunahu/gedcom-viewer/issues.'));
+      copy.addEventListener('click', () => copyPlain(composed(), box, 'Copied: the report, then What happened. Paste it into a new issue at github.com/bunahu/gedcom-viewer/issues, or into an email to feedback@gedcom-viewer.net.'));
       row.appendChild(copy);
       row.appendChild(el('span', 'muted', 'puts the report as it reads, then What happened, on the clipboard'));
       body.appendChild(row);
@@ -2386,9 +2417,13 @@
   // Controls, panels and keys
   // ---------------------------------------------------------------------------------------------
 
+  // System is the computer's light or dark, and follows it while the page is open.
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const drawnTheme = () => (state.theme === 'system' ? (prefersDark.matches ? 'dark' : 'light') : state.theme);
   function applyTheme() {
-    root.classList.remove('dark', 'sunset');
-    if (state.theme !== 'light') root.classList.add(state.theme);
+    root.classList.remove('dark', 'dusk');
+    const drawn = drawnTheme();
+    if (drawn !== 'light') root.classList.add(drawn);
     for (const name of THEMES) $(`theme-${name}`).setAttribute('aria-pressed', String(name === state.theme));
   }
   for (const name of THEMES) {
@@ -2398,14 +2433,39 @@
       applyTheme();
     });
   }
+  prefersDark.addEventListener('change', () => { if (state.theme === 'system') applyTheme(); });
+
+  // Text: Larger sets the type and the rows' heights again (a class on <html>). Every list reads
+  // its row height again, so nothing is left laid out for the old one.
+  function applyTextSize() {
+    root.classList.toggle('text-larger', state.textSize === 'larger');
+    for (const name of TEXT_SIZES) $(`text-${name}`).setAttribute('aria-pressed', String(name === state.textSize));
+    for (const list of lists) list.remeasure();
+    if ($('settings-menu').matches(':popover-open')) placeMenu();   // the menu, and its button, have moved
+  }
+  for (const name of TEXT_SIZES) {
+    $(`text-${name}`).addEventListener('click', () => {
+      if (state.textSize === name) return;
+      const was = state.textSize;
+      state.textSize = name;
+      applyTextSize();
+      if (rowCount() * grid.rowHeight() > MAX_PIXELS) {         // taller rows than a page can be tall for this file
+        state.textSize = was;
+        applyTextSize();
+        notice('This file has too many lines to show in larger text, so the text stays Normal.', 'error');
+        return;
+      }
+      store.set('textSize', state.textSize);
+    });
+  }
   // Settings opens under its button; a click elsewhere, or Esc, closes it.
-  $('settings-menu').addEventListener('toggle', (e) => {
-    if (e.newState !== 'open') return;
+  function placeMenu() {
     const menu = $('settings-menu');
     const b = $('settings').getBoundingClientRect();
     menu.style.top = `${Math.round(b.bottom + 4)}px`;
     menu.style.left = `${Math.round(Math.max(8, Math.min(b.left, window.innerWidth - menu.offsetWidth - 8)))}px`;
-  });
+  }
+  $('settings-menu').addEventListener('toggle', (e) => { if (e.newState === 'open') placeMenu(); });
 
   function applyIndent() {
     $('indent').setAttribute('aria-pressed', String(state.indent));
@@ -2934,6 +2994,7 @@
   $('grid').addEventListener('pointercancel', () => endDrag());
 
   applyTheme();
+  applyTextSize();
   applyIndent();
   applySurnames();
   applyFrames();

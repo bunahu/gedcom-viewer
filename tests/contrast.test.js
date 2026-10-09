@@ -1,0 +1,114 @@
+// Contrast (WCAG 2.2 AA), measured from style.css as text: the three palette blocks are read, each
+// pair's tokens are resolved for each theme, and the ratio is computed (tests/contrast.js). A
+// token written as color-mix(in srgb, X n%, transparent) is X at n% alpha over what it sits on.
+// Text needs 4.5:1 (1.4.3); the ring round a control, and a control's edge, need 3:1 (1.4.11).
+'use strict';
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const h = require('./helpers.js');
+const K = require('./contrast.js');
+
+const css = fs.readFileSync(path.join(h.ROOT, 'style.css'), 'utf8');
+const THEMES = [['Light', null], ['Dusk', 'dusk'], ['Dark', 'dark']];
+
+// The three backgrounds the palette sets: the frames and bars (card), the left bar, the boxes.
+const CARD = ['--color-bg-card'];
+const SIDE = ['--color-bg-sidebar'];
+const BOX = ['--color-bg'];
+const BASES = [CARD, SIDE, BOX];
+const label = (layers) => layers.map((t) => t.replace(/^--(color-bg-)?/, '')).join(' + ');
+
+// Every token in `fg` against every background in `on`, in all three themes.
+function holds(fg, on, min, themes = THEMES) {
+  const short = [];
+  for (const [name, cls] of themes) {
+    for (const layers of on) {
+      const r = K.ratio(css, cls, fg, layers);
+      if (r < min) short.push(`${name}: ${fg} on ${label(layers)} is ${r.toFixed(2)}, needs ${min}`);
+    }
+  }
+  assert.deepEqual(short, []);
+}
+
+describe('contrast, measured from style.css', () => {
+  it('the helper: black on white is 21:1, a colour on itself 1:1, color-mix is alpha over the background', () => {
+    const fake = ':root { --a: #000000; --b: #ffffff; --c: color-mix(in srgb, var(--a) 50%, transparent); --d: var(--b); }';
+    assert.equal(K.ratioOf(K.colour(K.propsOf(fake, null), '--a'), K.colour(K.propsOf(fake, null), '--d')), 21);
+    assert.equal(K.ratio(fake, null, '--b', ['--d']), 1);
+    const mid = K.layered(K.propsOf(fake, null), ['--b', '--c']);
+    assert.equal(Math.round(mid.r), 128);
+    const themed = ':root { --a: #111111; } .dark { --a: #eeeeee; } :root { --b: var(--a); }';
+    assert.equal(K.colour(K.propsOf(themed, 'dark'), '--b').r, 0xee);
+    assert.equal(K.colour(K.propsOf(themed, null), '--b').r, 0x11);
+  });
+
+  it('the three palette blocks are :root (Light), .dusk and .dark; Sunset is Dusk, and no rule is left for it', () => {
+    const selectors = K.blocksOf(css).map((b) => b.selector);
+    assert.deepEqual(selectors.filter((s) => s !== ':root').sort(), ['.dark', '.dusk', '.text-larger']);
+    assert.ok(!/sunset/i.test(css), 'style.css still says sunset');
+  });
+
+  it('the focus ring: 3:1 on the three backgrounds, on a hovered and on a pressed control, in every theme (1.4.11)', () => {
+    const on = [];
+    for (const base of BASES) on.push(base, [...base, '--hover-bg'], [...base, '--pressed-bg']);
+    holds('--focus-color', on, 3);
+  });
+
+  it('the rules draw the ring from --focus-color, and --focus-ring is the one outline the controls use', () => {
+    assert.ok(/--focus-ring:\s*2px solid var\(--focus-color\);/.test(css), '--focus-ring must be built from --focus-color');
+    const rules = css.slice(css.indexOf('/* -------'));
+    const outlines = [...rules.matchAll(/(?<![-\w])outline:\s*([^;}]+)/g)].map((m) => m[1].trim());
+    assert.ok(outlines.length > 0 && outlines.every((o) => o === 'var(--focus-ring)' || o === 'none'), `an outline that is not the focus ring: ${outlines}`);
+  });
+
+  it('a note count, in a tab or a list: 4.5:1 on the left bar, the frames and the boxes; in Light, also on a hovered and a selected tab', () => {
+    holds('--mark-note', BASES, 4.5);
+    holds('--mark-note', [[...SIDE, '--hover-bg'], [...SIDE, '--pressed-bg']], 4.5, [THEMES[0]]);
+  });
+
+  it('an error count, in a tab or a list: 4.5:1 on the left bar, the frames and the boxes; in Light, also on a hovered and a selected tab', () => {
+    holds('--mark-error', BASES, 4.5);
+    holds('--mark-error', [[...SIDE, '--hover-bg'], [...SIDE, '--pressed-bg']], 4.5, [THEMES[0]]);
+    holds('--raw-color', BASES, 4.5);
+  });
+
+  it('record ids such as @I1@: 4.5:1 on the lines\' background and on a box; in Light, also on a selected line', () => {
+    holds('--id-color', [CARD, BOX], 4.5);
+    holds('--id-color', [[...CARD, '--row-selected']], 4.5, [THEMES[0]]);
+  });
+
+  it('muted text: 4.5:1 on the left bar, the frames and the boxes', () => {
+    holds('--color-text-muted', BASES, 4.5);
+  });
+
+  it('the edge of an input and of a button: 3:1 on the three backgrounds (1.4.11)', () => {
+    holds('--control-border', BASES, 3);
+  });
+
+  it('inputs, buttons and the report box take that edge; the quieter lines between parts keep --color-border', () => {
+    const rules = css.slice(css.indexOf('/* -------'));
+    const body = (selector) => {
+      const at = rules.indexOf(`\n${selector} {`);
+      assert.ok(at >= 0, `no rule for ${selector}`);
+      return rules.slice(at, rules.indexOf('}', at));
+    };
+    for (const selector of ['.button', '.input', '.report']) {
+      assert.ok(/border:\s*1px solid var\(--control-border\)/.test(body(selector)), `${selector} must take --control-border`);
+    }
+    assert.ok(/--split-color:\s*var\(--color-border\)/.test(css), 'the bars you drag keep --color-border');
+  });
+
+  it('the text colour holds 4.5:1 on the three backgrounds and on the selected line, so the gold stays a fill behind it', () => {
+    holds('--color-text', [...BASES, [...CARD, '--row-selected']], 4.5);
+  });
+
+  it('the ids, counts and notes are drawn from the tokens measured here', () => {
+    const rules = css.slice(css.indexOf('/* -------'));
+    assert.ok(/\.n-note\s*\{[^}]*color:\s*var\(--mark-note\)/.test(rules), '.n-note must use --mark-note');
+    assert.ok(/\.n-error\s*\{[^}]*color:\s*var\(--mark-error\)/.test(rules), '.n-error must use --mark-error');
+    assert.ok(/\.id\s*\{\s*color:\s*var\(--id-color\)/.test(rules), '.id must use --id-color');
+    assert.ok(/--mark-error:\s*var\(--color-danger\)/.test(css), '--mark-error must follow --color-danger');
+  });
+});

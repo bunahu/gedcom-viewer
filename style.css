@@ -1,18 +1,21 @@
 /* GEDCOM Viewer. Copyright (C) 2026 bunahu. Free software under the GNU General Public License, version 3 or later: see LICENSE. */
 /* GEDCOM Viewer — the look.
  *
- * Every colour, size and width is a custom property in the first three blocks below; the rules
- * after them only use them. README.md lists the properties and what each one moves.
+ * Every colour, size and width is a custom property in the blocks at the top; the rules after
+ * them only use them. README.md lists the properties and what each one moves.
  */
 
-/* The sibling project's three palettes, as it has them (sibling/frontend/src/index.css at v3.254.9). Light is the
-   default; Theme steps light → sunset → dark by setting a class on <html>. */
+/* The sibling project's three palettes (sibling/frontend/src/index.css at v3.254.9), with two
+   colours changed for contrast (--color-danger, --color-text-muted) and, at the foot of each block,
+   a group that is GEDCOM Viewer's own and differs by theme. tests/contrast.test.js measures them.
+   Light is the default; Settings sets a class on <html> for Dusk or Dark; System picks Light or
+   Dark from the computer. */
 :root {
   --color-bg: #ede5d2;
   --color-bg-card: #f6efe1;
   --color-bg-sidebar: #e3d8c3;
   --color-text: #2d2d2d;
-  --color-text-muted: #6e6256;
+  --color-text-muted: #5e5348;
   --color-nonbio: #2563eb;
   --color-info: #2563eb;
   --color-border: #d3c8b3;
@@ -20,7 +23,7 @@
   --color-accent-hover: #8b7355;
   --color-success: #5cb85c;
   --color-warning: #d4a24e;
-  --color-danger: #c0392b;
+  --color-danger: #9f221b;
   --color-entity-repository: #6d4aa0;
   --color-entity-collection: #4558a3;
   --color-entity-source: #1f6d39;
@@ -30,6 +33,11 @@
   --color-affiliation: #2a7d8c;
   --color-ancestor: #a67c00;
   --color-assertion-mark: #9c3a9e;
+  /* GEDCOM Viewer's own, by theme */
+  --focus-color: #84651e;             /* the ring round the control in use */
+  --control-border: #837560;          /* the edge of an input and of a button */
+  --mark-note: #734b00;               /* a note's count and code */
+  --id-color: #6f5a40;                /* @I1@ */
 }
 
 .dark {
@@ -37,7 +45,7 @@
   --color-bg-card: #221f1c;
   --color-bg-sidebar: #28251f;
   --color-text: #e8e6df;
-  --color-text-muted: #8a857a;
+  --color-text-muted: #a39d90;
   --color-nonbio: #7da9f0;
   --color-info: #7da9f0;
   --color-border: #36322a;
@@ -45,7 +53,7 @@
   --color-accent-hover: #8b7355;
   --color-success: #5cb85c;
   --color-warning: #d4a24e;
-  --color-danger: #c0392b;
+  --color-danger: #f2867a;
   --color-entity-repository: #8c6bc4;
   --color-entity-collection: #6b7ec9;
   --color-entity-source: #4ea05a;
@@ -55,15 +63,19 @@
   --color-affiliation: #3a9bad;
   --color-ancestor: #e3ba4d;
   --color-assertion-mark: #d488e0;
+  --focus-color: #c4a45a;
+  --control-border: #78725f;
+  --mark-note: #d4a24e;
+  --id-color: #c9a876;
   color-scheme: dark;
 }
 
-.sunset {
+.dusk {
   --color-bg: #3e3933;
   --color-bg-card: #4a4339;
   --color-bg-sidebar: #56503f;
   --color-text: #ede4d3;
-  --color-text-muted: #b8aa92;
+  --color-text-muted: #cfc2a8;
   --color-nonbio: #8fb8f5;
   --color-info: #8fb8f5;
   --color-border: #5a4f43;
@@ -71,7 +83,7 @@
   --color-accent-hover: #8b7355;
   --color-success: #5cb85c;
   --color-warning: #d4a24e;
-  --color-danger: #c0392b;
+  --color-danger: #ffb4a8;
   --color-entity-repository: #8c6bc4;
   --color-entity-collection: #6b7ec9;
   --color-entity-source: #4ea05a;
@@ -81,11 +93,16 @@
   --color-affiliation: #3a9bad;
   --color-ancestor: #e3ba4d;
   --color-assertion-mark: #d488e0;
+  --focus-color: #dfcda5;
+  --control-border: #aaa08f;
+  --mark-note: #e5c48d;
+  --id-color: #e0c79c;
   color-scheme: dark;
 }
 
 /* GEDCOM Viewer's own properties. Colours here are drawn from the palette above, so each theme carries
-   them; change one here and it changes in all three. */
+   them; change one here and it changes in all three. (The ones that differ by theme are at the foot
+   of each palette block.) No type is smaller than 14px, at either text size. */
 :root {
   /* type */
   --font-title: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
@@ -96,13 +113,13 @@
   --file-border: var(--color-accent);
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-grid: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-size-body: 14px;
-  --font-size-small: 12.5px;
-  --font-size-grid: 13px;
+  --font-size-body: 16px;
+  --font-size-small: 14px;
+  --font-size-grid: 15px;
   --tag-weight: 650;
 
   /* the grid */
-  --row-height: 22px;                 /* every row, one height; the page reads it at load */
+  --row-height: 24px;                 /* every row, one height; the page reads it at load, and again when the text size changes */
   --tab-size: 4;                      /* how wide a tab inside a value shows */
   --row-tint: transparent;            /* a row's tint; each state below sets it (selected, found, changed…) */
   --row-selected: color-mix(in srgb, var(--color-accent) 30%, transparent);
@@ -110,7 +127,6 @@
   --row-hover: color-mix(in srgb, var(--color-accent) 10%, transparent);
   --line-number-color: var(--color-text-muted);
   --level-color: var(--color-text-muted);
-  --id-color: var(--color-accent-hover);
   --tag-color: var(--color-text);
   --value-color: var(--color-text);
   --pointer-color: var(--color-info);
@@ -118,11 +134,11 @@
   --match-bg: color-mix(in srgb, var(--color-warning) 55%, transparent);
   --special-bg: color-mix(in srgb, var(--color-warning) 30%, transparent);
   --mark-error: var(--color-danger);
-  --mark-note: var(--color-warning);
   --mark-size: 7px;
   --fold-color: var(--color-text-muted);   /* the ▸ ▾ that shut and open a block */
   --section-bg: color-mix(in srgb, var(--color-text) 7%, transparent);   /* a section's row, between record types */
   --fold-size: 1.25em;
+  --fold-hit: 24px;                       /* the least a fold's click area is, each way */
   --hidden-bg: var(--hover-bg);            /* the count of lines a shut block hides */
 
   /* editing: what is not yet saved */
@@ -164,13 +180,25 @@
   --gap: 10px;
   --radius: 0.5rem;                   /* inputs, buttons and cards, as the sibling project's */
   --input-padding: 0.3rem 0.6rem;
-  --focus-ring: 2px solid var(--color-accent);
+  --focus-ring: 2px solid var(--focus-color);
   --pressed-bg: color-mix(in srgb, var(--color-accent) 35%, transparent);
   --hover-bg: color-mix(in srgb, var(--color-accent) 18%, transparent);
   --drop-bg: color-mix(in srgb, var(--color-accent) 18%, transparent);
   --dialog-width: 46rem;
   --shadow: 0 12px 36px color-mix(in srgb, var(--color-text) 24%, transparent);
   --backdrop: color-mix(in srgb, var(--color-text) 22%, transparent);
+}
+
+/* Settings, Text, Larger: a class on <html> that sets the type and the rows' heights again. It comes
+   after the block above, which it overrides. */
+.text-larger {
+  --font-size-title: 24px;
+  --font-size-file: 19px;
+  --font-size-body: 20px;
+  --font-size-small: 18px;
+  --font-size-grid: 19px;
+  --row-height: 30px;
+  --list-row-height: 32px;
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -191,7 +219,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 
 .button {
   padding: var(--input-padding);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
@@ -202,11 +230,11 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .button:disabled { opacity: 0.4; cursor: default; }
 .button:focus-visible { outline: var(--focus-ring); outline-offset: -1px; }
 
-/* the sibling project's .sibling-input: half-rem radius, a one-pixel border, the gold ring when in use */
+/* the sibling project's .sibling-input: half-rem radius, a one-pixel border, the ring when in use */
 .input {
   min-width: 0;
   padding: var(--input-padding);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: var(--color-bg);
   color: var(--color-text);
@@ -241,7 +269,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   background: var(--color-bg-card);
   border-bottom: 1px solid var(--color-border);
 }
-.bar-top { display: flex; align-items: center; gap: var(--gap); min-width: 0; }
+.bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--gap); min-width: 0; }   /* wraps when the window is too narrow for one line, as it is at the larger text */
 .app-name { white-space: nowrap; }
 .app-title { font-family: var(--font-title); font-size: var(--font-size-title); letter-spacing: 0.01em; }
 .app-title-gedcom { color: var(--title-color); font-weight: 700; letter-spacing: 0.06em; }
@@ -440,7 +468,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .item.is-removed { box-shadow: inset var(--mark-bar) 0 0 var(--mark-removed); }
 .item.is-removed .main { text-decoration: line-through; color: var(--color-text-muted); }
 .item.is-moved { box-shadow: inset var(--mark-bar) 0 0 var(--mark-moved); }
-.item.is-head .fold { flex: none; width: 1.4em; margin-left: -4px; }
+.item.is-head .fold { flex: none; width: max(1.4em, var(--fold-hit)); margin-left: -4px; }
 
 /* -- the grid ---------------------------------------------------------------------------------- */
 
@@ -551,11 +579,13 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .mk.is-error::before { background: var(--mark-error); }
 .mk.is-note::before { background: var(--mark-note); }
 /* the indent, then the ▸ ▾ of a line with lines under it */
-.fd { flex: none; }
+.fd { flex: none; display: flex; }
 .fold {
-  display: inline-block;
-  width: 2ch;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max(2ch, var(--fold-hit));   /* the whole row high, and not less than --fold-hit wide: a click lands */
+  height: var(--row-height);
   color: var(--fold-color);
   font-size: var(--fold-size);
   line-height: 1;
@@ -574,7 +604,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   border-radius: var(--radius);
   background: var(--hidden-bg);
   color: var(--color-text-muted);
-  font-size: 0.85em;
+  font-size: var(--font-size-small);
 }
 .hc.is-changed { color: var(--mark-changed); box-shadow: inset 0 0 0 1px var(--mark-changed); }
 /* a line being typed: its box fills the row */
@@ -637,7 +667,7 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   padding: 0 2px;
   border-radius: 3px;
   background: var(--special-bg);
-  font-size: 0.85em;
+  font-size: var(--font-size-small);
 }
 
 .empty {
@@ -832,7 +862,7 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   width: 100%;
   min-height: var(--report-height);
   padding: 6px 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: var(--color-bg);
   color: var(--color-text);
@@ -866,3 +896,48 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .prose a { color: var(--color-accent-hover); }
 .prose-date { color: var(--color-text-muted); font-size: var(--font-size-small); }
 .prose-back { margin-top: 2.5em; }
+
+/* ---------------------------------------------------------------------------------------------- */
+/* The computer asks for less motion: nothing eases, and the side frames hide and show at once. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The computer forces its own colors (Windows contrast themes and the like). The browser then drops
+   the page's backgrounds and shadows, so what only a tint or a shadow showed is drawn again here in
+   the system's own colors, which it keeps: the selected line, a pressed button or tab, the ring
+   round a control, the gold line of a drag, and the dots of a change and of a finding. These are
+   the system's colors, not the palette's, so they are written here and not as properties.
+   forced-color-adjust: none, which the parts inside inherit, keeps the browser from drawing a plate
+   of its own behind their text; the box a line is typed in is given back to the browser. */
+@media (forced-colors: active) {
+  :root { --focus-color: CanvasText; }
+
+  .button[aria-pressed="true"], .icon-button[aria-pressed="true"], .tab[aria-selected="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: CanvasText;
+  }
+  .button[aria-pressed="true"]:focus-visible, .icon-button[aria-pressed="true"]:focus-visible, .tab[aria-selected="true"]:focus-visible { outline-color: HighlightText; }
+  .tab[aria-selected="true"] * { color: HighlightText; }
+
+  .fx { background: Canvas; }
+  .row.is-sel { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .row.is-sel .fx { background: Highlight; }
+  .row.is-sel * { color: HighlightText; }
+  .row.is-sel .edit { forced-color-adjust: auto; background: Field; color: FieldText; }
+  .row.is-sel mark, .row.is-sel .hc, .row.is-sel .ch { background: Canvas; color: CanvasText; }
+  mark { background: Mark; color: MarkText; }
+
+  .drop-line { background: Highlight; }
+
+  .cg.is-changed::before, .cg.is-added::before, .cg.is-moved::before, .mk.is-error::before { background: CanvasText; }
+  .mk.is-note::before { box-sizing: border-box; border: 2px solid CanvasText; background: transparent; }   /* an error is a full dot, a note a ring */
+  .row.is-sel .cg::before, .row.is-sel .mk.is-error::before { background: HighlightText; }
+  .row.is-sel .mk.is-note::before { border-color: HighlightText; }
+}

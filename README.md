@@ -18,6 +18,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.5.2 | on the web: gedcom-viewer.net serves the page, published from a version tag once the tests pass, the page's files alone; Open GEDCOM again, since online "upload" says the file goes somewhere, and it does not; the icon; a description for search engines; `privacy.html`, how the page treats a file, linked under the button; a content-security policy in both pages, which has the browser refuse every connection; the repository public, its history rewritten first — the real file's name became `RAW.ged`, and the commits' identity the owner's GitHub handle |
 | 0.5.3 | Report a problem, in Settings (the brief's P8, R1): a report of counts and codes, never a line of the file, in a box to read, change or cut; What happened, in the user's own words; Copy — the page sends nothing, and the original is kept nowhere. Its last line is a checksum, so a changed report reads as changed; `tools/report-check.js` reads one back |
 | 0.5.4 | six small fixes: the lines no longer scroll sideways when one opens for typing; the tab's title no longer holds the file's name, unless File name in the tab is turned on in Settings; spell check and page translation are off where the file's words show; the privacy page says plainly what the page sends, what it cannot control, and how to check it yourself; a notice that says why Chrome may refuse a folder for Save, and what to do; the README no longer names a path on one disk |
+| 0.5.5 | easier to read: text and borders reach the contrast the web's accessibility guidelines ask for (WCAG 2.2 AA) in all three looks; larger type (16 px) and rows (24 px), and a Text choice in Settings, Normal or Larger; a System choice for the theme, which follows the computer's light or dark and is what a new visitor gets, and Sunset is now called Dusk (a choice already kept still works); feedback@gedcom-viewer.net, an address that needs no GitHub account, beside the issue route for a report or a question; the line under Open GEDCOM now reads "The file does not leave your computer.", with a Privacy Policy link; less motion when the computer asks for it, and the system's own colors when it forces them; fold arrows at least 24 by 24 pixels to click; the content-security policy no longer allows inline styles; page translation is off for the file's name, facts and counts |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -68,7 +69,8 @@ keep traces of that.
 The strip above the lines holds **↑ Top** (line 1, as a jump, so Back returns), **← Back to …**
 while there is somewhere to go back to, and **Collapse all**, which shuts every record to its
 first line and every type to its row; it then reads **Expand all**, which opens every block and
-every type. **Settings**, in the top bar, holds the theme (Light · Sunset · Dark), Indent and its width,
+every type. **Settings**, in the top bar, holds the theme (System, Light, Dusk or Dark), the text size (Normal or
+Larger), Indent and its width,
 **Report a problem…** (below), **Bold surnames**, which shows the part of a name between slashes in bold, without
 the slashes, wherever a record is named — Records, the right frame, the dialogs — and never in a
 line as written, and **File name in the tab**, off unless turned on, which puts the file's name in the
@@ -84,7 +86,13 @@ name the file gives it — `content` in web formatting, `transcription`, `person
 GEDCOM** opens the computer's own file dialog; nothing is uploaded anywhere — the file is read
 here, and nothing leaves the machine; `privacy.html`, linked under the button, says so in full.
 
-Remembered between visits, in the browser: Indent on or off and its width, the theme, the two
+**System**, the theme a new visitor gets, is Light or Dark as the computer has it, and follows the computer while
+the page is open. **Larger** makes the type and every row taller together. When the computer asks for less
+motion, the side frames open and shut at once. When it forces its own colors (Windows contrast themes), the
+selected line, a pressed button or tab, the ring round a control, the gold line of a drag and the dots of a
+change and of a finding are drawn in the system's colors.
+
+Remembered between visits, in the browser: Indent on or off and its width, the theme, the text size, the two
 panel widths and whether each side frame is hidden, Bold surnames, File name in the tab, the Tags list's order,
 whether the change stamps are ticked, and whether the file's facts show. Never a file's name,
 content or place. Edit is off whenever a file opens.
@@ -158,7 +166,9 @@ encoding, the header's program, record counts, check findings by code and line n
 browser, Edit and the unsaved changes, and the first twelve characters of the file's sha256 — and
 never a line of the file, its name or its folder. It shows in a box to read, change or cut; **What
 happened** takes the user's own words; **Copy** puts the report as it reads, then What happened, on
-the clipboard, to paste into a new issue at github.com/bunahu/gedcom-viewer/issues. The page sends
+the clipboard, to paste into a new issue at github.com/bunahu/gedcom-viewer/issues, or into an email to
+feedback@gedcom-viewer.net, which needs no GitHub account (an issue is public and an email is not, so
+nothing goes into an issue that should not be public). A question can go to that address too. The page sends
 nothing, and the original is kept nowhere. The report's last line is a checksum of the lines above
 it, so a report changed after it was built reads as changed, on the page and in
 `node tools/report-check.js report.txt` (or `pbpaste | node tools/report-check.js`): as built,
@@ -179,7 +189,7 @@ node --test tests/*.test.js
 | Tests | `node --test tests/*.test.js` | all pass; the only skips are the tests that need the public files, when they are absent |
 | The real files | `node tools/check-real.js local/RAW.ged local/CLEANED.ged` | every number equals section 3 of the brief, for a file it measured; the probe's numbers for any other; an edit and a record deleted on each, the whole file checked again within 0.3 s, and undone to its sha256 |
 | The second opinion | `node tools/compare.js fixtures local/RAW.ged local/CLEANED.ged` | no number differs between `core.js` and `tools/baseline_probe.py` |
-| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; Save in place through a folder held in the page's memory; Save a copy downloaded in a browser with no pickers. `--only PART` walks one part alone (read-only, rest, editing, edges, third, save, copy) |
+| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save in place through a folder held in the page's memory; Save a copy downloaded in a browser with no pickers. `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look) |
 
 The tools print counts, tags, ids, line numbers, lengths and hashes only — never a value — so
 they are safe to run over a file that holds living people. The walk drives Google Chrome,
@@ -226,7 +236,7 @@ the computer either way; `privacy.html` says how.
 | `favicon.svg` · `favicon.ico` · `apple-touch-icon.png` | the icon: three lines of a file, each a level deeper, on the palette's gold |
 | `.github/workflows/publish.yml` | what puts a version on the web (Publish, above) |
 | `tools/report-check.js` | reads a problem report back: as built, changed after it was built, or no checksum |
-| `tests/` | the tests; `helpers.js` they share; `fake-handles.js`, in-memory files and folders for `save.js` |
+| `tests/` | the tests; `helpers.js` they share; `fake-handles.js`, in-memory files and folders for `save.js`; `contrast.js`, which reads `style.css` and measures contrast for `contrast.test.js` |
 | `fixtures/synthetic/` | small files written for the checks, fictional people only |
 | `tools/` | `baseline_probe.py` (the Python second opinion), `check-real.js`, `compare.js`; `walk.js`, which walks the page in headless Chrome, driven by `chrome.js` |
 | `spike/` | what the scoping session measured with, and `save-spike.html` (phase 0) |
@@ -235,9 +245,13 @@ the computer either way; `privacy.html` says how.
 
 Every colour, size and width is a custom property in the first blocks of `style.css`; the rules
 below them only use them. Change a value there and it changes everywhere it is used.
+`tests/contrast.test.js` measures the colours that carry text and the edges of controls, in all three
+looks, so a value that falls below its ratio fails there.
 
-**The sibling project's palette** — three blocks, as the sibling project has them: light (`:root`), `.sunset`, `.dark`. Theme
-steps light → sunset → dark.
+**The sibling project's palette**: three blocks, as the sibling project has them: light (`:root`), `.dusk`, `.dark`.
+Settings, Theme, offers System (Light or Dark, as the computer has it), Light, Dusk and Dark; the page puts the class
+`dusk` or `dark` on `<html>`. Two colours differ from the sibling project's, for contrast: `--color-danger` and
+`--color-text-muted`. Each block ends with a group of GEDCOM Viewer's own colours that differ by theme.
 
 | Property | Moves |
 |---|---|
@@ -245,13 +259,13 @@ steps light → sunset → dark.
 | `--color-bg-card` | the top bar, the main frame, the right frame, the lists |
 | `--color-bg-sidebar` | the left bar |
 | `--color-text` | the text |
-| `--color-text-muted` | quiet text: line numbers, levels, the facts line, counts' names |
-| `--color-border` | lines between parts; box edges; the bars you drag |
-| `--color-accent` | the gold: the focus ring, the selected line, pressed buttons |
-| `--color-accent-hover` | the sepia: ids |
+| `--color-text-muted` | quiet text: line numbers, levels, the facts line, counts' names (4.5 to 1 against the bars and the boxes, in each look) |
+| `--color-border` | lines between parts; the bars you drag. An input's and a button's own edge is `--control-border` |
+| `--color-accent` | the gold: the selected line, pressed buttons, the gold line of a drag |
+| `--color-accent-hover` | the sepia: the title, links |
 | `--color-info` | pointers (links) |
-| `--color-warning` | notes (N1–N7) |
-| `--color-danger` | errors (E1–E9); a line that did not parse |
+| `--color-warning` | the washes behind a search's match and a special character (a note's own text is `--mark-note`) |
+| `--color-danger` | errors (E1–E9) and removed lines, as text and as the dot; a line that did not parse (4.5 to 1 against the bars and the boxes, in each look) |
 | the rest (`--color-nonbio`, `--color-success`, `--color-entity-…`, `--color-affiliation`, `--color-ancestor`, `--color-assertion-mark`) | nothing yet; kept so the palettes stay the sibling project's |
 
 **GEDCOM Viewer's own** — drawn from the palette, so each theme carries them.
@@ -262,19 +276,23 @@ steps light → sunset → dark.
 | `--font-size-file` · `--file-bg` · `--file-border` | the open file's name |
 | `--font-body` | the type of everything but the lines (the sibling project's system sans) |
 | `--font-grid` | the lines' monospace, in the main frame and the right frame |
-| `--font-size-body` · `--font-size-small` · `--font-size-grid` | the three type sizes |
+| `--font-size-body` · `--font-size-small` · `--font-size-grid` | the three type sizes: 16 px, 14 px and 15 px, and none anywhere is under 14 px. Settings, Text, Larger, sets these and the two row heights again (the `.text-larger` block, below the properties) |
+| `--focus-color` | the ring round the control in use: gold in Dusk and Dark, a deep gold in Light; 3 to 1 against the three backgrounds. `--focus-ring` is the whole outline |
+| `--control-border` | the edge of an input and of a button; 3 to 1 against the three backgrounds, in each look |
 | `--tag-weight` | how strong a tag is |
-| `--row-height` | the height of every row in the main frame; the page reads it each time it lays the rows out |
+| `--row-height` | the height of every row in the main frame (24 px); the page reads it each time it lays the rows out, and again when Text changes, keeping the same line in view |
 | `--tab-size` | how wide a tab inside a value shows |
 | `--row-tint` | a row's tint, which each state below sets; the sticky left part of a row (its number, mark and fold) lays it over the frame's own colour |
 | `--row-selected` · `--row-hit` · `--row-hover` | the selected line; a search's lines; the line under the pointer |
-| `--line-number-color` · `--level-color` · `--id-color` · `--tag-color` · `--value-color` | the parts of a line |
+| `--line-number-color` · `--level-color` · `--tag-color` · `--value-color` | the parts of a line |
+| `--id-color` | a record's id, such as @I1@; set for each look, 4.5 to 1 against the lines' background |
 | `--pointer-color` | a pointer value |
 | `--raw-color` | a line that did not parse, shown as written |
 | `--match-bg` | the text a search found |
 | `--special-bg` | the mark for a control or line-break character inside a value (NEL, LS, ␋ …) |
-| `--mark-error` · `--mark-note` · `--mark-size` | the dot beside a line with a finding |
-| `--fold-color` · `--fold-size` | the ▸ ▾ that shut and open a block |
+| `--mark-error` · `--mark-size` | the dot beside a line with a finding; an error's count and code |
+| `--mark-note` | a note's dot, count and code; set for each look, 4.5 to 1 against the bars and the boxes |
+| `--fold-color` · `--fold-size` · `--fold-hit` | the ▸ ▾ that shut and open a block; the least its click area is, each way (24 px) |
 | `--hidden-bg` | the count of lines a shut block hides |
 | `--section-bg` | the row between two record types |
 | `--mark-changed` · `--mark-added` · `--mark-removed` · `--mark-moved` | what is not yet saved: a changed line, an added one, the rule where lines were removed, a moved line and the rule where it was taken from; the ● in the bar |
@@ -296,7 +314,7 @@ steps light → sunset → dark.
 | `--edit-bg` | the box a line is typed in |
 | `--left-width` · `--right-width` | the left bar and the right frame (also dragged, and remembered) |
 | `--split-width` · `--split-color` | the bars between them |
-| `--list-row-height` | the rows of Records, Checks, Changes and Tags |
+| `--list-row-height` | the rows of Records, Checks, Changes and Tags (26 px at the least) |
 | `--bar-padding` · `--gap` | space in the top bar |
 | `--radius` · `--input-padding` · `--focus-ring` | boxes and buttons, as the sibling project's |
 | `--pressed-bg` · `--hover-bg` | a pressed button; anything under the pointer |

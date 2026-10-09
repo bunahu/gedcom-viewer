@@ -37,7 +37,8 @@ kept.</li>
 
 <h2>What stays in your browser</h2>
 <p>Between visits the page remembers only its settings, in your browser's own storage on your
-computer: the theme, Indent and its width, Bold surnames, File name in the tab (on or off),
+computer: the theme (System, Light, Dusk or Dark), the text size (Normal or Larger), Indent and its
+width, Bold surnames, File name in the tab (on or off),
 the widths of the side frames and whether each is hidden, the Tags list's order, whether the change
 stamps are ticked, and whether the file's facts show. Never a file's name, its contents or where it
 is. Clearing this site's data in your browser removes all of it.</p>
@@ -45,9 +46,7 @@ is. Clearing this site's data in your browser removes all of it.</p>
 <h2>No network</h2>
 <p>The page carries its own content-security policy, which tells your browser to refuse requests,
 images, fonts and scripts from anywhere else; the browser enforces it, and you can read it in the
-page's source. The policy does let styles be inline, which Chrome needs for one of its own error
-messages when a _META holds broken XML; the page writes no inline style of its own, and
-a style can send nothing anywhere. The page's five files hold no code that fetches, posts or opens
+page's source. The page's five files hold no code that fetches, posts or opens
 a connection, and the project's tests check that on every change.</p>
 
 <h2>What the host sees</h2>
@@ -93,9 +92,12 @@ counts and codes: the file's size, lines, encoding, record counts and check find
 line number, the program that exported it, the browser, and the first characters of the file's
 hash. Never a line of the file, its name or its folder. You read it, change or cut anything, add
 what happened in your own words, and Copy puts it on your clipboard, to paste into a new issue in
-the repository. Nothing leaves the page on its own, and the original is kept nowhere. The report's
-last line is a checksum of the lines above it, so a report changed after it was built reads as
-changed, which is all it says about editing. Write nothing you would not want public.</p>
+the repository, or into an email to
+<a href="mailto:feedback@gedcom-viewer.net">feedback@gedcom-viewer.net</a>. A question can go to that
+address too, and it needs no GitHub account. An issue is public and an email is not. Nothing leaves
+the page on its own, and the original is kept nowhere. The report's last line is a checksum of the
+lines above it, so a report changed after it was built reads as changed, which is all it says about
+editing. In an issue, write nothing you would not want public.</p>
 
 <h2>Changes</h2>
 <p>Changes to this page are made in the repository, where each one is dated and visible.</p>

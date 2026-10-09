@@ -21,9 +21,12 @@
 // Bold surnames, a link selected whole, a clipped row's count, and E. Release 0.5.4 is walked in the
 // third round (the tab's title and its setting), in the rest of the page (the spell check and
 // translation attributes), and in a part of its own, scroll (a line opened for typing leaves the
-// grid where it was). --shots DIR saves pictures of the fictional files, and of nothing else.
+// grid where it was). Release 0.5.5 is walked in the rest of the page (the theme's first choice), in
+// the third round (Settings' controls), and in a part of its own, look (System, Dusk, the text size,
+// less motion, forced colors, and the policy with a _META that does not parse). --shots DIR saves
+// pictures of the fictional files, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
-// third, scroll, drags, save, copy. Exit 0 when every step passes.
+// third, scroll, drags, save, copy, look. Exit 0 when every step passes.
 //
 // Save in place is not walked here: its folder picker and its permission prompts need a person's
 // click. tests/save.test.js walks every other step of section 15's editing walk, over in-memory
@@ -421,14 +424,20 @@ async function restOfThePage(page, dir, shots) {
     ? `the scrollbar dragged from 0 to ${fmt(d.reached)} of ${fmt(d.max)} and back, the least ink ${(100 * d.least).toFixed(1)}%`
     : 'the scrollbar: its thumb could not be taken hold of in three tries');
   const themes = [];
-  for (const [k, name] of ['sunset', 'dark', 'light'].entries()) {
+  // 0.5.5: with no choice made, the theme is System, which draws Light when the computer is light (the
+  // Chrome of the walk is told it is, whatever the computer it runs on is set to)
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+  await page.waitFor("!document.documentElement.classList.contains('dark')");
+  const startsOn = await page.ev("(document.documentElement.className || 'light') + '/' + document.getElementById('theme-system').getAttribute('aria-pressed') + '/' + localStorage.getItem('gedview.theme')");
+  check(startsOn === 'light/true/null', `with no theme chosen, System is pressed and draws Light, and nothing is stored: ${startsOn}`);
+  for (const [k, name] of ['dusk', 'dark', 'light'].entries()) {
     await setting(page, `theme-${name}`);
     themes.push(await page.ev("(document.documentElement.className || 'light') + ' ' + getComputedStyle(document.body).backgroundColor"));
     if (k < 2) await shot(themes[k].split(' ')[0]);
   }
   const names = themes.map((t) => t.split(' ')[0]);
   const colours = new Set(themes.map((t) => t.slice(t.indexOf(' ') + 1)));
-  check(JSON.stringify(names) === '["sunset","dark","light"]' && colours.size === 3, `the three themes, chosen in Settings, each its own background: ${themes.join(' → ')}`);
+  check(JSON.stringify(names) === '["dusk","dark","light"]' && colours.size === 3, `the three themes, chosen in Settings, each its own background: ${themes.join(' → ')}`);
 
   // a file dropped on the page
   await page.ev(`(() => {
@@ -1039,6 +1048,7 @@ async function thirdRound(page, dir, shots) {
 
   // 3.3 — the _META drawn as it reads, above Joined; nothing loads
   const metaLine = m.texts.findIndex((t) => t.startsWith('1 _META')) + 1;
+  const errorsBefore = page.log.errors.length;
   await gotoLine(page, metaLine + 2);                                // one of its CONC lines
   const drawn = await page.ev(`(() => { const d = document.getElementById('detail');
     const titles = [...d.querySelectorAll('.detail-title')].map((t) => t.textContent);
@@ -1059,6 +1069,13 @@ async function thirdRound(page, dir, shots) {
   check(drawn.persons === 2 && drawn.person === 'Jane Fixture · 1 Jan 1900 · Fixtureville · 2 Feb 1950 · Fixture City' && drawn.transcription === 'Line one\nLine two' && drawn.copies >= 6,
     `the persons as a table (${drawn.person}); the transcription with its line break; a copy button on each of the ${drawn.copies} boxes`);
   check(drawn.title === 'GEDCOM Viewer' && storyCopied.includes('She lived there.'), 'the script inside the story never ran, and the story copies as text');
+  // 0.5.5: the policy allows no inline style, so Chrome refuses the story's own (a span's style, a <style>) in the inert
+  // document it is read in, with a message each in the console; none is drawn. They are taken out of what the walk's
+  // last step reads, once they are known to be only that.
+  await sleep(100);
+  const refusals = page.log.errors.splice(errorsBefore);
+  check(refusals.length > 0 && refusals.every((e) => /Applying inline style violates/.test(e)),
+    `the story's own styles (a span's, a <style>) are refused by the policy, in the inert document: ${refusals.length} message${refusals.length === 1 ? '' : 's'} of Chrome's in the console, nothing else; none of them is drawn`);
   await shot('meta');
 
   // 3.9 — a double-click selects a web address whole; with ⌥, a pointer whole, and nothing jumps
@@ -1131,8 +1148,8 @@ async function thirdRound(page, dir, shots) {
   const menu = await page.ev("[...document.querySelectorAll('#settings-menu button')].map((b) => b.id).join(',')");
   await page.ev("document.getElementById('settings-menu').hidePopover(); true");
   const inBar = await page.ev("['theme','fold-all','indent','surnames'].map((id) => !!document.querySelector('.bar #' + id)).join(',')");
-  check(menu === 'theme-light,theme-sunset,theme-dark,indent,surnames,tab-name,report' && inBar === 'false,false,false,false',
-    `Settings opens a menu holding ${menu.split(',').length} controls: the themes, Indent, Bold surnames, File name in the tab, Report a problem; none of them in the top bar`);
+  check(menu === 'theme-system,theme-light,theme-dusk,theme-dark,text-normal,text-larger,indent,surnames,tab-name,report' && inBar === 'false,false,false,false',
+    `Settings opens a menu holding ${menu.split(',').length} controls: the themes (System, Light, Dusk, Dark), the text size (Normal, Larger), Indent, Bold surnames, File name in the tab, Report a problem; none of them in the top bar`);
 
   // P8 — Report a problem: the report reads as counts and codes and holds no line of the file; cut
   // a line and it no longer reads as built; Copy puts the box as it reads, then What happened, on
@@ -1280,8 +1297,7 @@ async function fourthDrags(page, dir, shots) {
   // where this Chrome can stop answering (tools/chrome.js, `press`) — a record dragged beyond its
   // own type, and Esc letting go
   const i1 = line('0 @I1@ INDI');
-  await gotoLine(page, i1);
-  await page.ev("document.getElementById('grid').scrollTop = 1e9; true");   // as far down as it goes: the families mid-view
+  await gotoLine(page, i1);                                          // the jump puts the person three rows below the top, and the families further down, in view and clear of the frame's edges
   await sleep(60);
   const i1Rect = await page.ev(ROW_RECT(i1));
   const f2Rect = await page.ev(ROW_RECT(line('0 @F2@ FAM')));
@@ -1469,6 +1485,185 @@ async function copyWithoutPickers(page, dir, shots) {
   await page.waitFor("document.getElementById('dirty').hidden");
 }
 
+// ---------------------------------------------------------------------------------------------
+// 0.5.5: the look
+// ---------------------------------------------------------------------------------------------
+
+// Forty people of five lines each, one with a pointer to nothing, a family, and two media records:
+// a _META that parses and one that does not.
+function lookFiction() {
+  const L = ['0 HEAD', '1 SOUR gedview-walk', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8'];
+  for (let k = 1; k <= 40; k += 1) L.push(`0 @I${k}@ INDI`, `1 NAME Person${k} /Look/`, `1 SEX ${k % 2 ? 'F' : 'M'}`, '1 BIRT', `2 DATE ${1 + (k % 28)} JAN ${1800 + k}`);
+  L.push('1 FAMC @F99@', '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@',
+    '0 @O1@ OBJE', '1 FILE good.jpg', '1 _META <metadataxml><content><line>&lt;p&gt;Good <strong>story</strong>&lt;/p&gt;</line></content><cemetery>Look Cemetery</cemetery></metadataxml>',
+    '0 @O2@ OBJE', '1 FILE broken.jpg', '1 _META <metadataxml><content><line>broken</content></metadataxml>', '0 TRLR');
+  return `${L.join('\n')}\n`;
+}
+
+// What the grid and the lists look like: the pitch of its rows, the first line in view, the fold's box, the type, the lists' row heights.
+const LOOK_NOW = `(() => { const g = document.getElementById('grid'); const rows = [...g.querySelectorAll('.v-inner > div')].filter((r) => r.style.display !== 'none');
+  const f = g.querySelector('.fold:not(:empty)').getBoundingClientRect();
+  return { pitch: rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top, first: rows[0].querySelector('.ln').textContent, fold: [f.width, f.height],
+    font: getComputedStyle(g).fontSize, body: getComputedStyle(document.body).fontSize, small: getComputedStyle(document.querySelector('.version')).fontSize,
+    lists: ['records-list', 'checks-list', 'changes-list', 'tags-list'].map((id) => getComputedStyle(document.getElementById(id)).getPropertyValue('--row-height')).join(), cls: document.documentElement.className,
+    larger: document.getElementById('text-larger').getAttribute('aria-pressed') }; })()`;
+
+async function theLook(page, dir, shots) {
+  const file = path.join(dir, 'look.ged');
+  fs.writeFileSync(file, lookFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  const line = (text) => m.texts.indexOf(text) + 1;
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `look-${name}.png`)) : null);
+  const media = (features) => page.send('Emulation.setEmulatedMedia', { features });
+  const cls = () => page.ev('document.documentElement.className');
+  const pressed = () => page.ev("['system', 'light', 'dusk', 'dark'].filter((n) => document.getElementById('theme-' + n).getAttribute('aria-pressed') === 'true').join()");
+  const stored = (key) => page.ev(`localStorage.getItem('gedview.${key}')`);
+  const reload = async () => { await page.goto(`file://${path.join(ROOT, 'index.html')}`); };
+  console.log(`\n== the look (0.5.5), on a fictional file of ${fmt(m.n)} lines`);
+
+  // System follows the computer while the page is open; a chosen theme does not; a Sunset kept from before reads as Dusk
+  await media([{ name: 'prefers-color-scheme', value: 'light' }]);
+  await page.waitFor("!document.documentElement.classList.contains('dark')");
+  const first = `${await cls()}|${await pressed()}`;
+  await media([{ name: 'prefers-color-scheme', value: 'dark' }]);
+  await page.waitFor("document.documentElement.classList.contains('dark')");
+  const dark = `${await cls()}|${await pressed()}`;
+  await media([{ name: 'prefers-color-scheme', value: 'light' }]);
+  await page.waitFor("!document.documentElement.classList.contains('dark')");
+  const light = `${await cls()}|${await pressed()}`;
+  check(first === '|system' && dark === 'dark|system' && light === '|system' && (await stored('theme')) === null,
+    `System follows the computer, live: Light (${first}), then Dark (${dark}) the moment it changes, then Light again (${light}); nothing is stored`);
+  await setting(page, 'theme-dusk');
+  await media([{ name: 'prefers-color-scheme', value: 'dark' }]);
+  await sleep(100);
+  const dusk = `${await cls()}|${await pressed()}|${await stored('theme')}`;
+  check(dusk === 'dusk|dusk|"dusk"', `Dusk, chosen, stays Dusk when the computer is dark: ${dusk}`);
+  await media([{ name: 'prefers-color-scheme', value: 'light' }]);
+  await page.ev("localStorage.setItem('gedview.theme', JSON.stringify('sunset')); true");
+  await reload();
+  const sunset = `${await cls()}|${await pressed()}|${await stored('theme')}`;
+  check(sunset === 'dusk|dusk|"sunset"', `a Sunset kept from before reads as Dusk, and is not rewritten: ${sunset}`);
+  await page.ev("localStorage.setItem('gedview.theme', JSON.stringify('purple')); true");
+  await reload();
+  const unknown = `${await cls()}|${await pressed()}`;
+  check(unknown === '|system', `a theme the page does not know reads as System: ${unknown}`);
+  await page.ev("localStorage.removeItem('gedview.theme'); true");
+
+  // the text size: the rows laid out again at their new height, the same line in view, the fold's box big enough
+  await page.openFile(file);
+  await gotoLine(page, line('1 FAMC @F99@'));
+  await sleep(100);
+  const count = await page.ev(ROWS);
+  const normal = await page.ev(LOOK_NOW);
+  check(normal.pitch === 24 && normal.body === '16px' && normal.font === '15px' && normal.small === '14px' && normal.lists === '26px,26px,26px,26px' && normal.fold[0] >= 24 && normal.fold[1] >= 24 && normal.larger === 'false',
+    `Normal, the default: rows ${normal.pitch} px apart, type 16, 15 and 14 px, the lists' rows ${normal.lists.split(',')[0]}, a fold ${normal.fold.map((x) => Math.round(x)).join(' by ')} px`);
+  await shot('normal');
+  await setting(page, 'text-larger');
+  await sleep(100);
+  const larger = await page.ev(LOOK_NOW);
+  check(larger.pitch === 30 && larger.body === '20px' && larger.font === '19px' && larger.lists === '32px,32px,32px,32px' && larger.fold[1] >= 30 && larger.cls === 'text-larger' && larger.larger === 'true' && (await stored('textSize')) === '"larger"',
+    `Larger: rows ${larger.pitch} px apart, type 20 and 19 px, the lists' rows ${larger.lists.split(',')[0]}, and remembered`);
+  check(larger.first === normal.first && (await page.ev(ROWS)) === count, `the same line, ${normal.first}, stays at the top of the view, and the grid is as long as before (${fmt(count)} rows)`);
+  await shot('larger');
+  await reload();
+  const kept = await page.ev("document.documentElement.className + '|' + document.getElementById('text-larger').getAttribute('aria-pressed')");
+  check(kept === 'text-larger|true', `Larger is remembered across a reload: ${kept}`);
+
+  // a line opened for typing, and a block dragged: the box is a row high, and the gold line sits on a row's edge, at either size
+  await page.openFile(file);
+  await page.click("document.getElementById('edit')");
+  for (const size of ['larger', 'normal']) {
+    if (size === 'normal') await setting(page, 'text-normal');
+    await sleep(100);
+    const nameLine = line('1 NAME Person2 /Look/');
+    await gotoLine(page, nameLine);
+    await openEditBox(page);
+    const box = await page.ev("(() => { const i = document.querySelector('#grid input.edit'); const r = i.closest('.row').getBoundingClientRect(); const b = i.getBoundingClientRect(); return { row: r.height, box: b.height, top: b.top - r.top, ring: getComputedStyle(i).outlineStyle }; })()");
+    await page.key('Escape', 'Escape', 27);
+    await page.waitFor("!document.querySelector('#grid input.edit')");
+    const rec = (k) => line(`0 @I${k}@ INDI`);
+    await gotoLine(page, rec(2));
+    const from = await page.ev(ROW_RECT(rec(3)));
+    const to = await page.ev(ROW_RECT(rec(2)));
+    await page.mouse('mouseMoved', from.x, from.y);
+    await page.mouse('mousePressed', from.x, from.y);
+    await page.mouse('mouseMoved', from.x, from.y - 8, { button: 'left', buttons: 1 });
+    await page.mouse('mouseMoved', to.x, to.top + 2, { button: 'left', buttons: 1 });
+    await sleep(60);
+    const held = await page.ev(`(() => { const d = document.querySelector('#grid .drop-line'); const b = d.getBoundingClientRect(); return { shown: !d.hidden, off: Math.abs(b.top + b.height / 2 - ${to.top}), h: b.height }; })()`);
+    await page.mouse('mouseReleased', to.x, to.top + 2);
+    await page.waitFor("document.getElementById('changes-count').textContent === '1'");
+    await page.key('z', 'KeyZ', 90, 4);
+    await page.waitFor("document.getElementById('changes-count').textContent === ''");
+    const high = size === 'larger' ? 30 : 24;
+    check(box.row === high && box.box === high && box.top === 0 && box.ring === 'solid', `${size}: the box a line is typed in is one row high (${box.box} px) and fills it, with its ring`);
+    check(held.shown && held.off < 1.5 && held.h === 2, `${size}: the gold line of a drag shows at the edge of the row it would land before (${held.off.toFixed(1)} px off, ${held.h} px thick)`);
+  }
+  await page.click("document.getElementById('edit')");
+
+  // a file too long for the taller rows is not laid out wrongly: Larger is refused with a plain notice
+  const big = path.join(dir, 'look-big.ged');
+  fs.writeFileSync(big, `0 HEAD\n1 CHAR UTF-8\n${'1 NOTE x\n'.repeat(1200000)}0 TRLR\n`);
+  await page.openFile(big);
+  await setting(page, 'text-larger');
+  await sleep(150);
+  const refused = await page.ev("({ cls: document.documentElement.className, normal: document.getElementById('text-normal').getAttribute('aria-pressed'), notice: document.getElementById('notice').hidden ? '' : document.getElementById('notice').textContent, stored: localStorage.getItem('gedview.textSize') })");
+  check(refused.cls === '' && refused.normal === 'true' && /too many lines/.test(refused.notice) && refused.stored === '"normal"',
+    `a file of 1,200,003 lines opens at Normal, and Larger is refused: "${refused.notice}"`);
+  await page.click("document.getElementById('notice')");
+
+  // less motion: the side frame hides at once, where it eased before
+  await page.openFile(file);
+  const frameAfterTwoFrames = () => page.ev(`(async () => { const side = document.getElementById('side'); document.getElementById('hide-left').click();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); const w = side.getBoundingClientRect().width;
+    await new Promise((r) => setTimeout(r, 400)); document.getElementById('hide-left').click(); await new Promise((r) => setTimeout(r, 400)); return w; })()`);
+  const eased = await frameAfterTwoFrames();
+  await media([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  const durations = await page.ev("getComputedStyle(document.getElementById('work')).transitionDuration");
+  const at_once = await frameAfterTwoFrames();
+  await media([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+  check(eased > 0 && at_once === 0 && durations === '0s', `less motion: the left frame is gone two frames after its icon is pressed (${at_once} px; it was ${Math.round(eased)} px, easing, without), and its transition lasts ${durations}`);
+
+  // forced colors: what a tint or a shadow showed is drawn in the system's colors
+  await media([{ name: 'forced-colors', value: 'active' }]);
+  await page.click("document.getElementById('edit')");
+  const nameLine = line('1 NAME Person2 /Look/');
+  await gotoLine(page, nameLine);
+  await openEditBox(page);
+  const typing = await page.ev("(() => { const i = document.querySelector('#grid input.edit'); const c = getComputedStyle(i); return { text: c.color, bg: c.backgroundColor }; })()");
+  await page.press('x', 'KeyX', 88, 'x');
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("document.querySelector('#grid .row.is-sel.is-changed')");
+  const forced = await page.ev(`(() => { const body = getComputedStyle(document.body).backgroundColor; const sel = document.querySelector('#grid .row.is-sel'); const css = (e) => getComputedStyle(e);
+    const dot = getComputedStyle(sel.querySelector('.cg'), '::before').backgroundColor; const edit = document.getElementById('edit'); const tab = document.querySelector('.tab[aria-selected="true"]');
+    return { body, row: css(sel).backgroundColor, rowAdjust: css(sel).forcedColorAdjust, dot, button: css(edit).backgroundColor, buttonAdjust: css(edit).forcedColorAdjust, tab: css(tab).backgroundColor, tabText: css(tab).color }; })()`);
+  const okForced = forced.row !== forced.body && forced.rowAdjust === 'none' && forced.dot !== 'rgba(0, 0, 0, 0)' && forced.button !== forced.body && forced.buttonAdjust === 'none' && forced.tab !== forced.body && forced.tabText !== forced.tab && typing.text !== typing.bg;
+  check(okForced, `forced colors: the selected line, the pressed Edit button and the selected tab are drawn in Highlight (not the page's background), the change dot is drawn, and a line being typed in is readable`);
+  await shot('forced');
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor("document.getElementById('changes-count').textContent === ''");
+  await page.click("document.getElementById('edit')");
+  await media([{ name: 'forced-colors', value: 'none' }]);
+
+  // the policy allows no inline style; a _META that parses is drawn, one that does not draws nothing and costs the console one line of the page's own
+  const policy = await page.ev("document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]').content");
+  check(/style-src 'self';/.test(policy) && !/unsafe/.test(policy), `the policy allows styles from the page's own file alone, none inline: ${policy}`);
+  const infos = [];
+  page.on((msg) => { if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'info') infos.push(msg.params.args.map((a) => a.value || '').join(' ')); });
+  const errorsBefore = page.log.errors.length;
+  await gotoLine(page, line('1 FILE good.jpg') + 1);
+  const goodDrawn = await page.ev("[...document.querySelectorAll('#detail .detail-title')].map((t) => t.textContent).join('|') + ' / ' + ((document.querySelector('#detail .meta-story') || {}).innerText || '')");
+  check(goodDrawn.startsWith('content|cemetery') && goodDrawn.includes('Good story') && page.log.errors.length === errorsBefore, `a _META that parses is drawn as it reads (${goodDrawn.split(' / ')[0]}), and the console says nothing`);
+  await gotoLine(page, line('1 FILE broken.jpg') + 1);
+  await sleep(200);
+  const brokenShows = await page.ev("({ titles: [...document.querySelectorAll('#detail .detail-title')].map((t) => t.textContent).join('|'), story: !!document.querySelector('#detail .meta-story'), value: document.querySelector('#detail .detail-value').textContent.slice(0, 22), block: !!document.querySelector('#detail parsererror, body parsererror') })");
+  const fresh = page.log.errors.splice(errorsBefore);                 // what Chrome says about its own error block: taken out, so the walk's last step sees only the page's own
+  check(!brokenShows.story && !brokenShows.titles.includes('content') && brokenShows.value === '<metadataxml><content>' && !brokenShows.block,
+    'a _META that does not parse draws nothing: the right frame shows the line as written, and no error block of Chrome\'s is on the page');
+  check(fresh.length > 0 && fresh.every((e) => /Applying inline style violates/.test(e)) && infos.length === 1 && /^GEDCOM Viewer: a _META held XML that does not parse/.test(infos[0]) && /Nothing was sent anywhere\.$/.test(infos[0]),
+    `the console holds Chrome's ${fresh.length} refusal${fresh.length === 1 ? '' : 's'} of its own style, and one line of the page's own: "${infos[0]}"`);
+}
+
 async function waitForFile(dir, pattern, timeout = 10000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
@@ -1532,6 +1727,7 @@ async function waitForFile(dir, pattern, timeout = 10000) {
     if (part('drags')) await inChrome((page) => fourthDrags(page, dir, shots));
     if (part('save')) await inChrome((page) => saveInPlace(page, dir));
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
+    if (part('look')) await inChrome((page) => theLook(page, dir, shots));
     console.log('\n== the whole walk');
     check(log.errors.length === 0, `no error in the console${log.errors.length ? `: ${log.errors.join(' | ')}` : ''}`);
     // file:// is the page and its files; blob: is a download the page made of its own bytes
