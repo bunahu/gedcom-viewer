@@ -36,7 +36,7 @@ All from the owner, 2026-09-28, in the scoping session.
 | # | Ruling | His words |
 |---|---|---|
 | R1 | **One web page, nothing behind it.** | "A (it matches what the sibling project looks like, for now, and I can customize the UI)" |
-| R2 | **The date goes in file NAMES, and an edit log sits beside the file.** | "In the file's name. Also b., sure." |
+| R2 | **The date goes in file NAMES, and an edit log sits beside the file.** The log was cut on 2026-10-08 (P5, section 10); the date in the name stands. | "In the file's name. Also b., sure." |
 | R3 | **A last-updated date inside the file only where the standard has one, with a NOTE under it that explains it.** | "c is if GEDCOM supports last updated, and can add a NOTE under the timestamp explaining it; if not, no." |
 | R4 | **Its own folder and its own local git repo**, beside `sibling/`; the name is gedview. | "your recs. gedview is fine." |
 | R5 | **Every assumption put to him stands** (they are the rules of sections 5–10). | "Decided: yes to everything." |
@@ -109,9 +109,9 @@ where session 1 walked the page.
 | Capability | Result | Consequence |
 |---|---|---|
 | Secure context | yes | the file-access features are offered |
-| `showOpenFilePicker` · `showSaveFilePicker` · `showDirectoryPicker` | there | Save can write in place |
-| A handle from a file dropped on the page | there | a dropped file can be saved in place too |
-| `FileSystemDirectoryHandle.resolve` | there | the page can prove the folder holds the file |
+| `showOpenFilePicker` · `showSaveFilePicker` · `showDirectoryPicker` | there | Save writes a dated copy through `showSaveFilePicker` (10.2, from 0.5.6); `showDirectoryPicker` was Save in place until then |
+| A handle from a file dropped on the page | there | a dropped file has a handle, so 10.2 step 6 can refuse the original |
+| `FileSystemDirectoryHandle.resolve` | there | proved the folder held the file, until 0.5.6 |
 | `crypto.subtle.digest` (sha256) | works | hashes for the log and the read-back checks |
 | A sibling file loaded as a classic `<script src>` | loads | **the scripts are classic scripts** |
 | `import()` of a sibling module | **refused** | no ES modules |
@@ -119,10 +119,12 @@ where session 1 walked the page.
 | `new Worker(siblingFile)` | **refused** | no file-based workers (a Blob worker works; none is needed) |
 | `localStorage`, IndexedDB | work, and last between runs | preferences can be remembered |
 | The origin-private file system | **refused** | it cannot stand in for real handles in a test |
+| A directory grant on Downloads, Desktop, Documents or the home folder | **refused** by Chrome: "Can't open this folder" (the readiness review of 2026-10-08, from the Chromium source; not walked here) | a folder grant could never cover a file sitting straight in Downloads, where exports land |
+| A file saved inside one of those folders through `showSaveFilePicker` | allowed by the same source (files and folders inside them are not refused); to be seen in the 0.5.6 walk | a dated copy can go beside the original wherever it is |
 
 Firefox (the owner's default browser) and Safari have none of the three pickers (MDN's
-compatibility data, checked 2026-09-28). There gedview reads, checks and edits, and "Save a copy"
-is a download.
+compatibility data, checked 2026-09-28). There gedview reads, checks and edits, and Save is a download
+(**Download a copy**, 10.2).
 
 **Not verified — it needs a human click:** the pickers' permission prompts and a real write in
 place. That is phase 0.
@@ -140,9 +142,9 @@ These are the rules the build must not break. A change that breaks one is wrong,
 | I3 | **Nothing is normalized.** No trimming, no re-wrapping of `CONC`/`CONT`, no change of case, line ending, encoding or spacing. |
 | I4 | **The indent is on the screen only.** It is never written to a file. |
 | I5 | **Nothing leaves the machine.** No network request of any kind — no CDN, no web font, no analytics. |
-| I6 | **Every write in place is preceded by a backup** of the file as it is on disk, read back and compared, and followed by a read-back of the file itself. |
-| I7 | **A file that changed on disk** since it was opened (or last saved) is never overwritten. |
-| I8 | **The only change gedview makes on its own is the change stamp** (F1). It is listed before the save and in the log, like any other change. |
+| I6 | **The original is never written.** A save writes a new dated file; a save that resolves to the original's own file is refused (10.2 step 6). Restated 2026-10-08; before it: every write in place preceded by a backup, read back and compared. |
+| I7 | **A copy that does not read back as written is said loudly**, and the original stands regardless (10.2 step 7). Restated 2026-10-08; before it: a file that changed on disk was never overwritten, which nothing now does. |
+| I8 | **The only change gedview makes on its own is the change stamp** (F1). It is listed before the save and in the Changes tab, like any other change. |
 | I9 | **The repo never holds a real GEDCOM, a log or a backup.** Test files are public or written for the test. |
 | I10 | **Nothing is dropped silently.** A delete is explicit, previewed when it reaches beyond one line, and undoable. |
 | I11 | **What cannot be written correctly is refused, loudly** — a character the file's encoding cannot hold, a line whose bytes could not be read. |
@@ -345,82 +347,80 @@ changed line, or lost one. A record whose own level-0 line was removed is a dele
 
 ## 10. Saving
 
+Rewritten 2026-10-08 for 0.5.6 (P5, shape S3, the log cut; section 19). The rule above all:
+**the original is never written.** A save writes a new, dated file, where the person chooses,
+through the computer's own Save dialog; in a browser without that dialog it is a download. No
+folder is ever asked for. There is no backup, because the original is the backup, and no log:
+the copy carries the change stamps (10.4), a comparison of the original and the copy shows every
+line that changed, and the Changes tab copies the list of changes as text (10.3). Until 0.5.6 is
+built, the page still saves in place as 0.5 did; the old section 10 is in this file's history.
+
 ### 10.1 Names
 
 The timestamp is local time, `YYYY-MM-DDTHHMMSS`. The stem is the file's name without its last
-extension when that is `.ged` or `.gedcom` (any case); the extension is kept as written.
+extension when that is `.ged` or `.gedcom` (any case); the extension is kept as written. A stem
+that itself ends in `.<timestamp>` (a copy opened and saved again) has that timestamp replaced,
+not stacked.
 
-| What | Name | Example, saved at 3:42:00 pm on 2026-09-28 |
+| What | Name | Example, saved at 3:12:00 pm on 2026-10-08 |
 |---|---|---|
-| Backup | `gedcom-viewer-history/<stem>.<timestamp><ext>.bak` (R7; `gedview-history/` before it) | `gedcom-viewer-history/RAW.2026-09-28T154200.ged.bak` |
-| Copy | `<stem>.<timestamp><ext>`; `-2`, `-3` if taken | `RAW.2026-09-28T154200.ged` |
-| Log | `<file name>.edits.log` | `RAW.ged.edits.log` |
+| The copy | `<stem>.<timestamp><ext>` | `RAW.2026-10-08T151200.ged` |
+| A copy of that copy | the same stem, the new timestamp | `RAW.2026-10-08T160500.ged`, not `RAW.2026-10-08T151200.2026-10-08T160500.ged` |
 
-All three live in the folder of the file that was opened. A backup does not end in `.ged`, so
-nothing that gathers GEDCOMs from a folder picks it up.
+The name is offered; the person may change it in the dialog, or rename the file after. Nothing
+else is written: no `gedcom-viewer-history/`, no `.bak`, no `.edits.log` (`.gitignore` keeps
+ignoring the ones already written).
 
-### 10.2 Save, in place — in this order, stopping at the first failure
+### 10.2 Save, in this order, stopping at the first failure
+
+"Changed" means the document differs from the original as it was opened. ● in the top bar and
+the Save button mean changed **since the last copy** (or since the open, when none has been
+written); the Changes tab counts from the original throughout.
 
 | Step | Act | On failure |
 |---|---|---|
-| 1 | Nothing changed → say so; write nothing | — |
-| 2 | No folder access yet → ask for the folder once (`showDirectoryPicker`, read-write, opening at the file) and prove it holds the file (`resolve` gives exactly the file's name). From then on reach the file **through the folder** (`getFileHandle(name)`), so the one grant covers the file, the backup and the log. | no folder, no save in place — offer Save a copy elsewhere |
-| 3 | Read the file from disk; its sha256 must equal the hash at open or at the last save | "The file changed on disk since it was opened." Offer Save a copy or Reload. Write nothing. |
-| 4 | Show the Save dialog: the list of changes, the note for this save, the change-stamp checkbox (F1) | — |
-| 5 | Apply the change stamps (10.4) as one undo step | — |
-| 6 | Build the bytes; hash them | — |
-| 7 | Write the backup from the bytes read in step 3; read it back; hashes equal | stop; the file is untouched |
-| 8 | Write the file; read it back; its hash equals step 6's | say so loudly and name the backup |
-| 9 | Append the log block (10.5) | say so; the save itself stands |
-| 10 | The new hash is the file's hash; `savedOrder` = `order` | — |
+| 1 | Nothing changed since the last copy → say so; write nothing | — |
+| 2 | The page's Save dialog: every change since the original (the stamps to come among them), the note for this save, the change-stamp checkbox (F1, V1). With the stamps unticked the note box is disabled: there is nowhere for a note to go | Cancel: nothing |
+| 3 | Apply the change stamps (10.4) as one undo step | — |
+| 4 | Build the bytes; hash them | — |
+| 5 | Ask where: `showSaveFilePicker`, the dated name offered, opening at the original (`startIn` its handle), accepting `.ged` and `.gedcom` | Cancel: the stamps are taken back; "No copy was written." |
+| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's) | "That is the original. GEDCOM Viewer never writes over it. Pick another name." The stamps are taken back; nothing is written |
+| 7 | Write the bytes; read them back; the hash equals step 4's | say so loudly and name the file; the original stands regardless |
+| 8 | The copy is the last copy: ● goes, Save turns off until the next change. The facts still name the original and its sha256 as opened; the page stays on the original | — |
+
+The notice after step 8: "Saved as RAW.2026-10-08T151200.ged." The computer's Save dialog asks
+for a name and a place and nothing else; there is no "allow this site" prompt, and Chrome's
+refusal to hand over Downloads, Desktop, Documents or the home folder whole does not apply to a
+file saved inside one of them (section 4).
+
+**In a browser with no pickers** (Safari, Firefox): the button reads **Download a copy**, and ⌘S
+does the same. Steps 1 to 4, then the bytes are downloaded under the dated name, wherever the
+browser puts downloads; no read-back is possible, and the notice says: "Downloaded as
+RAW.2026-10-08T151200.ged, where your browser keeps downloads." Step 8 as above: a download
+counts as the last copy, so leaving the page warns only for changes made since.
+
+There is one button, **Save** (⌘S). Save a copy and ⇧⌘S are gone. Nothing asks for a folder, so
+`grantFolder`, the folder grant held in memory and the 0.5.4 notice for a refused folder go too.
 
 **Building the bytes:** walk `order`; a run of original lines n, n+1, n+2 … is one slice of `bytes`
 from the first line's start to the last line's terminator; an added line is its text in the file's
 encoding, then its terminator. The file's prefix (a byte-order mark) comes first.
 
-### 10.3 Save a copy
+### 10.3 What stands in for the backup and the log
 
-Steps 1, 4, 5 and 6, then the copy is written into the same folder under its dated name, read
-back and compared, and a log block is appended to the **original's** log. The original on disk is
-untouched, so the document stays unsaved against it. With no folder access, the copy goes through
-`showSaveFilePicker` with the dated name offered, and the log block is offered as a second file.
-
-**In a browser with no pickers:** Save is off; Save a copy downloads the copy under its dated
-name, and the log block as `<file name>.<timestamp>.edits.log`.
-
-### 10.4 The change stamp (F1)
-
-For each changed record whose tag may carry one (section 2), at the moment of the save:
-
-| The record has | gedview does |
+| Was | Is |
 |---|---|
-| no `1 CHAN` | adds, at the record's end: `1 CHAN` · `2 DATE 28 SEP 2026` · `3 TIME 15:42:00` · `2 NOTE <the note>` |
-| a `1 CHAN` | sets its `2 DATE` and `3 TIME` (adding either if missing) and adds `2 NOTE <the note>` at the end of the block; notes already there stay |
+| the backup, written before the file was written over | the original, never written (I6) |
+| "the file changed on disk" refused (I7) | nothing on disk is ever written over, so there is nothing to refuse; the copy is written from the bytes the page read, and a change made to the original from outside, after it was opened, is not in the copy |
+| the log's `note` | the note, in each changed record's `2 NOTE` under its `1 CHAN` (10.4) |
+| the log's before and after lines | the original's sha256 on the facts line (P6, on demand); a copy's, in Terminal: `shasum -a 256 <copy>` |
+| the log's changed, added, removed and moved lines | the Changes tab, which gains a **copy** button at its top like every box's: it puts the list below on the clipboard, and the page writes it nowhere. A comparison of the original and the copy (`diff RAW.ged RAW.2026-10-08T151200.ged` in Terminal, or any file-comparison app) shows every line that differs |
 
-| Detail | Rule |
-|---|---|
-| Date | day without a leading zero, month as `JAN` … `DEC`, four-digit year |
-| Time | `HH:MM:SS`, 24-hour, local; in a file whose version starts with 7, UTC with a closing `Z` |
-| The note | what the owner typed for this save; if he typed nothing, `Edited by hand in GEDCOM Viewer.` (R7). One line, 200 characters at most. |
-| A deleted record | has nothing to stamp; the log alone records it |
-| `HEAD`, `TRLR`, records under other tags | never stamped; the log alone records the change |
-| A record changed only by an earlier stamp | is not stamped again |
-| A stamp gedview added since the last save in place (a copy was saved in between) | is **replaced** — its date, time and note set anew — never added to |
-
-The stamps are changes like any other: they show in the Save dialog before the save, in the grid
-after it, and in the log.
-
-### 10.5 The log
-
-UTF-8, LF, append-only — opened with `keepExistingData`, written at its end, never rewritten.
-One block per save:
+The Changes text:
 
 ```
-=== 2026-09-28T15:42:00-04:00  save  RAW.ged
-note     Edited by hand in GEDCOM Viewer.
-before   sha256 <64 hex>  4200000 bytes  123456 lines
-after    sha256 <64 hex>  4200092 bytes  238491 lines
-backup   gedcom-viewer-history/RAW.2026-09-28T154200.ged.bak
+GEDCOM Viewer  changes to RAW.ged  as of 2026-10-08T15:12:00-04:00
+original  sha256 <64 hex>  4200000 bytes  123456 lines
 changed  41202 -> 41202  @I42@ INDI
   - 1 NAME Jane /Fixtur/
   + 1 NAME Jane /Fixture/
@@ -428,12 +428,39 @@ removed  52310           @F45@ FAM
   - 1 CHIL @I42@
 added             41248  @I42@ INDI  (change stamp)
   + 1 CHAN
+moved    8120 -> 8134    @I7@ INDI  (15 lines)
 ```
 
-The first number is the line's place before the save, the second its place after. A copy's block
-opens `=== <time>  copy  <file> -> <copy's name>` and has no `backup` line.
-The log holds what the file holds — living people included — and belongs beside the file, never in
-a repo (I9).
+The first number is the line's place in the original, the second its place now. A move names
+what moved and how many lines, never their text. The text holds what the file holds, living
+people included, and belongs beside the file, never in a repo (I9).
+
+### 10.4 The change stamp (F1)
+
+For each changed record whose tag may carry one (section 2), at the moment of the save:
+
+| The record has | GEDCOM Viewer does |
+|---|---|
+| no `1 CHAN` | adds, at the record's end: `1 CHAN`, `2 DATE 8 OCT 2026`, `3 TIME 15:12:00`, `2 NOTE <the note>` |
+| a `1 CHAN` | sets its `2 DATE` and `3 TIME` (adding either if missing) and adds `2 NOTE <the note>` at the end of the block; notes already there stay |
+
+| Detail | Rule |
+|---|---|
+| Date | day without a leading zero, month as `JAN` … `DEC`, four-digit year |
+| Time | `HH:MM:SS`, 24-hour, local; in a file whose version starts with 7, UTC with a closing `Z` |
+| The note | what was typed for this save; if nothing, `Edited by hand in GEDCOM Viewer.` (R7). One line, 200 characters at most |
+| A deleted record | has nothing to stamp; the Changes tab alone records it |
+| `HEAD`, `TRLR`, records under other tags | never stamped; the Changes tab alone records the change |
+| A record changed only by an earlier stamp | is not stamped again |
+| A stamp added for an earlier copy, in this visit | is **replaced** when the record changes again: its date, time and note set anew, never added to |
+
+The stamps are changes like any other: they show in the Save dialog before the save, in the grid
+after it, in the Changes tab, and in the copy.
+
+### 10.5 The log
+
+Retired 2026-10-08 (P5; section 19). Its block format lives on as the Changes text (10.3), less
+the `after` and `backup` lines. `*.edits.log` stays in `.gitignore` for logs already written.
 
 ---
 
@@ -510,7 +537,7 @@ facts show. Never a file's name, content or handle; and Edit is off whenever a f
 | `index.html` | the markup; loads `core.js`, `save.js`, `ui.js` as classic scripts, in that order | — |
 | `style.css` | the whole look, its properties first | — |
 | `core.js` | bytes → encoding → lines → shape → records and pointers → checks → counts → labels; the document, the edits, undo, the net change, the stamps, the bytes of a save | **no** |
-| `save.js` | names, the save and copy pipelines, the log block — over "handles" passed to it | **no** |
+| `save.js` | the dated name, the save of 10.2 over the handle the dialog gives, the read-back, the Changes text (10.3); the bytes a browser with no pickers downloads | **no** |
 | `ui.js` | the grid, panels, dialogs, keys; the only file that knows the pickers exist | yes |
 | `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script (0.5.2) | — |
 | `favicon.svg` · `favicon.ico` · `apple-touch-icon.png` | the icon (0.5.2) | — |
@@ -619,7 +646,7 @@ findings it expects, by code and line number.
 | Undo and redo | any sequence of edits, fully undone, saves identical |
 | Net change | changed / removed / added, with the right line numbers before and after |
 | Stamps | both rows of 10.4; the version-7 time; a deleted record gets none; a second save with no edit writes nothing |
-| Save in place, fake handles | the order of 10.2: backup before file; a failing backup leaves the file untouched; the log grows and is never rewritten |
+| Save, fake handles | the order of 10.2: the original's own handle refused at step 6 and nothing written; a copy that reads back wrong said loudly, the original untouched; the stamps taken back on a cancel; the dated name, and a stem's old timestamp replaced; the Changes text of 10.3 |
 | Changed on disk | step 3 refuses |
 | Names | the three names of 10.1, with `.GED`, `.cleaned.ged`, and a taken name |
 | No network | the five files of the page (`index.html`, `style.css`, `core.js`, `save.js`, `ui.js`) hold no `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `import(`, `@import`, `url(http`, `http://` or `https://` — no exceptions; an inline SVG in HTML needs no namespace; `index.html` and `privacy.html` each carry a content-security policy — `default-src 'none'`, `connect-src 'none'`, scripts the page's own alone; styles may be inline in `index.html`, since Chrome styles its own XML parse-error block inline in the inert document a malformed `_META` is read in, and a style can reach nothing outside the page — ahead of anything they load, which the browser enforces and the test reads (0.5.2) |
@@ -734,6 +761,10 @@ from the standard (5.5.1 and 7.0) — the validation that would let a moved bloc
 place. The same table could check a file's own lines against the standard (a `BIRT` under a `FAM`,
 say), which section 7 does not do today: its checks are structural only.
 
+Raised 2026-10-08, with P5: after a save the page could move onto the copy, as Save As does in a
+desktop app, so that the next save derives from it and Changes count from it; version 1 stays on
+the original (10.2 step 8).
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
@@ -838,7 +869,7 @@ between record types, Go to Line… takes a range, and the change stamps are sho
 Findings come back by step number.
 
 On a **copy** of the raw export in a folder of its own, `local/walk/` (git ignores all of `local/`),
-where the backups and the log will go. Open the page with
+where the dated copies will go. Open the page with
 `open -a "Google Chrome" ~/Desktop/claude/gedcom-viewer/index.html` — `index.html` stays where it
 is, beside the four files it loads.
 
@@ -885,20 +916,20 @@ is, beside the four files it loads.
 | 19b | Press on the row **▾ SOUR Sources …** and drag it up to the row **▾ INDI People …**; release. Then ⇧⌘S, read the dialog, Cancel | the sources stand before the people; **Changes 3**: `moved: section SOUR · … records · … lines`; the dialog lists the move as one entry, and **Change stamps · 1 record** — the person of 19a, not the sources (3.4a). Try dragging a person down to the families: the gold line stops at the last edge among the people |
 | 19c | **Undo**, twice | the sources back, then the BIRT block back; **Changes 1** — the name of step 18 alone |
 
-**D. Save in place, with the change stamp** — steps 20–24 are of 0.5's saving; 0.6 replaces it (P5), and these steps with it.
+**D. Save, as a dated copy, with the change stamp** (rewritten 2026-10-08 for 0.5.6, P5)
 
 | # | Do | Expect |
 |---|---|---|
-| 20 | **Save** (⌘S). Pick the `walk` folder, and let Chrome edit files there | the dialog lists 1 change and **Change stamps · 1 record**, with a note box (left empty, the note is *Edited by hand in GEDCOM Viewer.*). Save |
-| 21 | Go to that person's record | it ends with `1 CHAN` · `2 DATE` today · `3 TIME` now · `2 NOTE` the note; ● gone; Changes 0 |
-| 22 | `shasum -a 256 ~/Desktop/claude/gedcom-viewer/local/walk/gedcom-viewer-history/*.bak` | one backup, `<sha256>`: the file as it was |
-| 23 | In Finder, select `RAW.ged.edits.log` beside the copy; Space | one `save` block: the time, the note, sha256 before (`<sha256>`) and after, the backup's name, the NAME line before → after, and the four stamp lines |
+| 20 | **Save** (⌘S) | the dialog lists 1 change and **Change stamps, 1 record**, with a note box (left empty; the note is *Edited by hand in GEDCOM Viewer.*). Save. The computer's Save dialog opens in `walk`, offering `RAW.<today>T<now>.ged`; keep the name; Save |
+| 21 | Go to that person's record | it ends with `1 CHAN`, `2 DATE` today, `3 TIME` now, `2 NOTE` the note; ● gone; Save off; Changes 1 still (counted from the original); the facts still name RAW.ged and its sha256 |
+| 22 | `shasum -a 256 local/walk/RAW.ged local/walk/RAW.*.ged` | RAW.ged is `<sha256>`, the file as opened, untouched; the copy differs |
+| 23 | `diff local/walk/RAW.ged local/walk/RAW.<stamp>.ged`; then, in the viewer, Changes, **copy**, and paste into TextEdit | the diff shows the NAME line before and after and the four stamp lines; the pasted text opens with the original's name and sha256 and lists the same change and the stamp |
 
 **E. Back to the original**
 
 | # | Do | Expect |
 |---|---|---|
-| 24 | **Undo** twice (the stamp, then the edit); **Save** with **Change stamps** unticked | the dialog lists the name back and the four stamp lines removed, and no new stamp. Then `shasum -a 256 ~/Desktop/claude/gedcom-viewer/local/walk/RAW.ged` is `<sha256>` |
+| 24 | **Undo** twice (the stamp, then the edit); **Save** with **Change stamps** unticked | the dialog lists the name back and the four stamp lines removed, and no new stamp; the note box is disabled. Save; keep the offered name. The new copy's sha256 is `<sha256>`: an edit undone saves the original's bytes again (I1) |
 
 The box remembers how it was left: tick it again before a save that should stamp.
 
@@ -924,16 +955,16 @@ The box remembers how it was left: tick it again before a save that should stamp
 
 | # | Do | Expect |
 |---|---|---|
-| 33 | **Save a copy** (⇧⌘S) | `RAW.2026-09-29T……ged` beside the copy; the copy itself unchanged; a `copy` block in the log |
+| 33 | **Save**, and in the computer's dialog type the original's name, `RAW.ged`, in `walk` | refused: "That is the original. GEDCOM Viewer never writes over it. Pick another name." Nothing written; `shasum` of RAW.ged unchanged |
 
 **I. What must refuse, and a clean fix**
 
 | # | Do | Expect |
 |---|---|---|
-| 34 | `printf '0 NOTE changed from outside\n' >> ~/Desktop/claude/gedcom-viewer/local/walk/RAW.ged`; in the viewer, edit any line; **Save** | it refuses — the file changed on disk since it was opened — and writes nothing |
-| 35 | With that edit unsaved, reload the tab (⌘R) | Chrome asks first; leave |
-| 36 | Reopen the walk copy | one line more than the file; Checks: 1 error, **No HEAD first / TRLR last**; the counts bar gains Notes 1 |
-| 37 | Edit on; Go to Line… the line after the last; ⌫; **Save** — pick the folder again (a reload forgets it) | the dialog: 1 line removed, **Change stamps · none needed**. Then 0 errors, and the copy's sha256 is `<sha256>` again |
+| 34 | `printf '0 NOTE changed from outside\n' >> local/walk/RAW.ged`; in the viewer, edit any line; **Save**, keep the offered name | a dated copy is written from the page's lines: the outside line is not in it (`tail -1` of the copy is `0 TRLR`); the facts' sha256 is still the file as opened |
+| 35 | With a further edit unsaved, reload the tab (⌘R) | Chrome asks first; leave |
+| 36 | Reopen the walk copy | one line more than the file had; Checks: 1 error, **No HEAD first / TRLR last**; the counts bar gains Notes 1 |
+| 37 | Edit on; Go to Line… the line after the last; ⌫; **Save** | the dialog: 1 line removed, **Change stamps, none needed**; no folder is asked for. Keep the offered name. The copy's sha256 is `<sha256>` again |
 
 **J. Real use**
 
@@ -1360,7 +1391,7 @@ The order, as releases, one tag per push, each tagged at the owner's word after 
 |---|---|---|
 | 0.5.4 | 3 the scroll; 2 the title, with a setting; 9 spell check off and `translate="no"`; 4 the privacy wording (P4, P5) and the half-sentence; the README's local path; from 1, a plain notice when Chrome refuses a folder | Sonnet |
 | 0.5.5 | 7 contrast; 12 type, with a text-size setting; 15's row height and fold area; 17 System theme and Sunset renamed; reduced motion and forced colors from 19; the policy's style allowance dropped; `translate="no"` on the file's name, the facts and the counts | Sonnet |
-| 0.5.6 | P5 (S3) and P6 (H1): the original never written, every save a dated copy; absorbs 1 and 6 | Opus |
+| 0.5.6 | P5 (S3, the log cut) and P6 (the facts line alone): the original never written, every save a dated copy; absorbs 1 and 6; section 10 rewritten for it | Opus |
 | 0.6 | 5 the first screen with the sample; 8 drawers; 13 Viewing and Editing; 21 | Opus |
 | alongside | 10 the README; 11 the strings; 16 the email | the owner writes, Sonnet applies |
 | later | 14 tag meanings; Move up and down from 15; treegrid and h1 from 19; 20 hashes; 18 the default look | — |
@@ -1377,7 +1408,7 @@ backup, so I6 falls away with the write it guarded, and no folder is asked for. 
 Save opens the computer's Save dialog with the dated name; the log is offered after, as a second
 dialog, and may be skipped; in a browser without the pickers the same two are downloads. Items 1
 and 6 of the punch list are absorbed by it; 0.5.6 builds P5 (S3) and P6 (H1), and rewrites
-section 10. Whether the log stays at all is his to say; it is kept, opt-in, until he says cut.
+section 10. The log is cut, the same day: the note typed at save time already goes into each changed record's CHAN NOTE (10.4), so the copy carries when and why and a comparison of the two files carries what; the Changes tab's copy button stands in (10.3).
 
 The policy's `'unsafe-inline'` for styles: dropped in 0.5.5 after an experiment, at his word. A
 `_META` whose XML does not parse gets nothing drawn, so Chrome's refusal of the style on its own
@@ -1387,3 +1418,17 @@ and `privacy.html` the half-sentence of 0.5.4.
 
 0.5.4 was built the same day (Sonnet; 155 tests; the walk's parts rest, editing, edges, third,
 scroll, drags, save and copy at 118 steps), walked by him, and tagged.
+
+### P5 built as 0.5.6: saving rewritten (2026-10-08)
+
+Section 10 is rewritten in place for S3 with the log cut; the old text stands in this file's
+history. Restated with it: I6 and I7 (section 5), R2's log (section 2), three rows and two new ones
+in section 4, `save.js` in section 12, its tests in section 14, the walk's steps 20 to 24 and 33 to
+37 above, and section 18's note on staying on the original. What goes: the folder grant and
+`grantFolder`, the 0.5.4 notice for a refused folder, Save a copy and ⇧⌘S, `gedcom-viewer-history/`
+and the `.bak`, the log and its block, `save.js`'s save-in-place and copy pipelines and their tests,
+the walk's `save` and `copy` parts, the README's Save paragraphs and table, privacy.html's Saving
+bullet. What comes: one **Save** (⌘S) through the computer's Save dialog with the dated name
+offered, the original's own file refused, the copy read back; **Download a copy** in a browser
+without the pickers, and a download counted as the last copy; the Changes tab's **copy** button and
+its text. 0.5.6 is Opus work, from section 10 and this entry; tagged after his walk of it.
