@@ -1618,8 +1618,8 @@ and the stored state is left alone. The strip's right group wraps as 0.6 has it.
 44 px are not in this release (section 18).
 
 Assumed unless he says otherwise: the breakpoints, 1,100 and 800; the side columns hidden entirely
-with no file; the sample's size and its three planted findings. Opus, after his walk of 0.6, since
-both touch `index.html`, `style.css` and `ui.js`.
+with no file; the sample's size and its three planted findings. P11 as picked (D1, below) is built in the same release. Opus, after his walk of 0.6, since
+all of it touches `index.html`, `style.css` and `ui.js`.
 
 ### P11: after a save, which file is open? (2026-10-09, from his walk of 0.5.6)
 
@@ -1639,3 +1639,11 @@ clicked, might do the trick." Three shapes; the recommendation first.
 What stays under every shape: the original is never written (I6); the copy is read back; the
 stamps and the header note. D1 rewrites 10.2 step 8 and section 18's note, and the title's "Lines"
 and the Changes list then count from the copy.
+
+Picked 2026-10-09: **D1**. After a save through the Save dialog the page is on the copy: its name
+in the chip, its facts, its bytes as the baseline Changes count from, and its handle, so that the
+next save opens beside it, offers its stem with the timestamp replaced (10.1), and refuses it as the
+original (10.2 step 6). After a download, the same, with no handle. Across the move the page keeps
+knowing which stamp lines and which header line it wrote this visit, so a later save sets them anew
+rather than doubling them (10.4, 10.6). 10.2 step 8 and the walk's steps 21 to 24 are rewritten with
+the build; section 18's note on staying on the original is closed by it. Built in 0.6.1.
