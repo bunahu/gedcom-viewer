@@ -71,4 +71,74 @@ describe('the page', () => {
     const missing = [...used].filter((v) => !defined.has(v) && v !== '--ln-width');
     assert.deepEqual(missing, [], 'used but not defined at the top');
   });
+
+  // 0.5.4: what the page tells the browser about the boxes and places that hold a file's words
+  const tagOf = (page, id) => {
+    const m = page.match(new RegExp(`<[a-z]+\\b[^>]*\\bid="${id}"[^>]*>`));
+    assert.ok(m, `index.html has no element with id "${id}"`);
+    return m[0];
+  };
+
+  it('the Search box, the Records filter and Go to Line turn spell check and the grammar helpers off', () => {
+    const page = read('index.html');
+    for (const id of ['search-box', 'records-filter', 'goto']) {
+      const tag = tagOf(page, id);
+      assert.ok(/\bspellcheck="false"/.test(tag), `#${id} leaves spell check on: ${tag}`);
+      assert.ok(/\bdata-gramm="false"/.test(tag), `#${id} leaves Grammarly on: ${tag}`);
+    }
+  });
+
+  it('what shows the file is marked translate="no": the lines, the right frame, the records list, and the Checks, Changes, Search and Tags panels', () => {
+    const page = read('index.html');
+    for (const id of ['grid', 'detail', 'records-list', 'panel-checks', 'panel-changes', 'panel-search', 'panel-tags']) {
+      assert.ok(/\btranslate="no"/.test(tagOf(page, id)), `#${id} can be translated: ${tagOf(page, id)}`);
+    }
+  });
+
+  it('the tab holds the file\'s name only through the File name in the tab setting, which is off unless it was turned on', () => {
+    const page = read('index.html');
+    const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
+    assert.ok(menu.includes('id="tab-name"') && /id="tab-name"[^>]*aria-pressed="false"[^>]*>File name in the tab</.test(menu), 'no File name in the tab button in Settings');
+    assert.ok(menu.indexOf('id="surnames"') < menu.indexOf('id="tab-name"'), 'File name in the tab sits beside Bold surnames');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("store.get('tabName', false) === true"), 'the setting must default to off');
+    const titles = ui.match(/document\.title\s*=[^;]*;/g) || [];
+    assert.equal(titles.length, 1, 'the tab\'s title is set in one place');
+    assert.ok(titles[0].includes('state.nameInTab'), `the title must name the file only when the setting is on: ${titles[0]}`);
+    assert.ok(/File name in the tab \$\{state\.nameInTab/.test(ui), 'the report\'s settings line must carry the setting');
+  });
+
+  it('privacy.html names every setting the page stores, so a new one cannot go unlisted', () => {
+    // each key the page stores, and the words privacy.html uses for it
+    const named = { theme: 'the theme', indent: 'Indent', indentWidth: 'its width', surnames: 'Bold surnames',
+      tabName: 'File name in the tab', hideLeft: 'whether each is hidden', hideRight: 'whether each is hidden',
+      tagsOrder: 'Tags list\'s order', stamps: 'change stamps', facts: 'file\'s facts show' };
+    const keys = [...new Set([...read('ui.js').matchAll(/store\.(?:get|set)\('(\w+)'/g)].map((m) => m[1]))].sort();
+    assert.deepEqual(keys, Object.keys(named).sort(), 'a key the page stores is not in this list: add it here and to privacy.html');
+    const privacy = read('privacy.html').replace(/\s+/g, ' ');
+    for (const [key, words] of Object.entries(named)) assert.ok(privacy.includes(words), `privacy.html does not name ${key} (${words})`);
+  });
+
+  it('privacy.html: "everything this page sends", no longer "the whole of what leaves your computer"; and the two sections on what the page cannot control and how to check it', () => {
+    const privacy = read('privacy.html').replace(/\s+/g, ' ');
+    assert.ok(!privacy.includes('the whole of what leaves your computer'), 'the old sentence is still there');
+    assert.ok(privacy.includes('That is everything this page sends.'));
+    assert.ok(privacy.includes('<h2>What the page cannot control</h2>'));
+    assert.ok(privacy.includes('<h2>How to check it yourself</h2>'));
+    assert.ok(privacy.includes('refuse requests, images, fonts and scripts from anywhere else'));
+  });
+
+  it('Save in place, refused a folder, says which folders Chrome refuses and what to do instead', () => {
+    const ui = read('ui.js');
+    const grant = ui.slice(ui.indexOf('async function grantFolder'), ui.indexOf('// 10.2 step 3 refused'));
+    assert.ok(grant.includes("e.name === 'AbortError'"));
+    for (const words of ['Downloads', 'Desktop', 'Documents', 'home folder', 'a folder of its own', 'Save a copy']) {
+      assert.ok(grant.includes(words), `the refused-folder notice does not say "${words}"`);
+    }
+  });
+
+  it('the README names no path on anyone\'s disk', () => {
+    const readme = read('README.md');
+    assert.ok(!/~\/Desktop|\/Users\/|\/home\//.test(readme), 'a path on one disk is in the README');
+  });
 });

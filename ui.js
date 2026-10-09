@@ -88,6 +88,7 @@
     stamps: store.get('stamps', true) !== false,   // F1, V1: on unless unticked
     showFacts: store.get('facts', false) === true,  // the file's facts, shown under its name
     boldSurnames: store.get('surnames', false) === true,   // 3.8: surnames in bold wherever a record is named
+    nameInTab: store.get('tabName', false) === true,       // the file's name in the tab's title: off unless asked for
     hiddenLeft: store.get('hideLeft', false) === true,     // 3.1: the left bar hidden
     hiddenRight: store.get('hideRight', false) === true,   // 3.1: the right frame hidden
     help: null,                       // 3.6: the check whose meaning the right frame shows
@@ -874,6 +875,17 @@
   document.addEventListener('pointerup', pressOver, true);
   document.addEventListener('pointercancel', pressOver, true);
 
+  // The box takes the focus and the caret at `at`. Each of those scrolls the grid sideways to
+  // follow it, which takes the level and tag columns off the screen. The grid is put back where
+  // it was, and put back again when the box closes, since typing at the end of a long line
+  // scrolls it too.
+  function focusEditor(input, at, left) {
+    const g = $('grid');
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(at, at);
+    g.scrollLeft = left;
+  }
+
   function startEdit(i) {
     if (!state.doc || !state.editing || i < 0 || i >= state.m.n) return;
     if (state.edit && !commitEdit(false)) return;
@@ -884,11 +896,11 @@
     }
     select(i);
     const input = makeEditor(state.m.texts[i]);
-    state.edit = { kind: 'edit', pos: i, input, prefill: input.value, level: state.m.level[i] };
+    const left = $('grid').scrollLeft;
+    state.edit = { kind: 'edit', pos: i, input, prefill: input.value, level: state.m.level[i], left };
     $('grid').classList.add('is-editing');
     grid.refresh();
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    focusEditor(input, input.value.length, left);
   }
 
   // A new line inside the selected line's block — directly under it, one level deeper — or after
@@ -905,15 +917,15 @@
     const level = lv < 0 ? null : kind === 'inside' ? lv + 1 : lv;
     const prefill = level === null ? '' : `${level} `;
     const input = makeEditor(prefill);
-    state.edit = { kind, pos: i, at, input, prefill, level };
+    const left = $('grid').scrollLeft;
+    state.edit = { kind, pos: i, at, input, prefill, level, left };
     state.pending = { at };
     rebuildRows();
     $('grid').classList.add('is-editing');
     grid.setCount(rowCount(), true);
     grid.show(state.rows.indexOf(-1));
     grid.refresh();
-    input.focus();
-    input.setSelectionRange(prefill.length, prefill.length);
+    focusEditor(input, prefill.length, left);
   }
 
   function closeEditor() {
@@ -923,6 +935,7 @@
     $('grid').classList.remove('is-editing');
     if (document.activeElement === ed.input) $('grid').focus();
     ed.input.remove();
+    $('grid').scrollLeft = ed.left;
     return ed;
   }
 
@@ -1153,7 +1166,10 @@
     $('redo').disabled = !doc || !doc.undone.length;
     $('undo').title = doc && doc.done.length ? `Undo: ${doc.done[doc.done.length - 1].label} (⌘Z)` : 'Undo (⌘Z)';
     $('redo').title = doc && doc.undone.length ? `Redo: ${doc.undone[doc.undone.length - 1].label} (⇧⌘Z)` : 'Redo (⇧⌘Z)';
-    document.title = doc ? `${changed ? '● ' : ''}${state.fileName} — GEDCOM Viewer` : 'GEDCOM Viewer';
+    // The tab's title lands in the browser's history, and in synced history, so a file's name was
+    // leaving the machine through the browser. The title holds the name only when asked to.
+    const mark = changed ? '● ' : '';
+    document.title = doc && state.nameInTab ? `${mark}${state.fileName} - GEDCOM Viewer` : `${mark}GEDCOM Viewer`;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1810,7 +1826,7 @@
   async function reportProblem() {
     const version = ($('version') || document.querySelector('.version') || {}).textContent || '';
     const where = location.protocol === 'file:' ? 'opened from disk' : location.host;
-    const settings = `theme ${state.theme} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'}`;
+    const settings = `theme ${state.theme} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'}`;
     const info = {
       version, where, browser: browserName(),
       bytes: state.disk ? state.disk.bytes : null,
@@ -2013,8 +2029,13 @@
       if (state.handle) opts.startIn = state.handle;
       dir = await window.showDirectoryPicker(opts);
     } catch (e) {
-      if (e.name === 'AbortError') notice(`No folder, no save in place. Save a copy can write ${state.fileName} somewhere else.`);
-      else notice(`${e.name}: ${e.message}`, 'error');
+      // Chrome's own picker says "Can't open this folder" for those folders, and the page sees
+      // the same AbortError as for a Cancel.
+      if (e.name === 'AbortError') {
+        notice('No folder was chosen, so there is no save in place. Chrome will not let a page write into Downloads, Desktop or ' +
+          'Documents themselves, or into the home folder, only into a folder inside them. Put the file in a folder of its own and ' +
+          'open it from there, or use Save a copy.');
+      } else notice(`${e.name}: ${e.message}`, 'error');
       return false;
     }
     let holds;
@@ -2445,6 +2466,17 @@
     state.boldSurnames = !state.boldSurnames;
     store.set('surnames', state.boldSurnames);
     applySurnames();
+  });
+
+  // The file's name in the tab's title, on or off, remembered.
+  function applyTabName() {
+    $('tab-name').setAttribute('aria-pressed', String(state.nameInTab));
+    updateBar();
+  }
+  $('tab-name').addEventListener('click', () => {
+    state.nameInTab = !state.nameInTab;
+    store.set('tabName', state.nameInTab);
+    applyTabName();
   });
 
   // 3.1 — the two icons at the ends of the top bar hide the left bar and the right frame, and
@@ -2907,5 +2939,5 @@
   applyFrames();
   openPanel('records');
   updateBack();
-  updateBar();
+  applyTabName();
 })();

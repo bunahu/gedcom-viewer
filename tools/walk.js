@@ -18,10 +18,12 @@
 // copy and its log. The third round (0.5) is walked on a fictional file of its own: the frames
 // hidden and shown across a reload, the lines scrolled sideways, the copy buttons, a _META drawn
 // as it reads, blocks and sections dragged, Collapse all, a check's meaning, Back over the lines,
-// Bold surnames, a link selected whole, a clipped row's count, and E. --shots DIR saves pictures
-// of the fictional files, and of nothing else. --only PART walks one part alone, or several
-// named with commas: read-only, rest, editing, edges, third, drags, save, copy. Exit 0 when every
-// step passes.
+// Bold surnames, a link selected whole, a clipped row's count, and E. Release 0.5.4 is walked in the
+// third round (the tab's title and its setting), in the rest of the page (the spell check and
+// translation attributes), and in a part of its own, scroll (a line opened for typing leaves the
+// grid where it was). --shots DIR saves pictures of the fictional files, and of nothing else.
+// --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
+// third, scroll, drags, save, copy. Exit 0 when every step passes.
 //
 // Save in place is not walked here: its folder picker and its permission prompts need a person's
 // click. tests/save.test.js walks every other step of section 15's editing walk, over in-memory
@@ -340,6 +342,15 @@ async function restOfThePage(page, dir, shots) {
   check(ms < BUDGET_MS, `it opens in ${fmt(ms)} ms`);
   await shot('top');
 
+  // 0.5.4: the boxes that take the file's words turn spell check and the grammar helpers off; what
+  // shows the file's words is marked not to be translated
+  const helpers = await page.ev(`['search-box', 'records-filter', 'goto'].filter((id) => { const b = document.getElementById(id);
+    return b.spellcheck !== false || b.getAttribute('data-gramm') !== 'false'; })`);
+  const translated = await page.ev(`['grid', 'detail', 'records-list', 'panel-checks', 'panel-changes', 'panel-search', 'panel-tags']
+    .filter((id) => document.getElementById(id).translate !== false)`);
+  check(helpers.length === 0 && translated.length === 0,
+    `spell check and Grammarly are off in the Search box, the Records filter and Go to Line; the lines, the right frame, the records list and four panels are marked not to translate${helpers.length || translated.length ? `, but ${helpers.concat(translated).join(', ')}` : ''}`);
+
   // Records: the filter box, a figure of the counts bar, a click on a record
   await page.click("document.querySelector('.tab[data-panel=records]')");
   await page.waitFor(LAID_OUT('records-list'));
@@ -466,8 +477,8 @@ async function editingOnThePage(page, dir, shots) {
   const bar = await page.ev(`({ title: document.querySelector('.app-title').textContent, window: document.title,
     open: !document.getElementById('open'), empty: document.getElementById('open-empty').textContent,
     facts: document.getElementById('facts').hidden, name: document.getElementById('file-name').textContent })`);
-  check(bar.title === 'GEDCOM Viewer' && bar.window === 'fiction.ged — GEDCOM Viewer',
-    `the name: "${bar.title}" in the top bar, "${bar.window}" in the window's title`);
+  check(bar.title === 'GEDCOM Viewer' && bar.window === 'GEDCOM Viewer',
+    `the name: "${bar.title}" in the top bar, "${bar.window}" in the window's title, with a file open and no file name in it`);
   check(bar.open && bar.empty === 'Open GEDCOM', `the top bar has no Open; the empty frame's button reads "${bar.empty}"`);
   await page.click("document.getElementById('file-name')");
   const facts = await page.ev("[...document.getElementById('facts').children].map((x) => x.textContent)");
@@ -675,6 +686,80 @@ async function editingOnThePage(page, dir, shots) {
   const clean = await page.ev("({ dirty: !document.getElementById('dirty').hidden, count: document.getElementById('changes-count').textContent })");
   check(!clean.dirty && clean.count === '', 'Undo to the start: nothing is changed');
   await page.click("document.getElementById('edit')");
+}
+
+// 0.5.4: a line opened for typing leaves the grid where it was. The box's focus and its caret each
+// scrolled the grid sideways to follow them, which took the level and tag columns off the screen
+// and left the grid there after the edit. A box is left by Escape only when nothing was typed in
+// it, and by Enter after typing (tools/chrome.js, `press`).
+async function editorScroll(page, dir) {
+  const file = path.join(dir, 'scroll.ged');
+  fs.writeFileSync(file, thirdFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  console.log(`\n== a line opened for typing leaves the grid where it was, on a fictional file of ${fmt(m.n)} lines`);
+  await page.openFile(file);
+  await page.click("document.getElementById('edit')");
+  const nameLine = m.texts.indexOf('1 NAME Jane /Fixture/') + 1;
+  const longLine = m.texts.findIndex((t) => t.length > 2000) + 1;
+  // where the grid is, and whether the level and tag columns of a row not being typed in sit clear of the number column
+  const WHERE = `(() => { const g = document.getElementById('grid');
+    const row = [...g.querySelectorAll('.row')].find((r) => r.querySelector('.lv') && r.querySelector('.tg') && r.querySelector('.fx'));
+    const edge = row.querySelector('.fx').getBoundingClientRect().right - 1;
+    const box = g.querySelector('input.edit');
+    return { at: g.scrollLeft, columns: row.querySelector('.lv').getBoundingClientRect().left >= edge && row.querySelector('.tg').getBoundingClientRect().left >= edge,
+      box: box ? box.getBoundingClientRect().left >= edge : null }; })()`;
+  const opened = async (n) => {
+    await gotoLine(page, n);
+    await page.key('Enter', 'Enter', 13);
+    await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+    await sleep(80);
+    return page.ev(WHERE);
+  };
+
+  // a short line: opened, and let go of with Escape
+  let w = await opened(nameLine);
+  check(w.at === 0 && w.columns && w.box, `line ${fmt(nameLine)} opened for typing: the grid has not moved (${w.at} px), the level and tag columns are in view, and the box starts at the number column`);
+  await page.key('Escape', 'Escape', 27);
+  await page.waitFor("!document.querySelector('#grid input.edit')");
+  await sleep(80);
+  w = await page.ev(WHERE);
+  check(w.at === 0 && w.columns, `Escape: the grid sits where it was (${w.at} px), the columns in view`);
+
+  // the grid already scrolled sideways: it stays where it was, opened and after Escape
+  await gotoLine(page, nameLine);
+  await page.ev("document.getElementById('grid').scrollLeft = 300");
+  await sleep(80);
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("document.querySelector('#grid .row.is-sel input.edit') === document.activeElement");
+  await sleep(80);
+  const openedAt = (await page.ev(WHERE)).at;
+  await page.key('Escape', 'Escape', 27);
+  await page.waitFor("!document.querySelector('#grid input.edit')");
+  await sleep(80);
+  const escapedAt = (await page.ev(WHERE)).at;
+  check(openedAt === 300 && escapedAt === 300, `the grid scrolled to 300 px: opened at ${openedAt} px, and after Escape at ${escapedAt} px`);
+
+  // a line of 2,500 characters: opened, the caret is at its far end and the grid stays at the left;
+  // typing follows the caret, as it must; Enter keeps the line, and the grid is back where it was
+  w = await opened(longLine);
+  check(w.at === 0 && w.columns && w.box, `line ${fmt(longLine)}, 2,500 characters, opened for typing: the grid has not moved (${w.at} px), the columns are in view`);
+  await page.type('x');
+  await sleep(150);
+  const typed = await page.ev(WHERE);
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("!document.querySelector('#grid input.edit')");
+  await sleep(80);
+  const kept = await page.ev(WHERE);
+  check(typed.at > 0 && kept.at === 0 && kept.columns,
+    `typed at the far end the grid follows the caret (${Math.round(typed.at)} px); Enter keeps the line, and the grid is back at ${kept.at} px, the columns in view`);
+
+  // Add inside: the same
+  await gotoLine(page, nameLine);
+  await page.click("[...document.querySelectorAll('#detail button')].find((b) => b.textContent.trim() === 'Add inside')");
+  await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
+  await sleep(80);
+  w = await page.ev(WHERE);
+  check(w.at === 0 && w.columns && w.box, `Add inside: the new line's box opens with the grid at ${w.at} px and the columns in view`);
 }
 
 // The edges of typing a line, on two of the written files (fictional people): a click elsewhere
@@ -973,7 +1058,7 @@ async function thirdRound(page, dir, shots) {
     `the story keeps its bold, its table (colspan ${drawn.colspan}) and its text; the link is text with its address, the image is [image]; no link, image, script, style, span, font or Word element survives`);
   check(drawn.persons === 2 && drawn.person === 'Jane Fixture · 1 Jan 1900 · Fixtureville · 2 Feb 1950 · Fixture City' && drawn.transcription === 'Line one\nLine two' && drawn.copies >= 6,
     `the persons as a table (${drawn.person}); the transcription with its line break; a copy button on each of the ${drawn.copies} boxes`);
-  check(drawn.title === 'third.ged — GEDCOM Viewer' && storyCopied.includes('She lived there.'), 'the script inside the story never ran, and the story copies as text');
+  check(drawn.title === 'GEDCOM Viewer' && storyCopied.includes('She lived there.'), 'the script inside the story never ran, and the story copies as text');
   await shot('meta');
 
   // 3.9 — a double-click selects a web address whole; with ⌥, a pointer whole, and nothing jumps
@@ -1017,14 +1102,37 @@ async function thirdRound(page, dir, shots) {
   await page.waitFor("document.getElementById('changes-count').textContent === ''");
   await page.click("document.getElementById('edit')");
 
+  // 0.5.4: the tab's title never holds the file's name unless File name in the tab is on, and the
+  // dot in front shows a change either way; the setting is remembered, and off is its default
+  const TITLE = 'document.title';
+  const stored = () => page.ev("localStorage.getItem('gedview.tabName')");
+  const offByDefault = (await stored()) === null && (await page.ev("document.getElementById('tab-name').getAttribute('aria-pressed')")) === 'false';
+  await page.click("document.getElementById('redo')");
+  const changedOff = await page.ev(TITLE);
+  await page.click("document.getElementById('undo')");
+  const savedOff = await page.ev(TITLE);
+  await setting(page, 'tab-name');
+  const nameOn = await page.ev(TITLE);
+  await page.click("document.getElementById('redo')");
+  const changedOn = await page.ev(TITLE);
+  await page.click("document.getElementById('undo')");
+  const pressedOn = await page.ev("document.getElementById('tab-name').getAttribute('aria-pressed')");
+  const kept = await stored();
+  await setting(page, 'tab-name');
+  check(offByDefault && savedOff === 'GEDCOM Viewer' && changedOff === '● GEDCOM Viewer',
+    `the tab's title, File name in the tab off (its default): "${savedOff}", and "${changedOff}" with an unsaved change; the file's name is not in it`);
+  check(nameOn === 'third.ged - GEDCOM Viewer' && changedOn === '● third.ged - GEDCOM Viewer' && pressedOn === 'true' && kept === 'true',
+    `File name in the tab on (and remembered): "${nameOn}", and "${changedOn}" with an unsaved change`);
+  check((await page.ev(TITLE)) === 'GEDCOM Viewer' && (await stored()) === 'false', 'turned off again, the title has no file name');
+
   // Settings holds Theme, Indent and Bold surnames; the Tags list steps through its orders
   await page.click("document.getElementById('settings')");
   await page.waitFor("document.getElementById('settings-menu').matches(':popover-open')");
   const menu = await page.ev("[...document.querySelectorAll('#settings-menu button')].map((b) => b.id).join(',')");
   await page.ev("document.getElementById('settings-menu').hidePopover(); true");
   const inBar = await page.ev("['theme','fold-all','indent','surnames'].map((id) => !!document.querySelector('.bar #' + id)).join(',')");
-  check(menu === 'theme-light,theme-sunset,theme-dark,indent,surnames,report' && inBar === 'false,false,false,false',
-    `Settings opens a menu holding ${menu.split(',').length} controls: the themes, Indent, Bold surnames, Report a problem; none of them in the top bar`);
+  check(menu === 'theme-light,theme-sunset,theme-dark,indent,surnames,tab-name,report' && inBar === 'false,false,false,false',
+    `Settings opens a menu holding ${menu.split(',').length} controls: the themes, Indent, Bold surnames, File name in the tab, Report a problem; none of them in the top bar`);
 
   // P8 — Report a problem: the report reads as counts and codes and holds no line of the file; cut
   // a line and it no longer reads as built; Copy puts the box as it reads, then What happened, on
@@ -1420,6 +1528,7 @@ async function waitForFile(dir, pattern, timeout = 10000) {
     if (part('editing')) await inChrome((page) => editingOnThePage(page, dir, shots));
     if (part('edges')) await inChrome((page) => editingEdges(page));
     if (part('third')) await inChrome((page) => thirdRound(page, dir, shots));
+    if (part('scroll')) await inChrome((page) => editorScroll(page, dir));
     if (part('drags')) await inChrome((page) => fourthDrags(page, dir, shots));
     if (part('save')) await inChrome((page) => saveInPlace(page, dir));
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));

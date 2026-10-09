@@ -17,6 +17,7 @@ machine. [BUILD-BRIEF.md](BUILD-BRIEF.md) is the specification.
 | 0.5.1 | the first half of the owner's fourth round, from his walk of 0.5: the side frames hidden by icons in the top bar, eased; a strip above the lines with Top, Back and Collapse all, which shuts the types too; Settings holding Theme, Indent and Bold surnames; Upload GEDCOM; the Tags list's order stepped by a button; a change dot in the mark column; the right frame following the typing; a `_META` under the names the file gives its parts; a shade when the lines are scrolled sideways, and a jump bringing them back; the gold line under a type's row. The editor and the saving of the round wait for his picks (the brief, section 19) |
 | 0.5.2 | on the web: gedcom-viewer.net serves the page, published from a version tag once the tests pass, the page's files alone; Open GEDCOM again, since online "upload" says the file goes somewhere, and it does not; the icon; a description for search engines; `privacy.html`, how the page treats a file, linked under the button; a content-security policy in both pages, which has the browser refuse every connection; the repository public, its history rewritten first — the real file's name became `RAW.ged`, and the commits' identity the owner's GitHub handle |
 | 0.5.3 | Report a problem, in Settings (the brief's P8, R1): a report of counts and codes, never a line of the file, in a box to read, change or cut; What happened, in the user's own words; Copy — the page sends nothing, and the original is kept nowhere. Its last line is a checksum, so a changed report reads as changed; `tools/report-check.js` reads one back |
+| 0.5.4 | six small fixes: the lines no longer scroll sideways when one opens for typing; the tab's title no longer holds the file's name, unless File name in the tab is turned on in Settings; spell check and page translation are off where the file's words show; the privacy page says plainly what the page sends, what it cannot control, and how to check it yourself; a notice that says why Chrome may refuse a folder for Save, and what to do; the README no longer names a path on one disk |
 | 1.0 | when the owner's own walk (phase 5) says it is done |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -36,9 +37,9 @@ keep traces of that.
 - **On the web:** [gedcom-viewer.net](https://gedcom-viewer.net) — the same page, served by GitHub
   Pages from this repository's last tagged version; nothing is installed, and the file still never
   leaves the computer. Or, from disk:
-- **In Chrome:** `open -a "Google Chrome" ~/Desktop/claude/gedcom-viewer/index.html` in Terminal,
-  or, in Chrome, File → Open File… and pick it. Double-clicking the file opens the default browser
-  instead. Keep `index.html` in this folder: it loads `style.css`, `core.js`, `save.js` and `ui.js`
+- **In Chrome:** from wherever the folder was put, run `open -a "Google Chrome" index.html` in
+  Terminal, inside the folder, or, in Chrome, File → Open File… and pick `index.html`.
+  Double-clicking the file opens the default browser instead. Keep `index.html` in this folder: it loads `style.css`, `core.js`, `save.js` and `ui.js`
   from beside it, and anywhere else it opens as a bare page.
 - Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page. With a file open, another is
   opened with ⌘O, by dropping it, or with **Open another GEDCOM…** among the file's facts.
@@ -68,9 +69,10 @@ The strip above the lines holds **↑ Top** (line 1, as a jump, so Back returns)
 while there is somewhere to go back to, and **Collapse all**, which shuts every record to its
 first line and every type to its row; it then reads **Expand all**, which opens every block and
 every type. **Settings**, in the top bar, holds the theme (Light · Sunset · Dark), Indent and its width,
-**Report a problem…** (below), and **Bold surnames**, which shows the part of a name between slashes in bold, without
+**Report a problem…** (below), **Bold surnames**, which shows the part of a name between slashes in bold, without
 the slashes, wherever a record is named — Records, the right frame, the dialogs — and never in a
-line as written. The two icons at the ends of the top bar hide the left bar and the right frame,
+line as written, and **File name in the tab**, off unless turned on, which puts the file's name in the
+tab's title (the browser keeps titles in its history, which is why it is off). The two icons at the ends of the top bar hide the left bar and the right frame,
 and bring them back. In **Checks**, a click on a check's title says in the right frame what it
 means and what is usually done; the ▸ ▾ at its left opens and shuts its lines. In **Tags**, the
 button above the list steps through its orders: by count, by count rising, A–Z, Z–A. Every box
@@ -83,7 +85,7 @@ GEDCOM** opens the computer's own file dialog; nothing is uploaded anywhere — 
 here, and nothing leaves the machine; `privacy.html`, linked under the button, says so in full.
 
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the two
-panel widths and whether each side frame is hidden, Bold surnames, the Tags list's order,
+panel widths and whether each side frame is hidden, Bold surnames, File name in the tab, the Tags list's order,
 whether the change stamps are ticked, and whether the file's facts show. Never a file's name,
 content or place. Edit is off whenever a file opens.
 
