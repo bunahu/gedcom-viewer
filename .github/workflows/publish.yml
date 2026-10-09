@@ -1,5 +1,5 @@
 # Publishes the page to GitHub Pages, at gedcom-viewer.net. A version tag (v0.5.2, …) runs the
-# tests, and then uploads the page's files alone — never the tests, the tools, the brief, or
+# tests, and then uploads the page's files alone, never the tests, the tools, the brief, or
 # anything in local/. "Run workflow" on the Actions tab publishes what main holds, by hand.
 # Once the page is live, a tag also gets a GitHub release whose notes carry the tag's own message
 # and the SHA-256 of each file the page serves. A run on a branch makes no release, and a re-run
@@ -81,7 +81,7 @@ jobs:
             echo '```'
             echo
             echo 'Download any file from `https://gedcom-viewer.net/<name>` and run `shasum -a 256 <name>` on a Mac (or `sha256sum` elsewhere).'
-            echo "The result must match that file's line above, which proves the served file is the one this tag holds."
+            echo "While this is the newest release, the result must match that file's line above, which proves the served file is the one this tag holds."
           } > notes.md
           cat notes.md
       - name: Create the release, or update its notes if it exists
