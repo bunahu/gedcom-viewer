@@ -1,6 +1,9 @@
 # Publishes the page to GitHub Pages, at gedcom-viewer.net. A version tag (v0.5.2, …) runs the
 # tests, and then uploads the page's files alone — never the tests, the tools, the brief, or
 # anything in local/. "Run workflow" on the Actions tab publishes what main holds, by hand.
+# Once the page is live, a tag also gets a GitHub release whose notes carry the tag's own message
+# and the SHA-256 of each file the page serves. A run on a branch makes no release, and a re-run
+# updates the notes of the one that exists.
 # One tag per push: GitHub makes no event for a push of more than three tags at once. The
 # artifact carries the attempt's number, so that a failed deploy can be re-run without leaving
 # two artifacts of one name behind, which deploy-pages refuses.
@@ -52,3 +55,42 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_attempt }}
+
+  # The files hashed are the ones the publish job copies into site/, so the two lists must match.
+  release:
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      # checkout fetches the tag by its name, so the tag's own message comes with it.
+      - uses: actions/checkout@v7
+      - name: Write the release notes
+        run: |
+          ANNOTATION="$(git tag -l --format='%(contents)' "$TAG")"
+          sha256sum index.html style.css core.js save.js ui.js privacy.html favicon.svg favicon.ico apple-touch-icon.png LICENSE > sums.txt
+          {
+            printf '%s\n\n' "$ANNOTATION"
+            echo '## Files served at gedcom-viewer.net'
+            echo
+            echo '```'
+            cat sums.txt
+            echo '```'
+            echo
+            echo 'Download any file from `https://gedcom-viewer.net/<name>` and run `shasum -a 256 <name>` on a Mac (or `sha256sum` elsewhere).'
+            echo "The result must match that file's line above, which proves the served file is the one this tag holds."
+          } > notes.md
+          cat notes.md
+      - name: Create the release, or update its notes if it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "GEDCOM Viewer ${TAG#v}" --notes-file notes.md
+          else
+            gh release create "$TAG" --title "GEDCOM Viewer ${TAG#v}" --notes-file notes.md
+          fi
