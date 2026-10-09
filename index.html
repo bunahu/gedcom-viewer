@@ -20,25 +20,17 @@
 </head>
 <body>
 
+<!-- The top bar: the name, and Settings; with a file open, the file's name (its facts under it) and Save
+     too. Nothing else: the controls for the lines are in the strip above them, and each side frame's
+     icon is in the frame it hides (P9). -->
 <header class="bar">
   <div class="bar-top">
-    <button class="icon-button" id="hide-left" type="button" aria-pressed="false" aria-label="Hide left bar" title="Hide left bar"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7.5 3.5v13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
-    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.5.6</span></span>
+    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span></span>
     <button class="file-name" id="file-name" type="button" aria-expanded="false" translate="no" hidden></button>
     <span class="dirty" id="dirty" title="Changes in no copy yet" hidden>●</span>
     <nav class="actions">
-      <button class="button" id="edit" type="button" aria-pressed="false" title="Edit on or off (E)" disabled>Edit</button>
-      <button class="button" id="undo" type="button" disabled>Undo</button>
-      <button class="button" id="redo" type="button" disabled>Redo</button>
-      <button class="button" id="save" type="button" title="Save a dated copy, where you choose; the original is never written (⌘S)" disabled>Save</button>
-      <span class="gap"></span>
-      <span class="goto-box">
-        <input class="input goto" id="goto" type="text" placeholder="Go to Line…" aria-label="Go to line" autocomplete="off" spellcheck="false" data-gramm="false" disabled>
-        <button class="button goto-go" id="goto-go" type="button" hidden>Go</button>
-        <button class="button goto-clear" id="goto-clear" type="button" title="Every line again" hidden>×</button>
-      </span>
+      <button class="button" id="save" type="button" title="Save a dated copy, where you choose; the original is never written (⌘S)" hidden disabled>Save</button>
       <button class="button" id="settings" type="button" popovertarget="settings-menu">Settings</button>
-      <button class="icon-button" id="hide-right" type="button" aria-pressed="false" aria-label="Hide right frame" title="Hide right frame"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12.5 3.5v13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
     </nav>
   </div>
   <div class="facts" id="facts" translate="no" hidden></div>
@@ -87,19 +79,25 @@
       <button class="button" id="report" type="button" title="A report of counts and codes, never a line of the file, to read, change and copy into an issue; nothing is sent">Report a problem…</button>
     </span>
   </div>
+  <!-- the version, written here once: Report a problem reads it from this line -->
+  <div class="menu-foot">GEDCOM Viewer <span id="version">0.6</span></div>
 </div>
 
 <nav class="counts" id="counts" aria-label="Records by type" translate="no"></nav>
 
 <main class="work" id="work">
   <aside class="side" id="side">
-    <nav class="tabs" role="tablist">
-      <button class="tab" type="button" role="tab" data-panel="records" aria-selected="true">Records</button>
-      <button class="tab" type="button" role="tab" data-panel="checks">Checks <span class="tab-count" id="checks-count"></span></button>
-      <button class="tab" type="button" role="tab" data-panel="changes">Changes <span class="tab-count" id="changes-count"></span></button>
-      <button class="tab" type="button" role="tab" data-panel="search">Search</button>
-      <button class="tab" type="button" role="tab" data-panel="tags">Tags</button>
-    </nav>
+    <!-- the left bar's head: its tabs, and at their right end the icon that shrinks the bar to the icon alone -->
+    <div class="side-head">
+      <nav class="tabs" role="tablist">
+        <button class="tab" type="button" role="tab" data-panel="records" aria-selected="true">Records</button>
+        <button class="tab" type="button" role="tab" data-panel="checks">Checks <span class="tab-count" id="checks-count"></span></button>
+        <button class="tab" type="button" role="tab" data-panel="changes">Changes <span class="tab-count" id="changes-count"></span></button>
+        <button class="tab" type="button" role="tab" data-panel="search">Search</button>
+        <button class="tab" type="button" role="tab" data-panel="tags">Tags</button>
+      </nav>
+      <button class="icon-button frame-icon" id="hide-left" type="button" aria-pressed="false" aria-label="Hide left bar" title="Hide left bar"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7.5 3.5v13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    </div>
 
     <section class="panel" id="panel-records">
       <div class="panel-head">
@@ -133,7 +131,8 @@
 
     <section class="panel" id="panel-tags" translate="no" hidden>
       <div class="panel-head panel-head-end">
-        <button class="icon-button" id="tags-order" type="button" aria-label="Another order"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 10a6 6 0 0 1 10.4-4.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14.6 2.6v3.6h-3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 10a6 6 0 0 1-10.4 4.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5.4 17.4v-3.6H9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <!-- steps through the list's orders; the one in force is named in the hover text alone -->
+        <button class="button sort" id="tags-order" type="button" aria-label="Sort"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 10a6 6 0 0 1 10.4-4.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14.6 2.6v3.6h-3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 10a6 6 0 0 1-10.4 4.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5.4 17.4v-3.6H9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Sort</button>
       </div>
       <div class="list" id="tags-list"></div>
     </section>
@@ -141,12 +140,28 @@
 
   <div class="split" id="split-left" title="Drag to widen or narrow"></div>
 
-  <section class="middle">
+  <section class="middle" id="middle">
+    <!-- the strip above the lines: Top, Back and Collapse all at its left; Go to Line…, Edit, Undo and Redo
+         at its right, none of them until a file is open. When the width runs out, the right group goes
+         under the left one -->
     <div class="strip" id="strip">
-      <button class="button" id="top" type="button" title="Line 1" disabled>↑ Top</button>
-      <button class="button" id="back" type="button" hidden>← Back</button>
-      <span class="strip-gap"></span>
-      <button class="button" id="fold-all" type="button" title="Shut every record to its first line and every type to its row, or open every block and every type" hidden>Collapse all</button>
+      <div class="strip-group" id="strip-left">
+        <button class="button" id="top" type="button" title="Line 1" disabled>↑ Top</button>
+        <button class="button" id="back" type="button" hidden>← Back</button>
+        <button class="button" id="fold-all" type="button" title="Shut every record to its first line and every type to its row, or open every block and every type" hidden>Collapse all</button>
+      </div>
+      <div class="strip-group strip-end" id="strip-right">
+        <span class="goto-box" id="goto-box" hidden>
+          <input class="input goto" id="goto" type="text" placeholder="Go to Line…" aria-label="Go to line" autocomplete="off" spellcheck="false" data-gramm="false">
+          <button class="button goto-go" id="goto-go" type="button" hidden>Go</button>
+          <button class="button goto-clear" id="goto-clear" type="button" title="Every line again" hidden>×</button>
+        </span>
+        <span class="strip-keep">
+          <button class="button" id="edit" type="button" aria-pressed="false" title="Edit on or off (E)" hidden>Edit</button>
+          <button class="button" id="undo" type="button" hidden>Undo</button>
+          <button class="button" id="redo" type="button" hidden>Redo</button>
+        </span>
+      </div>
     </div>
     <div class="grid" id="grid" tabindex="0" aria-label="Lines" translate="no"></div>
     <div class="empty" id="empty">
@@ -159,7 +174,15 @@
 
   <div class="split" id="split-right" title="Drag to widen or narrow"></div>
 
-  <aside class="detail" id="detail" translate="no"></aside>
+  <aside class="right" id="right">
+    <!-- the right frame's header: the line or lines the frame shows, and at its right end the icon that
+         shrinks the frame to the icon alone -->
+    <div class="frame-head">
+      <span class="frame-title" id="frame-title"></span>
+      <button class="icon-button frame-icon" id="hide-right" type="button" aria-pressed="false" aria-label="Hide right frame" title="Hide right frame"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12.5 3.5v13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
+    </div>
+    <div class="detail" id="detail" translate="no"></div>
+  </aside>
 </main>
 
 <dialog class="dialog" id="dialog"></dialog>

@@ -134,7 +134,7 @@ describe('the page', () => {
   it('one Save, ⌘S, and no Save a copy or ⇧⌘S: Save reads Download a copy in a browser without the Save dialog', () => {
     const page = read('index.html');
     const ui = read('ui.js');
-    assert.ok(/<button class="button" id="save" type="button" title="Save a dated copy, where you choose; the original is never written \(⌘S\)" disabled>Save<\/button>/.test(page));
+    assert.ok(/<button class="button" id="save" type="button" title="Save a dated copy, where you choose; the original is never written \(⌘S\)" hidden disabled>Save<\/button>/.test(page));
     for (const gone of ['save-copy', 'Save a copy', '⇧⌘S']) {
       assert.ok(!page.includes(gone), `index.html still holds "${gone}"`);
       assert.ok(!ui.includes(gone), `ui.js still holds "${gone}"`);
@@ -323,5 +323,142 @@ describe('the page', () => {
   it('the README names no path on anyone\'s disk', () => {
     const readme = read('README.md');
     assert.ok(!/~\/Desktop|\/Users\/|\/home\//.test(readme), 'a path on one disk is in the README');
+  });
+
+  // 0.6: the bars (P9, A1 and B1), Edit on as a file opens (P10), and three cleanups from the review's item 21
+  const between = (text, from, to) => {
+    const a = text.indexOf(from);
+    assert.ok(a >= 0, `no ${from}`);
+    const b = text.indexOf(to, a + from.length);
+    assert.ok(b >= 0, `no ${to} after ${from}`);
+    return text.slice(a, b);
+  };
+  const idsIn = (html) => [...html.matchAll(/<(?:button|span|input|div)\b[^>]*\bid="([\w-]+)"/g)].map((m) => m[1]);
+
+  it('the top bar holds the name, the file\'s name with its dot, Save and Settings, and nothing else: no icon button, no version, no Edit, Undo, Redo or Go to Line', () => {
+    const page = read('index.html');
+    const bar = between(page, '<header class="bar">', '</header>');
+    assert.ok(!/icon-button/.test(bar), 'an icon button in the top bar');
+    assert.deepEqual(idsIn(bar), ['file-name', 'dirty', 'save', 'settings', 'facts']);
+    assert.ok(!/class="version"/.test(page) && !/\.version\b/.test(read('style.css')), 'the version is out of the title bar');
+    assert.ok(between(bar, '<nav class="actions">', '</nav>').indexOf('id="save"') < bar.indexOf('id="settings"'), 'Save, then Settings');
+  });
+
+  it('each side frame\'s icon is in the frame it hides: the left bar\'s at the right end of its tab row, outside the tablist; the right frame\'s at the right end of a header row, after its title', () => {
+    const page = read('index.html');
+    const head = between(page, '<div class="side-head">', '<section class="panel"');
+    assert.ok(head.indexOf('</nav>') < head.indexOf('id="hide-left"'), 'the left icon comes after the tabs');
+    assert.ok(!between(head, '<nav class="tabs" role="tablist">', '</nav>').includes('hide-left'), 'and is not inside the tablist');
+    const right = between(page, '<aside class="right" id="right">', '</aside>');
+    const header = between(right, '<div class="frame-head">', '<div class="detail"');
+    assert.ok(header.indexOf('id="frame-title"') >= 0 && header.indexOf('id="frame-title"') < header.indexOf('id="hide-right"'), 'the title, then the icon');
+    assert.ok(/<div class="detail" id="detail" translate="no"><\/div>/.test(right), 'the frame\'s content under its header');
+    const css = read('style.css');
+    assert.ok(/\.frame-icon \{ position: absolute; right: var\(--frame-pad\); \}/.test(css), 'each icon at its frame\'s right edge, so it stays in the strip when the frame shrinks');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("hiddenLeft: store.get('hideLeft', false) === true") && ui.includes("hiddenRight: store.get('hideRight', false) === true"), 'the stored state keeps its keys');
+  });
+
+  it('A1: a hidden side frame shrinks to a strip one icon button wide, holding its icon alone; the bars beside it do not drag', () => {
+    const css = read('style.css');
+    assert.ok(/--frame-shrunk: calc\(var\(--icon-button\) \+ 2 \* var\(--frame-pad\)\);/.test(css), 'one icon button wide, and the room round it');
+    assert.ok(css.includes('.work.left-hidden { grid-template-columns: var(--frame-shrunk) var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width); }'));
+    assert.ok(css.includes('.work.right-hidden { grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) var(--frame-shrunk); }'));
+    assert.ok(css.includes('.work.left-hidden.right-hidden { grid-template-columns: var(--frame-shrunk) var(--split-width) minmax(0, 1fr) var(--split-width) var(--frame-shrunk); }'));
+    assert.ok(css.includes('.work.left-hidden .side > :not(.side-head), .work.left-hidden .tabs,\n.work.right-hidden .right > :not(.frame-head), .work.right-hidden .frame-title { visibility: hidden;'),
+      'everything but the icon goes out of sight');
+    assert.ok(read('ui.js').includes("if ((prop === '--left-width' && state.hiddenLeft) || (prop === '--right-width' && state.hiddenRight)) return;"), 'no drag while shrunk');
+  });
+
+  it('the strip above the lines: Top, Back and Collapse all in a group at its left; Go to Line…, Edit, Undo and Redo, in that order, in a group at its right, which wraps under the left one when the width runs out', () => {
+    const page = read('index.html');
+    const strip = between(page, '<div class="strip" id="strip">', '<div class="grid"');
+    assert.deepEqual(idsIn(between(strip, 'id="strip-left"', 'id="strip-right"')), ['top', 'back', 'fold-all']);
+    assert.deepEqual(idsIn(strip.slice(strip.indexOf('id="strip-right"'))), ['goto-box', 'goto', 'goto-go', 'goto-clear', 'edit', 'undo', 'redo']);
+    assert.ok(strip.indexOf('id="strip-left"') < strip.indexOf('id="strip-right"'));
+    const css = read('style.css');
+    assert.ok(/\.strip \{[^}]*flex-wrap: wrap;[^}]*\}/.test(css) && /\.strip-group \{[^}]*flex-wrap: wrap;/.test(css), 'the strip wraps its groups, and a group its controls: nothing is clipped');
+    assert.ok(/\.strip-end \{ margin-left: auto;/.test(css), 'the right group keeps to the right, under the left one when it wraps');
+    assert.ok(/\.middle \{[^}]*display: flex; flex-direction: column; \}/.test(css) && /\.grid \{\s*position: relative;\s*flex: 1;/.test(css),
+      'the lines start where the strip ends, however tall it grows: nothing overlaps them');
+  });
+
+  it('Go to Line…, Edit, Undo, Redo and Save are hidden, not disabled, until a file is open; Save is disabled too until there is something to save', () => {
+    const page = read('index.html');
+    for (const id of ['goto-box', 'edit', 'undo', 'redo', 'save']) assert.ok(/\shidden[\s>]/.test(tagOf(page, id)), `#${id} is not hidden before a file is open: ${tagOf(page, id)}`);
+    for (const id of ['goto', 'edit', 'undo', 'redo']) assert.ok(!/\sdisabled[\s>]/.test(tagOf(page, id)), `#${id} is disabled in the markup; hidden is the rule now: ${tagOf(page, id)}`);
+    assert.ok(/\sdisabled[\s>]/.test(tagOf(page, 'save')), 'Save is disabled until there is something to save');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("for (const id of ['goto-box', 'edit', 'undo', 'redo', 'save']) $(id).hidden = !doc;"), 'shown when a file is open, hidden when none is');
+    assert.ok(!/\$\('(?:goto|edit)'\)\.disabled/.test(ui), 'nothing disables Go to Line or Edit any more');
+    assert.ok(ui.includes("$('save').disabled = !changed;") && ui.includes("$('undo').disabled = !doc || !doc.done.length;"), 'Save, Undo and Redo are still off when there is nothing for them');
+    assert.ok(/\.goto-box\[hidden\] \{ display: none; \}/.test(read('style.css')), 'the box\'s own display must not undo hidden');
+  });
+
+  it('the keys do not change: E, ⌘Z, ⇧⌘Z, ⌘L, ⌘S, ⌘O, ⌘F', () => {
+    const ui = read('ui.js');
+    for (const want of ["if (mod && !e.shiftKey && !e.altKey && key === 's') {", "if (mod && !e.shiftKey && !e.altKey && key === 'o') {",
+      "if (mod && !e.shiftKey && !e.altKey && (key === 'f' || key === 'l')) {", "if (mod && !e.altKey && key === 'z') {", "if (e.shiftKey) doRedo(); else doUndo();",
+      "} else if (key === 'e' && !e.shiftKey) {"]) {
+      assert.ok(ui.includes(want), `a key is gone: ${want}`);
+    }
+  });
+
+  it('B1: the right frame\'s title is the line it shows, as the number column writes it, or the lines in hand: a Go to Line range, or a selected line whose block is shut', () => {
+    const ui = read('ui.js');
+    const fn = between(ui, 'function frameTitle(i) {', 'function renderDetail()');
+    assert.ok(fn.includes('const span = (a, b) => (a === b ? `Line ${fmt(a + 1)}` : `Lines ${fmt(a + 1)}-${fmt(b + 1)}`);'), 'Line 66, Lines 23-31, with the numbers as the number column has them');
+    assert.ok(fn.indexOf('if (state.range)') < fn.indexOf('if (isShut(i))'), 'a range in force is what is in hand, before a shut block');
+    assert.ok(fn.includes('return span(i, C.subtreeEnd(m, i) - 1);'), 'a shut block: the line through the last line it hides');
+    const render = between(ui, 'function renderDetail() {', 'const typing =');
+    assert.ok(render.indexOf("$('frame-title').textContent = '';") < render.indexOf('renderHelp(d, state.help)') && render.indexOf("$('frame-title').textContent = frameTitle(i);") > render.indexOf('if (!m || i < 0 || i >= m.n) return;'),
+      'no title for a check\'s meaning, a removed line, or no line selected');
+  });
+
+  it('P10: Edit is on whenever a file opens, and while it is on the lines take a darker look of their own; the README says so', () => {
+    const ui = read('ui.js');
+    const open = between(ui, 'async function openFile(file, handle) {', 'async function pickFile()');
+    assert.ok(open.includes('state.editing = true;') && !open.includes('state.editing = false'), 'a file opens with Edit on');
+    assert.ok(ui.includes("$('middle').classList.toggle('is-edit-on', !!doc && state.editing);"));
+    const css = read('style.css');
+    assert.ok(css.includes('.middle.is-edit-on { --lines-bg: var(--editing-bg); }'), 'Edit on: the lines\' background is the editing look');
+    for (const b of K.blocksOf(css).filter((x) => [':root', '.dusk', '.dark'].includes(x.selector) && x.props.has('--color-bg'))) {
+      assert.ok(/^#[0-9a-f]{6}$/.test(b.props.get('--editing-bg') || ''), `${b.selector} has no editing look of its own`);
+    }
+    const readme = read('README.md').replace(/\s+/g, ' ');
+    assert.ok(!/Edit is off whenever a file opens|it is off whenever a file opens/.test(readme), 'the README still says Edit is off when a file opens');
+    assert.ok(readme.includes('Edit is on whenever a file opens.') && readme.includes('it is on whenever a file opens'));
+  });
+
+  it('the delete question names what goes (core.deleteQuestion), a record\'s label shown as labels are, a line\'s text with its marks', () => {
+    const ui = read('ui.js');
+    const del = between(ui, 'async function deleteSelected() {', '// 9.3');
+    assert.ok(del.includes('dialog((title) => putQuestion(title, C.deleteQuestion(m, i)),'), 'the question comes from core.js');
+    const put = between(ui, 'function putQuestion(parent, parts) {', '// A dialog:');
+    assert.ok(put.includes("if (p.as === 'label') putLabel(parent, p.text);") && put.includes("else if (p.as === 'line') putText(parent, p.text);"));
+    assert.ok(between(ui, 'function dialog(title, fill, buttons) {', 'const body').includes("if (typeof title === 'function') title(heading); else heading.textContent = title;"));
+  });
+
+  it('Tags: the order button reads Sort beside its icon, aria-label Sort, and names the order in force in its hover text alone', () => {
+    const page = read('index.html');
+    const tag = tagOf(page, 'tags-order');
+    assert.ok(/aria-label="Sort"/.test(tag) && !/title="/.test(tag), `the button: ${tag}`);
+    assert.ok(/<\/svg>Sort<\/button>/.test(between(page, 'id="tags-order"', '</div>')), 'the word Sort, after the icon');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("const TAG_ORDER_NAMES = ['by count', 'by count rising', 'A to Z', 'Z to A'];"));
+    assert.ok(ui.includes("function updateTagsOrder() { $('tags-order').title = TAG_ORDER_NAMES[state.tagsOrder]; }"));
+    assert.ok(/updateTagsOrder\(\);\n {2}openPanel\('records'\);/.test(ui), 'named as the page starts');
+  });
+
+  it('the version is out of the title bar and at the foot of the Settings menu, written once, and the problem report reads it there; the README has a row for it', () => {
+    const page = read('index.html');
+    const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
+    const foot = menu.match(/<div class="menu-foot">GEDCOM Viewer <span id="version">(\d+(?:\.\d+)+)<\/span><\/div>\s*$/);
+    assert.ok(foot, 'no version line at the foot of the Settings menu');
+    assert.ok(menu.lastIndexOf('class="menu-row"') < menu.indexOf('class="menu-foot"'), 'at its foot');
+    assert.equal((page.match(/\bid="version"/g) || []).length, 1, 'the version is written once');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("const version = $('version').textContent;") && !ui.includes("querySelector('.version')"), 'the report reads it from the same place');
+    assert.ok(read('README.md').includes(`\n| ${foot[1]} | `), `the README's version table has no row for ${foot[1]}`);
   });
 });

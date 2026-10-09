@@ -92,4 +92,4 @@ function ratio(css, theme, fg, on) {
   return ratioOf(over(colour(props, fg), bg), bg);
 }
 
-module.exports = { blocksOf, propsOf, colour, layered, over, ratioOf, ratio };
+module.exports = { blocksOf, propsOf, colour, layered, over, luminance, ratioOf, ratio };

@@ -97,7 +97,7 @@
     help: null,                       // 3.6: the check whose meaning the right frame shows
     tagsOrder: [0, 1, 2, 3].includes(store.get('tagsOrder', 0)) ? store.get('tagsOrder', 0) : 0,   // the Tags list's order: by count, by count rising, A–Z, Z–A
     maxLevel: 0,                      // the deepest level in the file, for the grid's width
-    editing: false,                   // Edit: off when a file opens
+    editing: false,                   // Edit: on whenever a file opens (P10); off with none open
     folds: new Set(),                 // the lines shut, by their number in the document's order
     sections: null,                   // the record types, when the file is bunched by type
     shutSections: new Set(),          // the sections shut, by tag
@@ -955,6 +955,7 @@
     grid.setCount(rowCount(), true);
     grid.show(state.rows.indexOf(-1));
     grid.refresh();
+    renderDetail();                                                  // the new line in the right frame, and its title, at once: a shut block was opened for it
     focusEditor(input, prefill.length, left);
   }
 
@@ -1023,7 +1024,8 @@
     const i = state.sel;
     const end = C.subtreeEnd(m, i);
     if (end - i > 1) {
-      const yes = await dialog(`Delete line ${fmt(i + 1)}, and the ${plural(end - i - 1, 'line', 'lines')} under it?`, (body) => {
+      // the question names what goes: a record by its id, tag and name, another line by its number and its text (core.js)
+      const yes = await dialog((title) => putQuestion(title, C.deleteQuestion(m, i)), (body) => {
         const t = el('div', 'dialog-list');
         const line = el('div', 'chg-line is-was');
         line.appendChild(el('span', 'chg-sign', '−'));
@@ -1186,8 +1188,9 @@
   function updateBar() {
     const doc = state.doc;
     const changed = !!doc && C.unsaved(doc);                        // what no file holds yet: not the original, nor any copy (10.2)
-    $('edit').disabled = !doc;
+    for (const id of ['goto-box', 'edit', 'undo', 'redo', 'save']) $(id).hidden = !doc;   // P9: hidden, not disabled, until a file is open
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
+    $('middle').classList.toggle('is-edit-on', !!doc && state.editing);   // P10: the lines' editor's look, while Edit is on
     $('fold-all').hidden = !doc;
     $('file-name').hidden = !doc;
     $('file-name').setAttribute('aria-expanded', String(state.showFacts));
@@ -1417,9 +1420,21 @@
     if (run.record) d.appendChild(el('div', 'detail-section', `in ${recordName(run.record.id, run.record.tag)}`));
   }
 
+  // The right frame's title (P9, B1): the line it shows, as the number column writes it (Line 41,201);
+  // when more than one line is in hand, Lines 41,201-41,215: a Go to Line range in force, or else a
+  // selected line whose block is shut, from it through the last line it hides.
+  function frameTitle(i) {
+    const m = state.m;
+    const span = (a, b) => (a === b ? `Line ${fmt(a + 1)}` : `Lines ${fmt(a + 1)}-${fmt(b + 1)}`);
+    if (state.range) return span(state.range.a, state.range.b);
+    if (isShut(i)) return span(i, C.subtreeEnd(m, i) - 1);
+    return span(i, i);
+  }
+
   function renderDetail() {
     const d = $('detail');
     d.textContent = '';
+    $('frame-title').textContent = '';                               // no line selected, a check's meaning, a removed line: no title
     const m = state.m;
     if (state.help) {
       renderHelp(d, state.help);
@@ -1432,6 +1447,7 @@
     }
     const i = state.sel;
     if (!m || i < 0 || i >= m.n) return;
+    $('frame-title').textContent = frameTitle(i);
     const typing = state.edit && state.edit.input ? state.edit : null;
     if (typing && typing.kind !== 'edit') {                          // a new line being typed, shown first
       const sec = section(d, typing.kind === 'inside' ? 'New line, inside' : 'New line, after');
@@ -1796,13 +1812,18 @@
     (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
     (a, b) => (a[0] > b[0] ? -1 : a[0] < b[0] ? 1 : 0),
   ];
+  // The button reads Sort; the order in force is named in its hover text alone (the owner, 0.5.1:
+  // the orders are not named on its face).
+  const TAG_ORDER_NAMES = ['by count', 'by count rising', 'A to Z', 'Z to A'];
   function renderTags(keepScroll) {
     state.tagRows = [...state.m.tagCounts.entries()].sort(TAG_ORDERS[state.tagsOrder]);
     tagsList.setCount(state.tagRows.length, keepScroll);
   }
+  function updateTagsOrder() { $('tags-order').title = TAG_ORDER_NAMES[state.tagsOrder]; }
   $('tags-order').addEventListener('click', () => {
     state.tagsOrder = (state.tagsOrder + 1) % TAG_ORDERS.length;
     store.set('tagsOrder', state.tagsOrder);
+    updateTagsOrder();
     if (state.m) renderTags(false);
   });
 
@@ -1902,7 +1923,7 @@
   }
 
   async function reportProblem() {
-    const version = ($('version') || document.querySelector('.version') || {}).textContent || '';
+    const version = $('version').textContent;                       // the foot of the Settings menu: the one place the version is written
     const where = location.protocol === 'file:' ? 'opened from disk' : location.host;
     const settings = `theme ${state.theme} · Text size ${state.textSize} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'} · Date in the header ${state.headerNote ? 'on' : 'off'}`;
     const info = {
@@ -1959,14 +1980,26 @@
     }, [{ label: 'Close', value: '' }]);
   }
 
-  // A dialog: a title, what `fill` puts in its body, and its buttons. It resolves with the value of
-  // the button pressed, or null for Cancel or Esc.
+  // A question in parts, as core.js words it: a record's label shown as labels are (3.8), a line's
+  // own text with its special characters marked, and the words between.
+  function putQuestion(parent, parts) {
+    for (const p of parts) {
+      if (p.as === 'label') putLabel(parent, p.text);
+      else if (p.as === 'line') putText(parent, p.text);
+      else parent.appendChild(document.createTextNode(p.text));
+    }
+  }
+
+  // A dialog: a title (its words, or a function that puts them in the heading), what `fill` puts in
+  // its body, and its buttons. It resolves with the value of the button pressed, or null for Cancel or Esc.
   function dialog(title, fill, buttons) {
     const d = $('dialog');
     d.textContent = '';
     const form = el('form', 'dialog-form');
     form.method = 'dialog';
-    form.appendChild(el('h2', 'dialog-title', title));
+    const heading = el('h2', 'dialog-title');
+    if (typeof title === 'function') title(heading); else heading.textContent = title;
+    form.appendChild(heading);
     const body = el('div', 'dialog-body');
     fill(body);
     form.appendChild(body);
@@ -2238,7 +2271,7 @@
     $('changes-copy').hidden = true;
     $('search-count').textContent = '';
     $('detail').textContent = '';
-    $('goto').disabled = true;
+    $('frame-title').textContent = '';
     $('goto').value = '';
     state.gotoApplied = '';
     updateGoto();
@@ -2299,7 +2332,7 @@
     state.pick = null;
     state.help = null;
     state.maxLevel = Math.max(0, ...[...doc.view.levelCounts.keys()].map(Number));
-    state.editing = false;                                           // a file opens to be read
+    state.editing = true;                                            // P10: a file opens with Edit on, as a text editor has it
     endDrag();
     state.pending = null;
     state.recordType = null;
@@ -2313,7 +2346,6 @@
     $('message').hidden = true;
     $('notice').hidden = true;
     $('empty').hidden = true;
-    $('goto').disabled = false;
     $('goto').value = '';
     state.gotoApplied = '';
     updateGoto();
@@ -2533,8 +2565,9 @@
     applyTabName();
   });
 
-  // 3.1 — the two icons at the ends of the top bar hide the left bar and the right frame, and
-  // bring them back. Remembered.
+  // 3.1, P9: the icon at the top right of each side frame, beside the left bar's tabs and in the
+  // right frame's header, shrinks the frame to a strip holding the icon alone, and brings it back at
+  // its width. Remembered, under the same keys as before 0.6.
   function applyFrames() {
     $('work').classList.toggle('left-hidden', state.hiddenLeft);
     $('work').classList.toggle('right-hidden', state.hiddenRight);
@@ -2567,8 +2600,9 @@
   $('undo').addEventListener('click', doUndo);
   $('redo').addEventListener('click', doRedo);
 
-  // Edit: off, the file is read, and a double-click highlights a word; on, lines can be typed over,
-  // added and deleted, and the lines removed since the file was opened show where they were.
+  // Edit: on, as every file opens (P10), lines can be typed over, added and deleted, the lines removed
+  // since the file was opened show where they were, and the lines take their editor's look; off, the
+  // file is read, and a double-click highlights a word.
   function setEditing(on) {
     if (!state.doc || on === state.editing) return;
     if (!on && state.edit && !commitEdit(false)) return;
@@ -2991,6 +3025,7 @@
   applyIndent();
   applySurnames();
   applyFrames();
+  updateTagsOrder();
   openPanel('records');
   updateBack();
   applyTabName();

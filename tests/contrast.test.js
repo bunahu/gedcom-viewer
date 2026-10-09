@@ -104,6 +104,39 @@ describe('contrast, measured from style.css', () => {
     holds('--color-text', [...BASES, [...CARD, '--row-selected']], 4.5);
   });
 
+  // P10 (0.6): Edit is on whenever a file opens, and the lines take a darker, editor's look while it is on
+  const EDITING = ['--editing-bg'];
+
+  it('Edit on: the lines\' editing look is darker than the frames in every theme', () => {
+    for (const [name, cls] of THEMES) {
+      const props = K.propsOf(css, cls);
+      const editing = K.luminance(K.colour(props, '--editing-bg'));
+      assert.ok(K.colour(props, '--editing-bg').a === 1, `${name}: the editing look must be opaque`);
+      assert.ok(editing < K.luminance(K.colour(props, '--color-bg-card')), `${name}: the editing look is not darker than the frames`);
+    }
+  });
+
+  it('Edit on: the lines\' text, numbers, levels, ids and muted text hold 4.5:1 on the editing look, in every theme; the text on the selected line too', () => {
+    for (const fg of ['--color-text', '--tag-color', '--value-color', '--line-number-color', '--level-color', '--id-color', '--color-text-muted', '--more-color']) holds(fg, [EDITING], 4.5);
+    holds('--color-text', [[...EDITING, '--row-selected']], 4.5);
+  });
+
+  it('Edit on: the box a line is typed in is lighter than the editing look, so it stands out, and its text holds 4.5:1', () => {
+    for (const [name, cls] of THEMES) {
+      const props = K.propsOf(css, cls);
+      assert.ok(K.luminance(K.colour(props, '--edit-bg')) > K.luminance(K.colour(props, '--editing-bg')), `${name}: the box is not lighter than the lines around it`);
+    }
+    holds('--color-text', [['--edit-bg']], 4.5);
+  });
+
+  it('the rules: Edit on sets the lines\' background to the editing look, and the grid and its number column draw it', () => {
+    const rules = css.slice(css.indexOf('/* -------'));
+    assert.ok(/\.middle\.is-edit-on \{ --lines-bg: var\(--editing-bg\); \}/.test(rules));
+    assert.ok(/--lines-bg:\s*var\(--color-bg-card\);/.test(css), 'with Edit off, the frames\' own colour');
+    assert.ok(/\.grid \{[^}]*background: var\(--lines-bg\);/.test(rules), 'the grid draws --lines-bg');
+    assert.ok(/\.fx \{[^}]*var\(--lines-bg\);/.test(rules) && /\.row\.is-dragging \.fx \{ background: var\(--lines-bg\); \}/.test(rules), 'the number column under its tint draws it too, never the frames\' colour');
+  });
+
   it('the ids, counts and notes are drawn from the tokens measured here', () => {
     const rules = css.slice(css.indexOf('/* -------'));
     assert.ok(/\.n-note\s*\{[^}]*color:\s*var\(--mark-note\)/.test(rules), '.n-note must use --mark-note');

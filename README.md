@@ -21,19 +21,20 @@ page, no server, no account. Nothing is installed, and nothing leaves the machin
 | 0.5.4 | six small fixes: the lines no longer scroll sideways when one opens for typing; the tab's title no longer holds the file's name, unless File name in the tab is turned on in Settings; spell check and page translation are off where the file's words show; the privacy page says plainly what the page sends, what it cannot control, and how to check it yourself; a notice that says why Chrome may refuse a folder for Save, and what to do; the README no longer names a path on one disk |
 | 0.5.5 | easier to read: text and borders reach the contrast the web's accessibility guidelines ask for (WCAG 2.2 AA) in all three looks; larger type (16 px) and rows (24 px), and a Text choice in Settings, Normal or Larger; a System choice for the theme, which follows the computer's light or dark and is what a new visitor gets, and Sunset is now called Dusk (a choice already kept still works); feedback@gedcom-viewer.net, an address that needs no GitHub account, beside the issue route for a report or a question; the line under Open GEDCOM now reads "The file does not leave your computer.", with a Privacy Policy link; less motion when the computer asks for it, and the system's own colors when it forces them; fold arrows at least 24 by 24 pixels to click; the content-security policy no longer allows inline styles; page translation is off for the file's name, facts and counts |
 | 0.5.6 | saving rewritten, so the original is never written: Save, the one button (⌘S), writes a dated copy through the computer's own Save dialog, which opens beside the original; no folder is asked for, and there is no backup and no log. The copy is read back once written. Picking the original itself in the Save dialog is refused, and the original put back as it was if the browser emptied it. In a browser without that dialog, Save is Download a copy. Changes count from the original, and the Changes tab has a copy button that puts them on the clipboard as text. The dot and Save show only while the lines hold what no file holds yet, the original's and every copy's lines aside, and so does the warning on leaving. A change stamp's note says what changed in its record, unless one is typed; the Save dialog shows each stamp's lines as they will be written; the header can carry the date of the save. Save a copy and ⇧⌘S are gone |
+| 0.6 | the bars: each side frame's icon in the frame it hides, at the right end of the left bar's tabs and of a new header over the right frame, which names the line or lines it shows (Line 66; Lines 23-31 for a shut block or a Go to Line range); a hidden frame shrinks to a strip holding its icon alone; Go to Line…, Edit, Undo and Redo at the right of the strip above the lines, going under its left group when the window is narrow; those four, and Save, shown only once a file is open; Edit on whenever a file opens, and the lines darker while it is on; the delete question names what goes; the Tags list's order button reads Sort; the version at the foot of the Settings menu |
 | 1.0 | when my own walk of the whole page passes |
 
-The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
+The version shows at the foot of the Settings menu, and each is a git tag (`git tag -n1` lists them).
 Before 0.4 it was called gedview; the code's own names (`GedCore`, the files' headers' history)
 keep traces of that.
 
 | The frames | What is in them |
 |---|---|
-| the top bar | an icon that hides the left bar; the name; the file's name (a click shows its facts under it); Edit, Undo, Redo, Save; Go to Line…; Settings; an icon that hides the right frame |
+| the top bar | the name; with a file open, the file's name (a click shows its facts under it) and Save; Settings |
 | the counts bar | People 2,345, Families, and so on; a click lists that type in Records |
-| the left bar | Records, Checks, Changes, Search and Tags |
-| the main frame | a strip (**↑ Top**, **← Back to …** while there is somewhere to go back to, **Collapse all** or **Expand all**) and the lines under it |
-| the right frame | the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings; a `_META` drawn as it reads; what a check means |
+| the left bar | Records, Checks, Changes, Search and Tags, and at their right end the icon that hides the bar |
+| the main frame | a strip (at its left **↑ Top**, **← Back to …** while there is somewhere to go back to, **Collapse all** or **Expand all**; at its right, once a file is open, **Go to Line…**, **Edit**, **Undo**, **Redo**) and the lines under it |
+| the right frame | a header naming the line it shows (Line 66, or Lines 23-31 for a shut block or a Go to Line range), with the icon that hides the frame; under it, the selected line: what can be done to it (with Edit on), its value, its record, what points at it, its findings; a `_META` drawn as it reads; what a check means |
 
 ## Open it
 
@@ -59,7 +60,7 @@ keep traces of that.
 | Enter, or a double-click | with Edit on: type over the selected line; Enter keeps it, Esc drops it, clicking away keeps it. With Edit off, a double-click highlights a word to copy, and a web address whole |
 | ⌥ and a double-click on a pointer | selects the pointer whole, `@` to `@`, and nothing jumps; ⌥ and a drag selects across it. A plain click still jumps |
 | a press on a row, moved | with Edit on: drags the line's block among its siblings (a record by its `0` line, every record of a type by its type row); a gold line shows where it would land; release to move, Esc to let go |
-| ⌫ | with Edit on: delete the selected line and the lines under it (asks first when there are any) |
+| ⌫ | with Edit on: delete the selected line and the lines under it (asks first when there are any, naming what goes: a record by its id, tag and name, another line by its number and its text) |
 | ⌘Z, ⇧⌘Z | Undo, Redo, one act each |
 | ⌘S | Save, as a dated copy; Download a copy in a browser without the Save dialog |
 | ⌘O | open another file |
@@ -76,10 +77,11 @@ Larger), Indent and its width,
 **Report a problem…** (below), **Bold surnames**, which shows the part of a name between slashes in bold, without
 the slashes, wherever a record is named (Records, the right frame, the dialogs) and never in a
 line as written, and **File name in the tab**, off unless turned on, which puts the file's name in the
-tab's title (the browser keeps titles in its history, which is why it is off). The two icons at the ends of the top bar hide the left bar and the right frame,
-and bring them back. In **Checks**, a click on a check's title says in the right frame what it
-means and what is usually done; the ▸ ▾ at its left opens and shuts its lines. In **Tags**, the
-button above the list steps through its orders: by count, by count rising, A–Z, Z–A. Every box
+tab's title (the browser keeps titles in its history, which is why it is off); the version shows at its foot. The icon at the right end of the left bar's tabs,
+and the one at the right end of the right frame's header, shrink their frame to a strip holding the icon alone, and bring
+it back at its width; the bars beside a shrunk frame do not drag. In **Checks**, a click on a check's title says in the right frame what it
+means and what is usually done; the ▸ ▾ at its left opens and shuts its lines. In **Tags**,
+**Sort**, above the list, steps through its orders: by count, by count rising, A to Z, Z to A; the one in force shows when the pointer rests on it. Every box
 of text in the right frame has a **copy** button at its top right. A row longer than 2,000
 characters ends with **… 81,797 more**, the count not shown; the right frame shows it whole. A
 `_META` (Ancestry's Find a Grave block) is drawn as it reads, above Joined, each part under the
@@ -97,12 +99,12 @@ change and of a finding are drawn in the system's colors.
 Remembered between visits, in the browser: Indent on or off and its width, the theme, the text size, the two
 panel widths and whether each side frame is hidden, Bold surnames, File name in the tab, the Tags list's order,
 whether the change stamps are ticked, whether the date is noted in the header, and whether the file's facts show. Never a file's name,
-content or place. Edit is off whenever a file opens.
+content or place. Edit is on whenever a file opens.
 
 ## Edit and save
 
-**Edit**, in the top bar, turns editing on and off; it is off whenever a file opens, so a file is
-first read. With it on, select a line and press Enter (or double-click it): its row becomes a box
+**Edit**, at the right of the strip above the lines, turns editing on and off; it is on whenever a file opens, as in a text
+editor, and the lines take a darker look while it is on. With it on, select a line and press Enter (or double-click it): its row becomes a box
 holding the whole line: level, tag and value. The right frame's buttons add a line inside the
 selected line's block (**Add inside**: directly under it, one level deeper), add one after its
 block (**Add after**, at its level), or delete the line or its whole record. Deleting a record
@@ -209,7 +211,7 @@ node --test tests/*.test.js
 | Tests | `node --test tests/*.test.js` | all pass; the only skips are the tests that need the public files, when they are absent |
 | The real files | `node tools/check-real.js local/<file>.ged` | every number equals section 3 of the brief, for a file it measured; the probe's numbers for any other; an edit and a record deleted on each, the whole file checked again within 0.3 s, and undone to its sha256 |
 | The second opinion | `node tools/compare.js fixtures local/<file>.ged` | no number differs between `core.js` and `tools/baseline_probe.py` |
-| The page | `node tools/walk.js local/<file>.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save through the page, with the computer's Open and Save dialogs stood in for (a dated copy written and read back, the original refused and put back, the Changes text copied); Download a copy in a browser with no pickers. `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look) |
+| The page | `node tools/walk.js local/<file>.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save through the page, with the computer's Open and Save dialogs stood in for (a dated copy written and read back, the original refused and put back, the Changes text copied); Download a copy in a browser with no pickers; the bars (each frame's icon in its frame, a frame shrunk to its icon, the right frame's title, the strip's two groups and what shows before a file is open, Edit on as a file opens and its look, the strip at a narrow width). `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look, bars) |
 
 The tools print counts, tags, ids, line numbers, lengths and hashes only, never a value, so
 they are safe to run over a file that holds living people. The walk drives Google Chrome,
@@ -304,7 +306,8 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--tag-weight` | how strong a tag is |
 | `--row-height` | the height of every row in the main frame (24 px); the page reads it each time it lays the rows out, and again when Text changes, keeping the same line in view |
 | `--tab-size` | how wide a tab inside a value shows |
-| `--row-tint` | a row's tint, which each state below sets; the sticky left part of a row (its number, mark and fold) lays it over the frame's own colour |
+| `--row-tint` | a row's tint, which each state below sets; the sticky left part of a row (its number, mark and fold) lays it over the lines' own colour |
+| `--lines-bg`, `--editing-bg` | the lines' background: the frames' own colour with Edit off, and with Edit on the editing look, darker than the frames. `--editing-bg` is set for each look; the lines' text, numbers, levels, ids and muted text hold 4.5 to 1 on it |
 | `--row-selected`, `--row-hit`, `--row-hover` | the selected line; a search's lines; the line under the pointer |
 | `--line-number-color`, `--level-color`, `--tag-color`, `--value-color` | the parts of a line |
 | `--id-color` | a record's id, such as @I1@; set for each look, 4.5 to 1 against the lines' background |
@@ -322,8 +325,10 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--row-changed`, `--row-added`, `--row-removed`, `--row-moved` | the tint of a changed row, an added row, a removed one (Edit on), a moved one |
 | `--drop-line`, `--drop-line-width`, `--drag-dim` | the gold line where a dragged block would land; how faint what would move is drawn |
 | `--more-color` | "… 81,797 more" at the end of a clipped row |
-| `--icon-button` | the square buttons that carry an icon: the side frames, the Tags list's order |
-| `--strip-height` | the strip above the lines: Top, Back, Collapse all |
+| `--icon-button` | the square buttons that carry an icon: the two that hide the side frames |
+| `--frame-pad`, `--frame-shrunk` | the space round a side frame's icon; a hidden side frame, shrunk to a strip one icon button wide |
+| `--strip-height` | the strip above the lines, and the right frame's header beside it: their height on one line (38 px; 44 px at Larger) |
+| `--goto-width` | the Go to Line… box, in the strip |
 | `--aside-shade` | the shade the number column casts while the lines are scrolled sideways |
 | `--frame-ease` | how long a side frame takes to hide or show |
 | `--menu-width` | the Settings menu |
@@ -333,7 +338,7 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--prose-max-width` | the privacy page's column of text |
 | `--report-height` | the Report a problem box |
 | `--meta-max-height`, `--table-border` | a `_META`'s story before it scrolls; the tables in a story and its persons |
-| `--edit-bg` | the box a line is typed in |
+| `--edit-bg` | the box a line is typed in, lighter than the lines' editing look |
 | `--off-opacity` | how faint a button is that cannot be pressed |
 | `--dialog-indent`, `--dialog-level-step` | the Save dialog: how far under its checkbox a record and the Note box sit, and how much further each level of a line it will write |
 | `--left-width`, `--right-width` | the left bar and the right frame (also dragged, and remembered) |

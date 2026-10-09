@@ -2005,6 +2005,29 @@
     return { end, more: total - limit };
   }
 
+  // The question asked before a line with lines under it is deleted (0.6, the review's item 21): it
+  // names what goes. A record's 0 line by its id and tag, then its label as the Records list shows
+  // it, unless the label is only the line itself: "Delete @I42@ INDI Jane /Fixture/ and the 14 lines
+  // under it?". Any other line by its number and its own text, clipped to about 60 characters:
+  // "Delete line 405, 1 BIRT, and the 3 lines under it?". In parts, so that the page shows a label
+  // as labels show (3.8) and a line's special characters marked: { text } for the words between,
+  // { text, as: 'label' }, { text, as: 'line' }.
+  const QUESTION_CHARS = 60;
+  function deleteQuestion(m, i) {
+    const under = subtreeEnd(m, i) - i - 1;
+    const tail = `the ${num(under)} ${under === 1 ? 'line' : 'lines'} under it?`;
+    const own = m.texts[i].slice(m.lead[i]);
+    const short = (t) => { const c = clip(t, QUESTION_CHARS); return c.more ? `${t.slice(0, c.end)}…` : t; };
+    const r = m.recOf[i];
+    if (r >= 0 && m.records[r] === i) {
+      const name = [m.xref[i], m.tag[i]].filter((x) => x).join(' ');
+      const label = m.labels[r];
+      if (!label || label === own) return [{ text: `Delete ${name} and ${tail}` }];
+      return [{ text: `Delete ${name} ` }, { text: short(label), as: 'label' }, { text: ` and ${tail}` }];
+    }
+    return [{ text: `Delete line ${num(i + 1)}, ` }, { text: short(own), as: 'line' }, { text: `, and ${tail}` }];
+  }
+
   // 3.3 — a _META value drawn as it reads. The page reads the value's XML, and the HTML inside
   // its story, in an inert document (DOMParser) and hands the trees over as plain nodes — { name,
   // attrs, children } for an element, { text } for text, { comment: true } for a comment — so
@@ -2186,7 +2209,7 @@
     moveRefusal, moveLines, landings,
     markCopied, takeBack, isChanged, changedSinceCopy, unsaved, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
-    nameParts, nameShown, linkAt, clip, stripStyles, metaRebuild, metaParts, lineShape,
+    nameParts, nameShown, linkAt, clip, deleteQuestion, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,
   };
 });

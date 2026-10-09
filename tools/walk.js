@@ -24,10 +24,15 @@
 // translation attributes), and in a part of its own, scroll (a line opened for typing leaves the
 // grid where it was). Release 0.5.5 is walked in the rest of the page (the theme's first choice), in
 // the third round (Settings' controls), and in a part of its own, look (System, Dusk, the text size,
-// less motion, forced colors, and the policy with a _META that does not parse). --shots DIR saves
+// less motion, forced colors, and the policy with a _META that does not parse). Release 0.6 is walked
+// in a part of its own, bars (the top bar with no file and with one, each side frame's icon in the
+// frame it hides and the frame shrunk to it, the right frame's title, the strip's two groups and
+// the strip at a narrow width, Edit on as a file opens and its look, the version in Settings),
+// and in the editing part (the delete question); every file now opens with Edit on, so the
+// read-only walk presses E first, and the parts that edit no longer turn it on. --shots DIR saves
 // pictures of the fictional files, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
-// third, scroll, drags, save, copy, look. Exit 0 when every step passes.
+// third, scroll, drags, save, copy, look, bars. Exit 0 when every step passes.
 //
 // The computer's Save dialog itself is not walked here: a person picks the name and the place in
 // it. The walk stands in for it as Chromium's behaves, the file picked created, or emptied when it
@@ -161,6 +166,13 @@ async function readOnlyWalk(page, file) {
 
   const ms = await page.openFile(file);
   check(ms < BUDGET_MS, `it opens in under 2 seconds: ${fmt(ms)} ms`);
+
+  // 0.6: a file opens with Edit on (P10); E once first, so the walk reads with it off, as part A does
+  const EDIT_PRESSED = "document.getElementById('edit').getAttribute('aria-pressed')";
+  const openedOn = await page.ev(EDIT_PRESSED);
+  await page.press('e', 'KeyE', 69, 'e');
+  const readOff = await page.ev(EDIT_PRESSED);
+  check(openedOn === 'true' && readOff === 'false', `it opens with Edit on; E turns it off for the reading (Edit ${openedOn}, then ${readOff})`);
 
   // the counts bar
   const bar = await page.ev("[...document.querySelectorAll('#counts .count-item')].map((b) => [b.title, b.querySelector('.count-figure').textContent])");
@@ -598,8 +610,11 @@ async function editingOnThePage(page, dir, shots) {
   await page.waitFor(`${ROWS} === ${m.n + sectionRows}`);
   check(await page.ev("document.getElementById('goto-clear').hidden && document.getElementById('goto').value === ''"), '× shows every line again');
 
-  // Edit off: Enter and a double-click do not edit; the double-click highlights a word, and it holds
+  // Edit off: Enter and a double-click do not edit; the double-click highlights a word, and it holds.
+  // The file opened with Edit on (0.6, P10), so the button turns it off first
   const name = m.definedAt.get('@I42@')[0] + 1;
+  const openedOn = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
+  await page.click("document.getElementById('edit')");
   await gotoLine(page, name + 1);
   await page.key('Enter', 'Enter', 13);
   const at = await page.ev(`(() => { const t = [...document.querySelectorAll('#grid .row.is-sel .tx .val')][0]; const b = t.getBoundingClientRect(); return { x: b.left + 12, y: b.top + b.height / 2 }; })()`);
@@ -609,8 +624,8 @@ async function editingOnThePage(page, dir, shots) {
   }
   await sleep(100);
   const readOnly = await page.ev("({ box: !!document.querySelector('#grid input.edit'), word: window.getSelection().toString(), actions: !!document.querySelector('#detail .detail-actions') })");
-  check(!readOnly.box && readOnly.word === 'Person42' && !readOnly.actions,
-    `with Edit off, Enter and a double-click edit nothing; the double-click highlights "${readOnly.word}", and it holds to be copied`);
+  check(openedOn === 'true' && !readOnly.box && readOnly.word === 'Person42' && !readOnly.actions,
+    `the file opened with Edit on; turned off, Enter and a double-click edit nothing; the double-click highlights "${readOnly.word}", and it holds to be copied`);
 
   // Edit on: a double-click types over the line; kept, it is marked in its row, in Changes and in the right frame
   await page.click("document.getElementById('edit')");
@@ -697,15 +712,26 @@ async function editingOnThePage(page, dir, shots) {
   await page.waitFor("document.getElementById('changes-count').textContent === '2'");
   check(true, '⌘Z takes back the restore, then the delete');
 
-  // a line with lines under it asks first; Cancel leaves it
+  // a line with lines under it asks first, and the question names what goes (0.6): another line by its
+  // number and its own text; a record's 0 line by its id, its tag and its label as the Records list
+  // shows it. Cancel leaves it
+  const ask = async (n) => {
+    await gotoLine(page, n);
+    await page.key('Backspace', 'Backspace', 8);
+    await page.waitFor("document.getElementById('dialog').open");
+    const title = await page.ev("document.querySelector('#dialog .dialog-title').textContent");
+    await page.click(BUTTON('#dialog', 'Cancel'));
+    await page.waitFor("!document.getElementById('dialog').open");
+    return title;
+  };
   const birt = m.definedAt.get('@I42@')[0] + 5;
-  await gotoLine(page, birt + 2);                                    // one line lower: the added line is above it
-  await page.key('Backspace', 'Backspace', 8);
-  await page.waitFor("document.getElementById('dialog').open");
-  const asked = await page.ev("document.querySelector('#dialog .dialog-title').textContent");
-  await page.click(BUTTON('#dialog', 'Cancel'));
-  await page.waitFor("!document.getElementById('dialog').open");
-  check(asked === `Delete line ${fmt(birt + 2)}, and the 4 lines under it?`, `⌫ on a line with lines under it asks first — "${asked}" — and Cancel leaves it`);
+  const asked = await ask(birt + 2);                                 // one line lower: the added line is above it
+  check(asked === `Delete line ${fmt(birt + 2)}, 1 BIRT, and the 4 lines under it?`, `⌫ on a line with lines under it asks first, naming it: "${asked}"; Cancel leaves it`);
+  const i43 = m.definedAt.get('@I43@')[0];
+  const askedRecord = await ask(i43 + 2);
+  const under43 = core.subtreeEnd(m, i43) - i43 - 1;
+  check(askedRecord === `Delete @I43@ INDI ${m.labels[m.recOf[i43]]} and the ${under43} lines under it?` && (await page.ev("document.getElementById('changes-count').textContent")) === '2',
+    `…and on a record's 0 line, naming the record as the Records list does: "${askedRecord}"; nothing goes`);
 
   // everything undone: the file as it was, nothing to save; Edit off
   for (let guard = 0; guard < 20 && !(await page.ev("document.getElementById('undo').disabled")); guard += 1) {
@@ -725,8 +751,7 @@ async function editorScroll(page, dir) {
   fs.writeFileSync(file, thirdFiction());
   const m = core.read(new Uint8Array(fs.readFileSync(file)));
   console.log(`\n== a line opened for typing leaves the grid where it was, on a fictional file of ${fmt(m.n)} lines`);
-  await page.openFile(file);
-  await page.click("document.getElementById('edit')");
+  await page.openFile(file);                                         // with Edit on, as every file opens (0.6)
   const nameLine = m.texts.indexOf('1 NAME Jane /Fixture/') + 1;
   const longLine = m.texts.findIndex((t) => t.length > 2000) + 1;
   // where the grid is, and whether the level and tag columns of a row not being typed in sit clear of the number column
@@ -799,8 +824,7 @@ async function editingEdges(page) {
   const family = path.join(ROOT, 'fixtures', 'synthetic', 'family.ged');
   const m = core.read(new Uint8Array(fs.readFileSync(family)));
   const row = (n) => `[...document.querySelectorAll('#grid .row')].find((r) => r.querySelector('.ln') && r.querySelector('.ln').textContent === '${n}')`;
-  await page.openFile(family);
-  await page.click("document.getElementById('edit')");               // Edit on
+  await page.openFile(family);                                       // with Edit on, as every file opens (0.6)
 
   await gotoLine(page, 17);
   await page.key('Enter', 'Enter', 13);
@@ -864,8 +888,7 @@ async function editingEdges(page) {
     await page.click("document.getElementById('undo')");
   }
 
-  await page.openFile(path.join(ROOT, 'fixtures', 'synthetic', 'e8-bad-bytes.ged'));
-  await page.click("document.getElementById('edit')");
+  await page.openFile(path.join(ROOT, 'fixtures', 'synthetic', 'e8-bad-bytes.ged'));   // Edit on as it opens
   await gotoLine(page, 8);
   await page.key('Enter', 'Enter', 13);
   const e8 = await page.ev(`({ box: !!document.querySelector('#grid input.edit'), said: document.getElementById('notice').textContent,
@@ -1032,23 +1055,33 @@ async function thirdRound(page, dir, shots) {
   check(afterJump.at === 0 && !afterJump.cue, 'a jump to a line brings the lines back to their left edge');
   await shot('sideways');
 
-  // 3.1 — the side frames hidden and shown, and remembered across a reload
+  // 3.1, and P9 (0.6): the side frames hidden and shown by the icon in each, and remembered across a
+  // reload: hidden, a frame shrinks to a strip holding its icon alone
+  const FRAMES = `({ cls: document.getElementById('work').className, tabs: getComputedStyle(document.querySelector('.tabs')).visibility, detail: getComputedStyle(document.getElementById('detail')).visibility,
+    icons: ['hide-left', 'hide-right'].map((id) => getComputedStyle(document.getElementById(id)).visibility).join(), width: document.getElementById('side').getBoundingClientRect().width,
+    tab: document.getElementById('hide-left').getAttribute('aria-pressed') + '/' + document.getElementById('hide-left').title + '/' + document.getElementById('hide-right').title })`;
   await page.click("document.getElementById('hide-left')");
   await page.click("document.getElementById('hide-right')");
   await sleep(350);                                                  // the frames ease shut
-  const hidden = await page.ev("({ cls: document.getElementById('work').className, side: getComputedStyle(document.getElementById('side')).visibility, detail: getComputedStyle(document.getElementById('detail')).visibility, width: document.getElementById('side').getBoundingClientRect().width, tab: document.getElementById('hide-left').getAttribute('aria-pressed') + '/' + document.getElementById('hide-left').title + '/' + document.getElementById('hide-right').title })");
+  const hidden = await page.ev(FRAMES);
   await shot('frames-hidden');
   await page.goto(`file://${path.join(ROOT, 'index.html')}`);
   const remembered = await page.ev("document.getElementById('work').className");
+  await sleep(350);                                                  // the frames ease to how they were left as the page loads, the left icon with its bar's edge
   await page.click("document.getElementById('hide-left')");
   await page.click("document.getElementById('hide-right')");
   await sleep(350);
-  const shown = await page.ev("({ cls: document.getElementById('work').className, side: getComputedStyle(document.getElementById('side')).visibility, tab: document.getElementById('hide-left').getAttribute('aria-pressed') + '/' + document.getElementById('hide-left').title })");
-  check(hidden.cls === 'work left-hidden right-hidden' && hidden.side === 'hidden' && hidden.detail === 'hidden' && hidden.width === 0 && hidden.tab === 'true/Show left bar/Show right frame',
-    `the two icons at the ends of the top bar hide the left bar and the right frame (${hidden.cls}, eased shut), and read "${hidden.tab.split('/')[1]}"`);
-  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.side === 'visible' && shown.tab === 'false/Hide left bar',
+  const shown = await page.ev(FRAMES);
+  check(hidden.cls === 'work left-hidden right-hidden' && hidden.tabs === 'hidden' && hidden.detail === 'hidden' && hidden.icons === 'visible,visible' && hidden.width > 0 && hidden.width < 60
+    && hidden.tab === 'true/Show left bar/Show right frame',
+  `the icon in each side frame shrinks it to a strip holding the icon alone (${hidden.cls}, eased; the left bar ${Math.round(hidden.width)} px wide), and reads "${hidden.tab.split('/')[1]}"`);
+  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tabs === 'visible' && shown.detail === 'visible' && shown.tab === 'false/Hide left bar/Hide right frame',
     `hidden or shown is remembered across a reload (${remembered}); the same icons bring them back (${shown.cls === 'work' ? 'both shown' : shown.cls})`);
   await page.openFile(file);
+  // the reading steps below want Edit off; the file opened with it on (0.6)
+  const reopenedOn = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
+  await page.click("document.getElementById('edit')");
+  check(reopenedOn === 'true' && (await page.ev("document.getElementById('edit').getAttribute('aria-pressed')")) === 'false', 'opened again, the file is in Edit; the button turns it off for reading');
 
   // 3.2 — a copy button on every box of text: the value, Joined, and each part of a _META
   await page.ev("navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }");
@@ -1194,16 +1227,23 @@ async function thirdRound(page, dir, shots) {
   await page.click("document.querySelector('.tab[data-panel=tags]')");
   await page.waitFor(LAID_OUT('tags-list'));
   const firstTag = () => page.ev(`${VISIBLE('tags-list')}[0].firstChild.textContent + ' ' + ${VISIBLE('tags-list')}[0].lastChild.textContent`);
+  // 0.6: the button reads Sort beside its icon; the order in force is named in its hover text alone
+  const SORT = "(() => { const b = document.getElementById('tags-order'); return { face: b.textContent, label: b.getAttribute('aria-label'), title: b.title, icon: !!b.querySelector('svg') }; })()";
+  const sort = await page.ev(SORT);
   const orders = [await firstTag()];
+  const hovers = [sort.title];
   for (let k = 0; k < 4; k += 1) {
     await page.click("document.getElementById('tags-order')");
     orders.push(await firstTag());
+    hovers.push((await page.ev(SORT)).title);
   }
   const byCount = [...m.tagCounts.entries()].sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
   const rising = [...m.tagCounts.entries()].sort((a, b) => (a[1] - b[1]) || (a[0] < b[0] ? -1 : 1));
   const names = [...m.tagCounts.keys()].sort();
   const want = [byCount[0], rising[0], [names[0], m.tagCounts.get(names[0])], [names[names.length - 1], m.tagCounts.get(names[names.length - 1])], byCount[0]].map((x) => `${x[0]} ${fmt(x[1])}`);
-  check(JSON.stringify(orders) === JSON.stringify(want), `the Tags list's order button steps through by count, by count rising, A–Z, Z–A and back: ${orders.join(' → ')}`);
+  check(JSON.stringify(orders) === JSON.stringify(want) && sort.face === 'Sort' && sort.label === 'Sort' && sort.icon
+    && JSON.stringify(hovers) === JSON.stringify(['by count', 'by count rising', 'A to Z', 'Z to A', 'by count']),
+  `the Tags list's Sort, its icon beside the word, steps through the orders and back, naming each in its hover text alone (${hovers.join(', ')}): ${orders.join(' → ')}`);
 
   // 3.11 — E turns Edit on and off; not while a box is typed in. Last, and the box left by a
   // click: see `press` in tools/chrome.js for what a synthetic key can do to headless Chrome.
@@ -1235,8 +1275,8 @@ async function fourthDrags(page, dir, shots) {
   await page.openFile(file);
   const line = (text) => m.texts.indexOf(text) + 1;
   const famsLine = line('1 FAMS @F1@');
-  // 3.4a — a block dragged among its siblings; a section dragged past another; Esc; own place
-  await page.click("document.getElementById('edit')");
+  // 3.4a: a block dragged among its siblings; a section dragged past another; Esc; own place. Edit is
+  // on as the file opens (0.6)
   const birt = line('1 BIRT');
   const nameLine = line('1 NAME Jane /Fixture/');
   await gotoLine(page, nameLine);
@@ -1433,8 +1473,7 @@ async function saveWithDialog(page) {
   check(bar.label === 'Save' && bar.off && !bar.copy && bar.title === 'Save a dated copy, where you choose; the original is never written (⌘S)',
     `opened through the Open dialog, with its handle: one button, "${bar.label}", off until a change; no Save a copy`);
 
-  await page.click("document.getElementById('edit')");
-  await retype(page, 12, '1 NAME Joe /Fixtures/');
+  await retype(page, 12, '1 NAME Joe /Fixtures/');                   // Edit is on as the file opens (0.6)
   check(await page.ev(`!document.getElementById('dirty').hidden && !document.getElementById('save').disabled && ${LEAVE_ASKS}`),
     'an edit: ●, Save on, and leaving would ask first');
 
@@ -1605,8 +1644,7 @@ async function copyWithoutPickers(page, dir, shots) {
   check(await page.ev("!('showSaveFilePicker' in window) && !('showOpenFilePicker' in window)"), 'the page, loaded again with no pickers');
   const empty = await page.ev("({ label: document.getElementById('save').textContent, title: document.getElementById('save').title })");
   check(empty.label === 'Download a copy' && empty.title === 'Download a dated copy; the original is never written (⌘S)', `before a file is open, the button reads "${empty.label}"`);
-  await page.openFile(file);
-  await page.click("document.getElementById('edit')");
+  await page.openFile(file);                                         // with Edit on, as every file opens (0.6)
   await retype(page, 9, '1 NAME Jane /Fixtures/');
   check(await page.ev("document.getElementById('save').textContent === 'Download a copy' && !document.getElementById('save').disabled"), 'an edit: Download a copy turns on');
 
@@ -1659,7 +1697,7 @@ function lookFiction() {
 const LOOK_NOW = `(() => { const g = document.getElementById('grid'); const rows = [...g.querySelectorAll('.v-inner > div')].filter((r) => r.style.display !== 'none');
   const f = g.querySelector('.fold:not(:empty)').getBoundingClientRect();
   return { pitch: rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top, first: rows[0].querySelector('.ln').textContent, fold: [f.width, f.height],
-    font: getComputedStyle(g).fontSize, body: getComputedStyle(document.body).fontSize, small: getComputedStyle(document.querySelector('.version')).fontSize,
+    font: getComputedStyle(g).fontSize, body: getComputedStyle(document.body).fontSize, small: getComputedStyle(document.querySelector('#settings-menu .menu-foot')).fontSize,
     lists: ['records-list', 'checks-list', 'changes-list', 'tags-list'].map((id) => getComputedStyle(document.getElementById(id)).getPropertyValue('--row-height')).join(), cls: document.documentElement.className,
     larger: document.getElementById('text-larger').getAttribute('aria-pressed') }; })()`;
 
@@ -1725,8 +1763,7 @@ async function theLook(page, dir, shots) {
   check(kept === 'text-larger|true', `Larger is remembered across a reload: ${kept}`);
 
   // a line opened for typing, and a block dragged: the box is a row high, and the gold line sits on a row's edge, at either size
-  await page.openFile(file);
-  await page.click("document.getElementById('edit')");
+  await page.openFile(file);                                         // with Edit on, as every file opens (0.6)
   for (const size of ['larger', 'normal']) {
     if (size === 'normal') await setting(page, 'text-normal');
     await sleep(100);
@@ -1767,21 +1804,22 @@ async function theLook(page, dir, shots) {
     `a file of 1,200,003 lines opens at Normal, and Larger is refused: "${refused.notice}"`);
   await page.click("document.getElementById('notice')");
 
-  // less motion: the side frame hides at once, where it eased before
+  // less motion: the side frame shrinks to its icon at once, where it eased before
   await page.openFile(file);
+  const SHRUNK = "parseFloat(getComputedStyle(document.getElementById('work')).gridTemplateColumns)";   // the left column, once shrunk: a strip one icon wide
   const frameAfterTwoFrames = () => page.ev(`(async () => { const side = document.getElementById('side'); document.getElementById('hide-left').click();
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); const w = side.getBoundingClientRect().width;
-    await new Promise((r) => setTimeout(r, 400)); document.getElementById('hide-left').click(); await new Promise((r) => setTimeout(r, 400)); return w; })()`);
+    await new Promise((r) => setTimeout(r, 400)); const strip = ${SHRUNK}; document.getElementById('hide-left').click(); await new Promise((r) => setTimeout(r, 400)); return { w, strip }; })()`);
   const eased = await frameAfterTwoFrames();
   await media([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   const durations = await page.ev("getComputedStyle(document.getElementById('work')).transitionDuration");
   const at_once = await frameAfterTwoFrames();
   await media([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
-  check(eased > 0 && at_once === 0 && durations === '0s', `less motion: the left frame is gone two frames after its icon is pressed (${at_once} px; it was ${Math.round(eased)} px, easing, without), and its transition lasts ${durations}`);
+  check(eased.w > eased.strip && at_once.w === at_once.strip && at_once.strip > 0 && durations === '0s',
+    `less motion: the left frame is down to its strip two frames after its icon is pressed (${at_once.w} px; it was ${Math.round(eased.w)} px, easing, without), and its transition lasts ${durations}`);
 
-  // forced colors: what a tint or a shadow showed is drawn in the system's colors
+  // forced colors: what a tint or a shadow showed is drawn in the system's colors. Edit is on, as the file opened (0.6)
   await media([{ name: 'forced-colors', value: 'active' }]);
-  await page.click("document.getElementById('edit')");
   const nameLine = line('1 NAME Person2 /Look/');
   await gotoLine(page, nameLine);
   await openEditBox(page);
@@ -1817,6 +1855,198 @@ async function theLook(page, dir, shots) {
     'a _META that does not parse draws nothing: the right frame shows the line as written, and no error block of Chrome\'s is on the page');
   check(fresh.length > 0 && fresh.every((e) => /Applying inline style violates/.test(e)) && infos.length === 1 && /^GEDCOM Viewer: a _META held XML that does not parse/.test(infos[0]) && /Nothing was sent anywhere\.$/.test(infos[0]),
     `the console holds Chrome's ${fresh.length} refusal${fresh.length === 1 ? '' : 's'} of its own style, and one line of the page's own: "${infos[0]}"`);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 0.6: the bars (P9, A1 and B1) and Edit on as a file opens (P10)
+// ---------------------------------------------------------------------------------------------
+
+// The version as index.html writes it, once, at the foot of the Settings menu.
+const VERSION = (fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').match(/<span id="version">([^<]+)<\/span>/) || [])[1];
+
+// A hundred and twenty made-up people in sixty families, and a source nothing points at: enough
+// lines for a number with a comma in it.
+function barsFiction() {
+  const L = ['0 HEAD', '1 SOUR gedview-walk', '2 VERS 1.0', '1 DATE 9 OCT 2026', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 SUBM @U1@', '0 @U1@ SUBM', '1 NAME Walk /Fixture/'];
+  for (let k = 1; k <= 120; k += 1) {
+    L.push(`0 @I${k}@ INDI`, `1 NAME Person${k} /Fixture/`, `2 GIVN Person${k}`, '2 SURN Fixture', `1 SEX ${k % 2 ? 'F' : 'M'}`, '1 BIRT',
+      `2 DATE ${1 + (k % 28)} JAN ${1850 + k}`, '2 PLAC Fixtureville', `1 FAMS @F${Math.ceil(k / 2)}@`);
+  }
+  for (let f = 1; f <= 60; f += 1) L.push(`0 @F${f}@ FAM`, `1 HUSB @I${2 * f}@`, `1 WIFE @I${2 * f - 1}@`, '1 MARR', `2 DATE ${1870 + f}`);
+  L.push('0 @S1@ SOUR', '1 TITL The Fixture Register', '0 TRLR');
+  return `${L.join('\n')}\n`;
+}
+
+// What the top bar shows, by id or class: its parts with a box on the screen.
+const TOP_BAR = "[...document.querySelectorAll('.bar-top > *, .bar-top .actions > *')].filter((e) => e.tagName !== 'NAV' && e.getClientRects().length).map((e) => e.id || e.className).join()";
+// The strip's controls that show, in its two groups and left to right; whether the right group is
+// under the left; whether any two overlap, any is outside the strip, or the lines start above its foot.
+const STRIP_NOW = `(() => { const r = (e) => e.getBoundingClientRect();
+  const shown = (id) => [...document.getElementById(id).querySelectorAll(':scope > *, :scope > .strip-keep > *')].filter((e) => !e.classList.contains('strip-keep') && e.getClientRects().length);
+  const strip = r(document.getElementById('strip')); const lg = r(document.getElementById('strip-left')); const rg = r(document.getElementById('strip-right'));
+  const boxes = [...document.querySelectorAll('#strip button, #strip input')].filter((e) => e.getClientRects().length).map(r);
+  const over = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  return { left: shown('strip-left').map((e) => e.id).join(), right: shown('strip-right').map((e) => e.id).join(), xs: [...shown('strip-left'), ...shown('strip-right')].map((e) => r(e).left),
+    under: rg.top >= lg.bottom - 0.5, rightEnd: Math.round(strip.right - rg.right), overlap: boxes.some((a, i) => boxes.some((b, j) => i < j && over(a, b))),
+    outside: boxes.filter((a) => a.left < strip.left - 0.5 || a.right > strip.right + 0.5 || a.top < strip.top - 0.5 || a.bottom > strip.bottom + 0.5).length,
+    lines: r(document.getElementById('grid')).top >= strip.bottom - 0.5, height: Math.round(strip.height),
+    rightLines: new Set(shown('strip-right').map((e) => Math.round(r(e).top))).size,
+    trio: new Set([...document.querySelectorAll('.strip-keep > *')].filter((e) => e.getClientRects().length).map((e) => Math.round(r(e).top))).size,
+    middle: Math.round(r(document.getElementById('middle')).width) }; })()`;
+// The lines' background now, the frames' own colour, and the editing look as style.css sets it.
+const LINES_LOOK = `(() => { const probe = document.createElement('div'); probe.style.background = 'var(--editing-bg)'; document.body.appendChild(probe);
+  const editing = getComputedStyle(probe).backgroundColor; probe.remove(); const plain = [...document.querySelectorAll('#grid .row')].find((x) => !x.matches('.is-sel, .is-section, :hover'));
+  return { edit: document.getElementById('edit').getAttribute('aria-pressed'), lines: getComputedStyle(document.getElementById('grid')).backgroundColor,
+    numbers: getComputedStyle(plain.querySelector('.fx')).backgroundColor, frames: getComputedStyle(document.getElementById('strip')).backgroundColor, editing }; })()`;
+const FRAME_TITLE = "document.getElementById('frame-title').textContent";
+
+async function theBars(page, dir, shots) {
+  const file = path.join(dir, 'bars.ged');
+  fs.writeFileSync(file, barsFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `bars-${name}.png`)) : null);
+  const pad = await page.ev("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--frame-pad'))");
+  console.log(`\n== the bars (0.6), on a fictional file of ${fmt(m.n)} lines`);
+
+  // before a file is open: the top bar holds the name and Settings alone; Go to Line…, Edit, Undo, Redo
+  // and Save are not there at all; the right frame's header holds its icon alone
+  const before = await page.ev(`({ bar: ${TOP_BAR}, icons: document.querySelectorAll('.bar .icon-button').length,
+    gone: ['goto-box', 'edit', 'undo', 'redo', 'save'].filter((id) => !document.getElementById(id).hidden || document.getElementById(id).getClientRects().length),
+    strip: [...document.querySelectorAll('#strip button, #strip input')].filter((e) => e.getClientRects().length).map((e) => e.id + (e.disabled ? ' off' : '')).join(),
+    title: ${FRAME_TITLE}, icon: getComputedStyle(document.getElementById('hide-right')).visibility, foot: document.querySelector('#settings-menu .menu-foot').textContent })`);
+  await shot('empty');
+  check(before.bar === 'app-name,settings' && before.icons === 0 && before.gone.length === 0 && before.strip === 'top off' && before.title === '' && before.icon === 'visible',
+    `with no file open the top bar holds ${before.bar.replace(',', ' and ')} alone, no icon; the strip holds Top, off; Go to Line…, Edit, Undo, Redo and Save are hidden, not just off; the right frame's header holds its icon alone`);
+  check(before.foot === `GEDCOM Viewer ${VERSION}`, `the version is out of the top bar and at the foot of Settings: "${before.foot}"`);
+
+  // a file opens with Edit on, and the lines in their editing look; Edit off gives them the frames' colour back
+  await page.openFile(file);
+  const on = await page.ev(LINES_LOOK);
+  await page.click("document.getElementById('edit')");
+  const off = await page.ev(LINES_LOOK);
+  await page.click("document.getElementById('edit')");
+  const onAgain = await page.ev(LINES_LOOK);
+  check(on.edit === 'true' && on.lines === on.editing && on.numbers === on.editing && on.lines !== on.frames,
+    `the file opens with Edit on: the button pressed, and the lines, their number column too, in the editing look (${on.lines}, the frames ${on.frames})`);
+  check(off.edit === 'false' && off.lines === off.frames && off.numbers === off.frames && onAgain.edit === 'true' && onAgain.lines === on.editing,
+    `Edit off: the lines take the frames' colour (${off.lines}); on again, the editing look`);
+
+  // the top bar with a file: the name, the file's name, Save, Settings; the strip's two groups, in order, on one line
+  const bar = await page.ev(`({ bar: ${TOP_BAR}, save: document.getElementById('save').disabled })`);
+  const strip = await page.ev(STRIP_NOW);
+  await shot('open');
+  check(bar.bar === 'app-name,file-name,save,settings' && bar.save, `with a file open the top bar holds the name, the file's name, Save (off: nothing to save) and Settings: ${bar.bar}`);
+  check(strip.left === 'top,fold-all' && strip.right === 'goto-box,edit,undo,redo' && strip.xs.every((x, k) => k === 0 || x > strip.xs[k - 1]) && !strip.under && strip.rightEnd === pad
+    && !strip.overlap && strip.outside === 0 && strip.lines,
+  `the strip: ${strip.left} at its left; ${strip.right} at its right end, in that order, on one line, ${strip.middle} px wide`);
+
+  // the icons: each in the frame it hides, at its right end; the left one beside Records, the right one in the header row after the title
+  const icons = await page.ev(`(() => { const r = (e) => e.getBoundingClientRect(); const side = r(document.getElementById('side')); const right = r(document.getElementById('right'));
+    const records = r(document.querySelector('.tab')); const head = r(document.querySelector('.frame-head')); const title = r(document.getElementById('frame-title'));
+    const l = r(document.getElementById('hide-left')); const h = r(document.getElementById('hide-right')); const mid = (b) => (b.top + b.bottom) / 2;
+    return { inLeft: document.getElementById('side').contains(document.getElementById('hide-left')), inTabs: !!document.getElementById('hide-left').closest('[role=tablist]'),
+      inHead: document.querySelector('.frame-head').contains(document.getElementById('hide-right')), leftEnd: side.right - l.right, rightEnd: right.right - h.right,
+      byRecords: Math.abs(mid(l) - mid(records)), inRow: Math.abs(mid(h) - mid(head)), afterTitle: title.right <= h.left }; })()`);
+  check(icons.inLeft && !icons.inTabs && icons.inHead && icons.leftEnd === pad && icons.rightEnd === pad && icons.byRecords < 1 && icons.inRow < 1 && icons.afterTitle,
+    'each side frame\'s icon is in the frame it hides: the left bar\'s at the right end of its tab row, beside Records; the right frame\'s at the right end of its header, after the title');
+
+  // B1: the right frame's title
+  const titles = [await page.ev(FRAME_TITLE)];
+  await gotoLine(page, 1066);
+  titles.push(await page.ev(FRAME_TITLE));
+  const rec = m.definedAt.get('@I114@')[0];
+  await gotoLine(page, rec + 1);
+  await page.click("document.querySelector('#grid .row.is-sel .fold')");
+  const shutTitle = await page.ev(FRAME_TITLE);
+  await page.click("document.querySelector('#grid .row.is-sel .fold')");
+  titles.push(await page.ev(FRAME_TITLE));
+  await page.key('l', 'KeyL', 76, 4);                                // ⌘L, the box now in the strip
+  const gotoFocused = await page.ev("document.activeElement === document.getElementById('goto') && !!document.activeElement.closest('#strip-right')");
+  await page.type('23-31');
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("!document.getElementById('goto-clear').hidden");
+  const rangeTitle = await page.ev(FRAME_TITLE);
+  await page.click("document.getElementById('goto-clear')");
+  await page.waitFor("document.getElementById('goto-clear').hidden");
+  titles.push(await page.ev(FRAME_TITLE));
+  await page.click("document.querySelector('.tab[data-panel=checks]')");
+  await page.waitFor(LAID_OUT('checks-list'));
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
+  const helpTitle = await page.ev(`({ title: ${FRAME_TITLE}, help: !!document.querySelector('#detail .help') })`);
+  await page.click("document.querySelector('.tab[data-panel=records]')");
+  await gotoLine(page, rec + 1);
+  check(JSON.stringify(titles) === JSON.stringify(['Line 1', 'Line 1,066', `Line ${fmt(rec + 1)}`, 'Line 23']),
+    `the right frame's title is the selected line, as the number column writes it: ${titles.join(', ')}`);
+  check(shutTitle === `Lines ${fmt(rec + 1)}-${fmt(core.subtreeEnd(m, rec))}` && rangeTitle === 'Lines 23-31' && gotoFocused,
+    `more than one line in hand: a shut block reads "${shutTitle}", from its line through the last it hides; Go to Line… (⌘L, in the strip) 23-31 reads "${rangeTitle}"`);
+  check(helpTitle.help && helpTitle.title === '', 'a check\'s meaning in the right frame: no title, the icon alone');
+
+  // A1: each side frame shrinks to a strip one icon button wide, at the window's edge, holding its icon
+  // alone; the bar beside it does not drag; a click brings it back at its width
+  const SHRUNK = (frame, icon) => `(() => { const r = (e) => e.getBoundingClientRect(); const f = r(document.getElementById('${frame}')); const i = r(document.getElementById('${icon}'));
+    const content = '${frame}' === 'side' ? [document.querySelector('.tabs'), ...document.querySelectorAll('.side > .panel')] : [document.getElementById('frame-title'), document.getElementById('detail')];
+    return { width: f.width, want: i.width + 2 * ${pad}, centred: Math.abs((i.left - f.left) - (f.right - i.right)) < 0.6, edge: '${frame}' === 'side' ? f.left : innerWidth - f.right,
+      icon: getComputedStyle(document.getElementById('${icon}')).visibility, rest: content.map((e) => getComputedStyle(e).visibility).filter((v) => v !== 'hidden').length,
+      pressed: document.getElementById('${icon}').getAttribute('aria-pressed') }; })()`;
+  // each frame's width on the screen, and the width a drag of its bar sets (the screen eases to it)
+  const WIDTHS = `(() => { const css = (p) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(p));
+    return { left: document.getElementById('side').getBoundingClientRect().width, right: document.getElementById('right').getBoundingClientRect().width, setLeft: css('--left-width'), setRight: css('--right-width') }; })()`;
+  const dragBar = async (id, dx) => {
+    const at = await page.ev(`(() => { const b = document.getElementById('${id}').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + 240 }; })()`);
+    await page.mouse('mouseMoved', at.x, at.y);
+    await page.mouse('mousePressed', at.x, at.y);
+    await page.mouse('mouseMoved', at.x + dx, at.y, { button: 'left', buttons: 1 });
+    await page.mouse('mouseReleased', at.x + dx, at.y);
+    await sleep(350);                                                // the frame eases to its new width, and its bar with it
+  };
+  const shown = await page.ev(WIDTHS);
+  await dragBar('split-left', 40);                                   // shown, the bar drags: the walk's drag reaches it
+  const dragged = await page.ev(WIDTHS);
+  await dragBar('split-left', -40);
+  await page.click("document.getElementById('hide-left')");
+  await page.click("document.getElementById('hide-right')");
+  await sleep(350);                                                  // the ease
+  const left = await page.ev(SHRUNK('side', 'hide-left'));
+  const right = await page.ev(SHRUNK('right', 'hide-right'));
+  await shot('shrunk');
+  await dragBar('split-left', 120);
+  await dragBar('split-right', -120);
+  const still = await page.ev(WIDTHS);
+  await page.click("document.getElementById('hide-left')");
+  await page.click("document.getElementById('hide-right')");
+  await sleep(350);
+  const back = await page.ev(WIDTHS);
+  check(dragged.setLeft === shown.setLeft + 40, `shown, the left bar's bar drags it wider (${shown.setLeft} → ${dragged.setLeft} px), and back`);
+  check([left, right].every((s) => Math.abs(s.width - s.want) < 0.6 && s.centred && Math.abs(s.edge) < 0.6 && s.icon === 'visible' && s.rest === 0 && s.pressed === 'true'),
+    `hidden, each frame is a strip one icon button wide (${Math.round(left.width)} and ${Math.round(right.width)} px), at the window's edge, holding its icon alone, centred and pressed`);
+  check(Math.abs(still.left - left.width) < 0.6 && Math.abs(still.right - right.width) < 0.6 && still.setLeft === shown.setLeft && still.setRight === shown.setRight,
+    `the bars beside a shrunk frame do not drag (still ${Math.round(still.left)} and ${Math.round(still.right)} px)`);
+  check(Math.abs(back.left - shown.left) < 0.6 && Math.abs(back.right - shown.right) < 0.6, `a click on each icon brings its frame back at its width: ${Math.round(back.left)} and ${Math.round(back.right)} px`);
+
+  // at a narrow width the strip's right group goes under its left group, still at the right; nothing is
+  // clipped and nothing overlaps; the lines start under the strip, however tall it grows
+  const narrow = [];
+  for (const width of [1024, 900]) {
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: false });
+    await sleep(300);
+    narrow.push({ width, ...(await page.ev(STRIP_NOW)) });
+    if (width === 1024) await shot('narrow');
+  }
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  const wide = await page.ev(STRIP_NOW);
+  check(narrow.every((s) => s.under && s.rightEnd === pad && !s.overlap && s.outside === 0 && s.lines && s.height > 38 && s.trio === 1) && narrow[0].left === 'top,back,fold-all' && narrow[0].right === 'goto-box,edit,undo,redo'
+    && narrow[0].rightLines === 1,
+  `a narrow window (${narrow.map((s) => `${s.width} px: the strip ${s.middle} px wide, ${s.height} px high, its right group on ${s.rightLines} line${s.rightLines === 1 ? '' : 's'}`).join('; ')}): the right group under the left one, at the right, Edit, Undo and Redo together; nothing clipped or overlapping; the lines start under the strip`);
+  check(!wide.under && wide.height === 38 && wide.lines, `wide again, the strip is one line, ${wide.height} px high`);
+
+  // the problem report reads the version from the foot of Settings
+  await setting(page, 'report');
+  await page.waitFor("document.getElementById('report-text') !== null");
+  const first = await page.ev("document.getElementById('report-text').value.split('\\n')[0]");
+  await page.click(BUTTON('#dialog', 'Close'));
+  await page.waitFor("!document.getElementById('dialog').open");
+  check(first.startsWith(`GEDCOM Viewer ${VERSION} `), `the problem report still carries the version: "${first.slice(0, 40)}…"`);
 }
 
 async function waitForFile(dir, pattern, timeout = 10000) {
@@ -1883,6 +2113,7 @@ async function waitForFile(dir, pattern, timeout = 10000) {
     if (part('save')) await inChrome((page) => saveWithDialog(page));
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
     if (part('look')) await inChrome((page) => theLook(page, dir, shots));
+    if (part('bars')) await inChrome((page) => theBars(page, dir, shots));
     console.log('\n== the whole walk');
     check(log.errors.length === 0, `no error in the console${log.errors.length ? `: ${log.errors.join(' | ')}` : ''}`);
     // file:// is the page and its files; blob: is a download the page made of its own bytes

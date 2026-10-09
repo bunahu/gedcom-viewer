@@ -68,6 +68,50 @@ describe('3.10 a clipped row says so', () => {
   });
 });
 
+// 0.6, from the review's item 21: the question asked before a line with lines under it is deleted
+// names what goes, in the brief's own two examples. Fictional people only.
+describe('the delete question names what goes', () => {
+  const L = ['0 HEAD', '1 CHAR UTF-8',
+    '0 @I42@ INDI', '1 NAME Jane /Fixture/', '2 GIVN Jane', '2 SURN Fixture', '1 SEX F', '1 RESI', '2 PLAC Fixtureville', '1 OCCU Fixture maker',
+    '1 NOTE A note', '2 CONT of four', '2 CONT lines', '2 CONT here', '1 FAMS @F1@', '1 FAMC @F2@', '1 _UID 1234'];
+  for (let k = 1; L.length < 403; k += 1) L.push(`0 @I${k}@ INDI`, `1 NAME Filler${k} /Fixture/`);
+  L.push('0 @I500@ INDI', '1 BIRT', '2 DATE 1 JAN 1900', '2 PLAC Fixtureville', '3 MAP');                // the BIRT is line 405
+  L.push('0 @S1@ SOUR', '1 PAGE 7', `0 @N1@ NOTE ${'A long fictional note, '.repeat(6)}`, '1 CONT and the rest',
+    '0 @I501@ INDI', `1 NOTE ${'x'.repeat(100)}`, '2 CONT the tail');
+  for (let k = 600; L.length < 1008; k += 1) L.push(`0 @I${k}@ INDI`);
+  L.push('0 @I2000@ INDI', '1 BIRT', '2 DATE 2 FEB 1902', '0 TRLR');                                      // this BIRT is line 1,010
+  const m = h.readText(`${L.join('\n')}\n`);
+  const said = (line) => core.deleteQuestion(m, line - 1).map((p) => p.text).join('');
+
+  it('a record\'s 0 line: its id and tag, then its label as the Records list shows it', () => {
+    assert.equal(said(3), 'Delete @I42@ INDI Jane /Fixture/ and the 14 lines under it?');
+    assert.deepEqual(core.deleteQuestion(m, 2), [{ text: 'Delete @I42@ INDI ' }, { text: 'Jane /Fixture/', as: 'label' }, { text: ' and the 14 lines under it?' }],
+      'the label is a part of its own, for the page to show as labels are (3.8)');
+    assert.equal(m.labels[m.recOf[2]], 'Jane /Fixture/', 'as the Records list shows it');
+  });
+
+  it('any other line: its number and its own text, then how many lines go with it', () => {
+    assert.equal(m.texts[404], '1 BIRT');
+    assert.equal(said(405), 'Delete line 405, 1 BIRT, and the 3 lines under it?');
+    assert.deepEqual(core.deleteQuestion(m, 404)[1], { text: '1 BIRT', as: 'line' }, 'the line as written, for the page to show with its marks');
+    assert.equal(said(1010), 'Delete line 1,010, 1 BIRT, and the 1 line under it?', 'the number as the number column writes it; one line, not lines');
+  });
+
+  it('a record whose label is only its line says the id and tag alone; HEAD, with no id, its tag', () => {
+    assert.equal(said(m.texts.indexOf('0 @S1@ SOUR') + 1), 'Delete @S1@ SOUR and the 1 line under it?');
+    assert.equal(said(1), 'Delete HEAD and the 1 line under it?');
+  });
+
+  it('a label or a line longer than about 60 characters is clipped, and says so', () => {
+    const note = said(m.texts.findIndex((t) => t.startsWith('0 @N1@ NOTE')) + 1);
+    assert.equal(note, `Delete @N1@ NOTE ${'A long fictional note, '.repeat(3).slice(0, 60)}… and the 1 line under it?`);
+    const at = m.texts.findIndex((t) => t.startsWith('1 NOTE xxx')) + 1;
+    assert.equal(said(at), `Delete line ${at}, 1 NOTE ${'x'.repeat(53)}…, and the 1 line under it?`);
+    const emoji = h.readText(`0 HEAD\n0 @I1@ INDI\n1 NOTE ${'\u{1F600}'.repeat(70)}\n2 CONT x\n0 TRLR\n`);
+    assert.equal(core.deleteQuestion(emoji, 2)[1].text, `1 NOTE ${'\u{1F600}'.repeat(53)}…`, 'counted in characters, never half of one');
+  });
+});
+
 // The _META of a Find a Grave record, as batch 20's export has them (fictional people): a story
 // in web formatting, a transcription, the persons, the cemetery and the record id.
 const STORY_HTML = [

@@ -38,6 +38,7 @@
   --control-border: #837560;          /* the edge of an input and of a button */
   --mark-note: #734b00;               /* a note's count and code */
   --id-color: #6f5a40;                /* @I1@ */
+  --editing-bg: #ebe2ce;              /* the lines while Edit is on: darker than the frames, an editor's look */
 }
 
 .dark {
@@ -67,6 +68,7 @@
   --control-border: #78725f;
   --mark-note: #d4a24e;
   --id-color: #c9a876;
+  --editing-bg: #151311;
   color-scheme: dark;
 }
 
@@ -97,6 +99,7 @@
   --control-border: #aaa08f;
   --mark-note: #e5c48d;
   --id-color: #e0c79c;
+  --editing-bg: #353029;
   color-scheme: dark;
 }
 
@@ -119,6 +122,7 @@
   --tag-weight: 650;
 
   /* the grid */
+  --lines-bg: var(--color-bg-card);   /* the lines' background: the frames' own colour; with Edit on, --editing-bg (P10) */
   --row-height: 24px;                 /* every row, one height; the page reads it at load, and again when the text size changes */
   --tab-size: 4;                      /* how wide a tab inside a value shows */
   --row-tint: transparent;            /* a row's tint; each state below sets it (selected, found, changed…) */
@@ -154,7 +158,7 @@
   --drop-line: var(--color-accent);                 /* the gold line where a dragged block would land */
   --drop-line-width: 2px;
   --drag-dim: 0.35;                                 /* how faint what would move is drawn while it is dragged */
-  --edit-bg: var(--color-bg);                       /* the box a line is typed in */
+  --edit-bg: var(--color-bg-card);                  /* the box a line is typed in: lighter than the lines' editing look */
   --more-color: var(--color-text-muted);            /* "… 81,797 more" at the end of a clipped row */
 
   /* the frame */
@@ -162,8 +166,11 @@
   --right-width: 360px;               /* the right pane; the same */
   --split-width: 5px;
   --split-color: var(--color-border);
-  --icon-button: 28px;                /* the square buttons that carry an icon: the side frames, the tags' order */
-  --strip-height: 38px;               /* the strip above the lines: Top, Back, Collapse all */
+  --icon-button: 28px;                /* the square buttons that carry an icon: the two that hide the side frames */
+  --strip-height: 38px;               /* the strip above the lines, and the right frame's header beside it: their height on one line */
+  --frame-pad: 8px;                   /* the space round a side frame's icon */
+  --goto-width: 8em;                  /* Go to Line…, in the strip: its placeholder, or a range such as 313,015-313,100 */
+  --frame-shrunk: calc(var(--icon-button) + 2 * var(--frame-pad));   /* a hidden side frame: a strip one icon button wide, holding its icon (P9, A1) */
   --aside-shade: color-mix(in srgb, var(--color-text) 28%, transparent);   /* the shade at the number column's edge while the lines are scrolled sideways */
   --frame-ease: 200ms;                /* how long a side frame takes to hide or show */
   --menu-width: 19em;                 /* the Settings menu */
@@ -203,6 +210,7 @@
   --font-size-grid: 19px;
   --row-height: 30px;
   --list-row-height: 32px;
+  --strip-height: 44px;
 }
 
 /* ---------------------------------------------------------------------------------------------- */
@@ -277,7 +285,6 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .app-name { white-space: nowrap; }
 .app-title { font-family: var(--font-title); font-size: var(--font-size-title); letter-spacing: 0.01em; }
 .app-title-gedcom { color: var(--title-color); font-weight: 700; letter-spacing: 0.06em; }
-.version { font-size: var(--font-size-small); color: var(--color-text-muted); }
 /* the open file's name: a chip; a click shows its facts under it */
 .file-name {
   min-width: 0;
@@ -301,9 +308,9 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .dirty { margin-left: calc(-0.6 * var(--gap)); color: var(--mark-changed); }
 .dirty[hidden] { display: none; }
 .actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.gap { width: var(--gap); }
-.goto-box { display: inline-flex; align-items: center; gap: 4px; }
-.goto { width: 9.5em; }
+.goto-box { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.goto-box[hidden] { display: none; }
+.goto { width: var(--goto-width); max-width: 100%; }
 .goto-go, .goto-clear { padding: 0.3rem 0.55rem; }
 .indent-width { width: 3.6em; }
 /* Settings: a menu under its button, closed by a click elsewhere or Esc */
@@ -324,6 +331,8 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .menu-name { color: var(--color-text-muted); }
 .menu-choices { display: inline-flex; align-items: center; gap: 4px; }
+/* the menu's last line, quiet: the name and the version */
+.menu-foot { margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--font-size-small); }
 .facts {
   margin-top: 3px;
   min-height: 1.4em;
@@ -387,14 +396,19 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width);
 }
 .work { transition: grid-template-columns var(--frame-ease) ease; }
-.work.left-hidden { grid-template-columns: 0 var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width); }
-.work.right-hidden { grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) 0; }
-.work.left-hidden.right-hidden { grid-template-columns: 0 var(--split-width) minmax(0, 1fr) var(--split-width) 0; }
-/* a hidden frame narrows to nothing over the ease, and only then is out of reach */
-.side, .detail { min-width: 0; overflow: hidden; }
-.work.left-hidden .side, .work.right-hidden .detail { visibility: hidden; transition: visibility 0s var(--frame-ease); }
+.work.left-hidden { grid-template-columns: var(--frame-shrunk) var(--split-width) minmax(0, 1fr) var(--split-width) var(--right-width); }
+.work.right-hidden { grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) var(--split-width) var(--frame-shrunk); }
+.work.left-hidden.right-hidden { grid-template-columns: var(--frame-shrunk) var(--split-width) minmax(0, 1fr) var(--split-width) var(--frame-shrunk); }
+/* A hidden frame shrinks to a strip one icon button wide, at the window's edge, holding its icon
+   alone (P9, A1): the rest narrows with it over the ease, and only then is out of sight and reach.
+   The icon sits at the frame's top right, so it stays in the strip; a click on it brings the frame
+   back at its width. The bars beside a shrunk frame do not drag. */
+.side, .right { min-width: 0; overflow: hidden; }
+.work.left-hidden .side > :not(.side-head), .work.left-hidden .tabs,
+.work.right-hidden .right > :not(.frame-head), .work.right-hidden .frame-title { visibility: hidden; transition: visibility 0s var(--frame-ease); }
 .split { background: var(--split-color); cursor: col-resize; }
 .work.left-hidden #split-left, .work.right-hidden #split-right { cursor: default; }
+.frame-icon { position: absolute; right: var(--frame-pad); }
 
 .side {
   min-height: 0;
@@ -402,7 +416,12 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   flex-direction: column;
   background: var(--color-bg-sidebar);
 }
-.tabs { flex: none; display: flex; flex-direction: column; gap: 1px; padding: 8px; }
+/* the left bar's head: its tabs, and the icon at their right end, beside Records. Records and the
+   icon sit on the strip's centre line, as the right frame's header does, at either text size: a tab
+   is 1.4em of text and 4px above and below it, 4px from the top */
+.side-head { flex: none; position: relative; }
+.tabs { display: flex; flex-direction: column; gap: 1px; padding: 4px calc(var(--icon-button) + var(--frame-pad) + 6px) 8px 8px; }
+.side-head .frame-icon { top: calc(4px + (1.4em + 8px - var(--icon-button)) / 2); }
 .tab {
   display: flex;
   justify-content: space-between;
@@ -423,6 +442,9 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .panel[hidden] { display: none; }
 .panel-head { flex: none; display: flex; gap: 6px; align-items: center; }
 .panel-head-end { justify-content: flex-end; }
+/* the Tags list's Sort: its icon, then the word */
+.sort { display: inline-flex; align-items: center; gap: 4px; }
+.sort svg { flex: none; }
 .panel-head .input { flex: 1; }
 .panel-sum { flex: none; padding: 0 4px; color: var(--color-text-muted); font-size: var(--font-size-small); }
 .search-nav { flex: none; display: flex; gap: 6px; align-items: center; }
@@ -476,15 +498,19 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 
 /* -- the grid ---------------------------------------------------------------------------------- */
 
-.middle { position: relative; min-width: 0; min-height: 0; }
+/* the main frame: the strip, then the lines below it, as tall as the strip leaves them */
+.middle { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* Edit on (P10, on whenever a file opens): the lines take their editor's look */
+.middle.is-edit-on { --lines-bg: var(--editing-bg); }
 .grid {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
   overflow: auto;                     /* down, and sideways to the end of the longest line (3.1) */
   overscroll-behavior: none;          /* a sideways swipe at the edge never takes the browser back a page */
   overflow-anchor: none;
   outline: none;
-  background: var(--color-bg-card);
+  background: var(--lines-bg);
   font-family: var(--font-grid);
   font-size: var(--font-size-grid);
 }
@@ -549,9 +575,9 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
   z-index: 1;
   flex: none;
   display: flex;
-  background: linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)), var(--color-bg-card);
+  background: linear-gradient(var(--row-tint, transparent), var(--row-tint, transparent)), var(--lines-bg);
 }
-.row.is-dragging .fx { background: var(--color-bg-card); }
+.row.is-dragging .fx { background: var(--lines-bg); }
 .ln {
   flex: none;
   width: var(--ln-width, 8ch);
@@ -627,24 +653,29 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .edit:focus { outline: var(--focus-ring); outline-offset: -2px; }
 .grid.is-editing { overflow-y: hidden; }
 
-/* the strip above the lines: Top, Back (while there is somewhere to go back to), Collapse all */
-.middle .grid { top: var(--strip-height); }
+/* The strip above the lines (P9): at its left Top, Back (while there is somewhere to go back to) and
+   Collapse all; at its right Go to Line…, Edit, Undo and Redo, once a file is open. When the width
+   runs out the right group goes under the left one, still at the right, and the strip grows to hold
+   it; a group too wide for the strip wraps its own controls. Nothing is clipped, nothing overlaps. */
 .strip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--strip-height);
+  position: relative;
+  z-index: 4;
+  flex: none;
+  min-height: var(--strip-height);
+  box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 4px 6px;
+  padding: 3px 8px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-card);
-  z-index: 4;
 }
-.strip .button { padding: 0.2rem 0.55rem; }
-.strip-gap { flex: 1; }
+.strip-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; max-width: 100%; }
+.strip-end { margin-left: auto; justify-content: flex-end; }
+/* Edit, Undo and Redo go under Go to Line… together, never one alone; they part only in a strip too narrow for the three */
+.strip-keep { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 6px; min-width: 0; max-width: 100%; }
+.strip .button, .strip .input { padding: 0.2rem 0.55rem; }
 .back[hidden], .strip .button[hidden] { display: none; }
 /* scrolled sideways, the number column casts a shade on the lines going under it */
 .grid.is-aside .fx::after {
@@ -715,11 +746,36 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 
 /* -- the right pane ---------------------------------------------------------------------------- */
 
-.detail {
+.right { min-height: 0; display: flex; flex-direction: column; background: var(--color-bg-card); }
+/* its header (P9, B1): the line or lines the frame shows, as the number column writes them, and the
+   icon at its right end; as high as the strip beside it */
+.frame-head {
+  flex: none;
+  position: relative;
+  height: var(--strip-height);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+}
+.frame-head .frame-icon { top: 0; bottom: 0; margin: auto 0; }
+/* the room round the title is the title's own, so the header is never wider than its frame, shrunk to its icon included */
+.frame-title {
   min-width: 0;
+  padding-left: 14px;
+  margin-right: calc(var(--icon-button) + var(--frame-pad) + 6px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.detail {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 12px 14px;
-  background: var(--color-bg-card);
   font-size: var(--font-size-small);
 }
 .detail-head { font-family: var(--font-grid); font-size: var(--font-size-grid); }
