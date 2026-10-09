@@ -1583,3 +1583,59 @@ removed in 0.5.1, and the file's facts in a status bar, since the facts under th
 design; both wait for his word. 0.6.1, after his walk of 0.6: the first screen with a baked-in
 sample file (item 5) and the side frames as drawers at narrow widths (item 8). Opus, from this
 entry, section 11, P9 and P10.
+
+### 0.6.1: the first screen, the sample and the drawers (2026-10-09, planned)
+
+**The first screen** (the review's item 5). With no file open, the side columns are hidden
+entirely, not shrunk: their icons mean nothing before a file. The main frame holds one column of
+text, centred:
+
+- one sentence of purpose, the README's first words kept to a line;
+- **Open GEDCOM**, as today, and under it "or drop a .ged file anywhere on the page";
+- **Try a sample family**, which opens the baked-in sample as if it had been dropped;
+- the line he wrote in 0.5.5, "The file does not leave your computer. Privacy Policy", with "How to
+  check" linking to the privacy page's section of that name;
+- one line on saving: "Save writes a dated copy where you choose, in Chrome and Edge; Safari and
+  Firefox download it."
+
+Nothing else: no empty panes and no greyed buttons (P9 hides them). The counts bar appears with a
+file.
+
+**The sample** (I5: nothing is fetched). A made-up family, written for the page and baked into a
+page script, `sample.js`, loaded like the others and named in `publish.yml` and
+`tests/page.test.js`: about 40 people over four generations, with families, a few sources and
+notes, one record that already has a `CHAN`, and planted findings so that Checks has something to
+show: one pointer to a record that is not there, one line out of level, one `CONC` where none may
+sit. Fictional names only, and no `_META`. It opens with no handle, so Save offers it as a download
+in every browser, and the screen says so. His to pick: the family's surname (I9 bars real ones; the
+tests use Fixture).
+
+**The drawers** (item 8). Below about 1,100 px of width the right frame becomes a drawer over the
+lines, opened and closed from its icon, which stays where A1 put it; below about 800 px the left
+bar becomes one too. The lines keep the whole width. A drawer closes when a line is chosen in it or
+on Esc. At these widths the drawers are closed when a file opens, whatever the stored state says,
+and the stored state is left alone. The strip's right group wraps as 0.6 has it. Touch targets of
+44 px are not in this release (section 18).
+
+Assumed unless he says otherwise: the breakpoints, 1,100 and 800; the side columns hidden entirely
+with no file; the sample's size and its three planted findings. Opus, after his walk of 0.6, since
+both touch `index.html`, `style.css` and `ui.js`.
+
+### P11: after a save, which file is open? (2026-10-09, from his walk of 0.5.6)
+
+His words: "After saving, the green dots appear; how do they go away? I suppose they are staying
+because they're updates to the 'original' GEDCOM, but it feels like instead we've 'opened' the
+most recent timestamped one. Is that fair? ... the fact that I'm confused about which file we're
+'editing' is evidence we need to simplify or clarify something for the non-technical user. I
+think even just having those dots appear, then disappearing after a set time or when the line is
+clicked, might do the trick." Three shapes; the recommendation first.
+
+| P11 | Variant | Worked example |
+|---|---|---|
+| **D1**, recommended | **The page moves onto the copy**, as Save As does in a desktop app: after a save the name chip reads the copy's name, the facts are the copy's, Changes counts from it (so it reads 0), the dots go, and the next save derives its name from the copy's stem with the timestamp replaced (10.1). The original stays on disk, untouched, to reopen | edit a NAME line; Save; keep the name: the chip now reads `family.2026-10-09T093345.ged`, Changes 0, no dots. Edit again and Save: `family.2026-10-09T101700.ged` is offered |
+| D2 | **Stay on the original; the dots fade** a minute after a save, and Changes keeps its list | as built, and a minute after the save the dots are gone; Changes still lists 3 |
+| D3 | **Stay on the original, and say so**: a line in the strip reads "3 changes since the file was opened; saved as family.2026-10-09T093345.ged" | the dots stay, and the strip says why |
+
+What stays under every shape: the original is never written (I6); the copy is read back; the
+stamps and the header note. D1 rewrites 10.2 step 8 and section 18's note, and the title's "Lines"
+and the Changes list then count from the copy.
