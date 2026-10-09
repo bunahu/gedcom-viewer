@@ -118,7 +118,7 @@ function parseMarkup(text) {
 // place: the XML's root element, and the story's HTML.
 function metaOf(value) {
   const root = parseMarkup(value).children.find((c) => c.name !== undefined);
-  return core.metaParts(root || null, (html) => parseMarkup(html));
+  return core.metaParts(root || null, (html) => parseMarkup(core.stripStyles(html)));
 }
 
 module.exports = {

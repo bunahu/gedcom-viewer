@@ -1809,6 +1809,22 @@
     return out;
   }
 
+  // 3.3: the HTML of a story, with its styles taken out of the text before the page's browser reads
+  // it: every style element, with all that is inside it, and every style attribute. A style
+  // element is `<style`, then a space, a slash or `>`, up to the first `</style>` (or the end, when
+  // it is never closed), in any case and across lines. A style attribute is a space, `style`, any
+  // spaces, `=`, then a value in double quotes, in single quotes or bare; a name that only ends in
+  // style, such as data-style, is not one. Text that looks like a style attribute is taken for one,
+  // in running text too. The allowlist below keeps no attribute but a cell's colspan and rowspan and
+  // drops the style element, so what is drawn does not change; what changes is that the inert
+  // document the HTML is read in meets no inline style, which the page's policy refuses, with a
+  // message in the console for each.
+  function stripStyles(html) {
+    return String(html)
+      .replace(/<style(?=[\s/>])[^>]*>[\s\S]*?(?:<\/style(?=[\s/>])[^>]*>|$)/gi, '')
+      .replace(/\sstyle\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+  }
+
   // The parts of a _META value, from its XML as the same plain nodes: the story (its content's
   // lines, joined with a line break, read as HTML by `parseHtml` and rebuilt from the allowlist),
   // the transcription, the persons, the cemetery and the record id. Null when the root is not
@@ -1930,7 +1946,7 @@
     moveRefusal, moveLines, landings,
     markSaved, isChanged, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, stampTargets, stampPlan, applyStamps,
-    nameParts, nameShown, linkAt, clip, metaRebuild, metaParts, lineShape,
+    nameParts, nameShown, linkAt, clip, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,
   };
 });

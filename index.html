@@ -6,9 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The browser enforces what the page promises: nothing is loaded from, or sent to, anywhere but the page's own files,
      and no inline style is allowed. The page sets styles through the CSSOM (el.style.top = ...), which the policy permits.
-     Chrome refuses, with a message each in the console, any style it meets in the inert documents a _META is read in:
-     its own error block when the XML does not parse (ui.js, metaOf, then says so in one line of its own), and a style
-     attribute or a style element in the HTML of a story that does. None of them is ever drawn. -->
+     The HTML of a _META's story has its style attributes and style elements taken out of the text before it is read
+     (core.js, stripStyles), so a _META that parses draws no refusal. When the XML does not parse, Chrome adds its own
+     styled error block to the inert document it is read in and refuses that style, with a message each in the console
+     (ui.js, metaOf, then says so in one line of its own); the page draws nothing from such a _META. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>GEDCOM Viewer</title>
 <meta name="description" content="Read, check and hand-edit a GEDCOM file in your browser, and save it with a log of what changed. Nothing is uploaded: the file never leaves your computer.">

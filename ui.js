@@ -1328,7 +1328,7 @@
       console.info('GEDCOM Viewer: a _META held XML that does not parse, so nothing is drawn from it. The policy messages above are Chrome refusing the styles on its own error block. Nothing was sent anywhere.');
       return null;
     }
-    return C.metaParts(domToTree(xml.documentElement), (html) => domToTree(parser.parseFromString(html, 'text/html').body));
+    return C.metaParts(domToTree(xml.documentElement), (html) => domToTree(parser.parseFromString(C.stripStyles(html), 'text/html').body));
   }
 
   // The rebuilt story as elements: only what the allowlist kept, built by name, never as markup.
@@ -1893,7 +1893,7 @@
       stateLine = el('div', 'dialog-sum');
       stateLine.id = 'report-state';
       body.appendChild(stateLine);
-      body.appendChild(el('div', 'dialog-sum', 'What happened — your own words; write nothing you would not want public:'));
+      body.appendChild(el('div', 'dialog-sum', 'What happened, in your own words. An issue is public, so write nothing there you would not want seen.'));
       what = el('textarea', 'report is-words');
       what.id = 'report-what';
       what.rows = 4;

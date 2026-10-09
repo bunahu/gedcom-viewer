@@ -1069,13 +1069,11 @@ async function thirdRound(page, dir, shots) {
   check(drawn.persons === 2 && drawn.person === 'Jane Fixture · 1 Jan 1900 · Fixtureville · 2 Feb 1950 · Fixture City' && drawn.transcription === 'Line one\nLine two' && drawn.copies >= 6,
     `the persons as a table (${drawn.person}); the transcription with its line break; a copy button on each of the ${drawn.copies} boxes`);
   check(drawn.title === 'GEDCOM Viewer' && storyCopied.includes('She lived there.'), 'the script inside the story never ran, and the story copies as text');
-  // 0.5.5: the policy allows no inline style, so Chrome refuses the story's own (a span's style, a <style>) in the inert
-  // document it is read in, with a message each in the console; none is drawn. They are taken out of what the walk's
-  // last step reads, once they are known to be only that.
+  // 0.5.5: the policy allows no inline style, and the story here holds a span's style and a <style>. The page takes
+  // both out of the HTML text before the browser reads it, so the console has nothing to say about them.
   await sleep(100);
   const refusals = page.log.errors.splice(errorsBefore);
-  check(refusals.length > 0 && refusals.every((e) => /Applying inline style violates/.test(e)),
-    `the story's own styles (a span's, a <style>) are refused by the policy, in the inert document: ${refusals.length} message${refusals.length === 1 ? '' : 's'} of Chrome's in the console, nothing else; none of them is drawn`);
+  check(refusals.length === 0, `the story's own styles (a span's, a <style>) are stripped before the browser reads them: ${refusals.length} message${refusals.length === 1 ? '' : 's'} of the policy's in the console`);
   await shot('meta');
 
   // 3.9 — a double-click selects a web address whole; with ⌥, a pointer whole, and nothing jumps

@@ -152,4 +152,65 @@ describe('3.3 the _META drawn as it reads', () => {
     assert.deepEqual(core.metaRebuild({ comment: true }), []);
     assert.deepEqual(core.metaRebuild({ text: 'plain' }), [{ text: 'plain' }]);
   });
+
+  it('stripStyles: a style attribute goes, with its value in double quotes, in single quotes or bare, in any case, with spaces round the = and over lines', () => {
+    const cases = [
+      ['<p style="color:red">a</p>', '<p>a</p>'],
+      ["<p style='color:red'>a</p>", '<p>a</p>'],
+      ['<p style=color:red>a</p>', '<p>a</p>'],
+      ['<p STYLE = "color:red">a</p>', '<p>a</p>'],
+      ['<p\nstyle="color:red;\nfont-size:9pt">a</p>', '<p>a</p>'],
+      ['<p class="x" style="a" id="y">a</p>', '<p class="x" id="y">a</p>'],
+      ['<p style="">a</p>', '<p>a</p>'],
+      ['<p style=>a</p>', '<p>a</p>'],
+      ['<span style="font-size:12pt"><font face="Arial" style="x">t</font></span>', '<span><font face="Arial">t</font></span>'],
+    ];
+    for (const [from, to] of cases) assert.equal(core.stripStyles(from), to, from);
+  });
+
+  it('stripStyles: data-style and any other name that only ends in style stay, and so do words that are not an attribute', () => {
+    for (const same of ['<p data-style="x">a</p>', '<p xstyle="x" restyle=y>a</p>', "<p data-x='1' data-style='y'>a</p>", '<p style>a</p>',
+      'a style of writing', 'the style: bold', '<styles>k</styles> <style-x>k</style-x>', 'no style here', '']) {
+      assert.equal(core.stripStyles(same), same, same);
+    }
+    assert.equal(core.stripStyles('<p data-style="a" style="b">k</p>'), '<p data-style="a">k</p>', 'only the style attribute goes');
+  });
+
+  it('stripStyles: text that looks like a style attribute is taken for one, in running text too', () => {
+    assert.equal(core.stripStyles('the style="x" is odd'), 'the is odd');
+    assert.equal(core.stripStyles('use style=fine here'), 'use here');
+    assert.equal(core.stripStyles("a style = 'b c' d"), 'a d');
+  });
+
+  it('stripStyles: a style element goes with everything inside it, in any case and over lines; one never closed goes to the end', () => {
+    const cases = [
+      ['<style>p { color: red }</style>a', 'a'],
+      ['<STYLE type="text/css" media="all">\np { color: red }\n</STYLE >a', 'a'],
+      ['a<style>x</style>b<Style>y</Style>c', 'abc'],
+      ['<style>\n/* <p style="x"> and </div> */\n</style><p>k</p>', '<p>k</p>'],
+      ['<svg><style>a { fill: red }</style></svg>', '<svg></svg>'],
+      ['<p>a</p><style>p { color: red }\n<p>b</p>', '<p>a</p>'],
+    ];
+    for (const [from, to] of cases) assert.equal(core.stripStyles(from), to, from);
+  });
+
+  it('stripStyles: nothing it returns holds a style element or a style attribute, and doing it twice changes nothing more', () => {
+    const nasty = ['<p style="a" style=\'b\' STYLE=c>x</p>', '<style><style>x</style></style>', '<div style="a"><p style="b"><i style=c>t</i></p></div>',
+      'x style=a style=b y', '<style>a</style><style>b</style><style>', STORY_HTML.join('\n')];
+    for (const text of nasty) {
+      const once = core.stripStyles(text);
+      assert.ok(!/<style(?=[\s/>])/i.test(once) && !/\sstyle\s*=/i.test(once), `left in: ${once}`);
+      assert.equal(core.stripStyles(once), once);
+    }
+  });
+
+  it('stripStyles changes nothing that is drawn: the story rebuilds to the same nodes with the styles in the text or out of it', () => {
+    const html = STORY_HTML.join('\n');
+    assert.ok(/style="font-size:12pt"/.test(html) && /<style>/.test(html), 'the sample holds a style attribute and a style element');
+    assert.notEqual(core.stripStyles(html), html);
+    assert.deepEqual(core.metaRebuild(h.parseMarkup(core.stripStyles(html))), core.metaRebuild(h.parseMarkup(html)));
+    const root = h.parseMarkup(META).children.find((c) => c.name !== undefined);
+    assert.deepEqual(core.metaParts(root, (x) => h.parseMarkup(core.stripStyles(x))), core.metaParts(root, (x) => h.parseMarkup(x)), 'every part, the story included');
+    assert.equal(core.stripStyles('<p>nothing to strip</p>'), '<p>nothing to strip</p>');
+  });
 });

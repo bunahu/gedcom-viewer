@@ -249,6 +249,15 @@ describe('the page', () => {
     assert.equal(note[1], 'The file does not leave your computer. <a href="privacy.html">Privacy Policy</a>');
   });
 
+  it('the story\'s styles are stripped from its HTML, by core.js, right before the page reads it, so a _META that parses draws no refusal; and the What happened label says who can see what', () => {
+    const ui = read('ui.js');
+    assert.ok(ui.includes("parser.parseFromString(C.stripStyles(html), 'text/html')"), 'stripStyles must come right before the HTML is read');
+    assert.equal((ui.match(/parseFromString\(/g) || []).length, 2, 'the page reads the XML and the story, and nothing else, in an inert document');
+    assert.ok(/function stripStyles\(html\)/.test(read('core.js')), 'it is a function of core.js');
+    assert.ok(ui.includes("'What happened, in your own words. An issue is public, so write nothing there you would not want seen.'"));
+    assert.ok(!/What happened \u2014 /.test(ui), 'the old label, with its dash, is gone');
+  });
+
   it('the README names no path on anyone\'s disk', () => {
     const readme = read('README.md');
     assert.ok(!/~\/Desktop|\/Users\/|\/home\//.test(readme), 'a path on one disk is in the README');
