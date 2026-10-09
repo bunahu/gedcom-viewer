@@ -766,6 +766,9 @@ Raised 2026-10-08, with P5: after a save the page could move onto the copy, as S
 desktop app, so that the next save derives from it and Changes count from it; version 1 stays on
 the original (10.2 step 8).
 
+Raised 2026-10-09, with P9: the file's name as a tab in the strip above the lines, as Domorium shows
+its file, with the facts under it; version 1 keeps it in the top bar.
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
@@ -1448,3 +1451,51 @@ bullet. What comes: one **Save** (⌘S) through the computer's Save dialog with 
 offered, the original's own file refused, the copy read back; **Download a copy** in a browser
 without the pickers, and a download counted as the last copy; the Changes tab's **copy** button and
 its text. 0.5.6 is Opus work, from section 10 and this entry; tagged after his walk of it.
+
+### P9: the bars (2026-10-09, from the owner's note on the top bar)
+
+His words: "Put the column collapse icons in the columns they collapse (not in the top bar). If
+those columns need a title we can add it. When there's no GEDCOM uploaded, the edit/undo/redo
+buttons shouldn't be visible. I think they also belong in the bar of the main pane, opposite of
+Top (when they are visible). Save and Save a Copy can stay there, but should also be not visible
+until there's a GEDCOM loaded. Similarly, go to Line should be in that top bar." Domorium's editor
+as inspiration, not a model: each column with a header of its own, and the file as a tab in the
+main frame's bar. Save a copy is gone with 0.5.6, so "Save and Save a copy" reads Save.
+
+What moves, settled by his words:
+
+| Today | 0.5.7 |
+|---|---|
+| the two icons at the ends of the top bar | one at the head of the column it hides: at the right end of the left bar's tab row, and at the right end of a new header row in the right frame |
+| Edit, Undo, Redo in the top bar, disabled with no file | at the right end of the strip above the lines, after Go to Line…; hidden, not disabled, until a file is open |
+| Go to Line… in the top bar | in the strip, right of centre, before Edit |
+| Save in the top bar, disabled with no file | stays in the top bar; hidden until a file is open; disabled until there is a change since the last copy (10.2) |
+| the top bar with no file | the name and version, and Settings; nothing else |
+| the top bar with a file | the name, the file's name with its facts under it, Save, Settings |
+
+The keys do not change (E, ⌘Z, ⇧⌘Z, ⌘L, ⌘S), and whether each column is hidden is remembered as today.
+
+**P9a, the way back for a hidden column.** Once the icon lives in the column, hiding the column
+hides the icon too.
+
+| P9a | Variant | Worked example |
+|---|---|---|
+| **A1**, recommended | **The column shrinks to its icon**: a hidden column keeps a strip one icon button wide, holding the icon alone, and a click brings the column back | click the icon at the right end of Records, Checks, Changes, Search, Tags: the left bar shrinks to a narrow strip at the window's left edge with the icon at its top; click it, and the bar is back at its width |
+| A2 | **The icon moves to the strip's corner** while its column is hidden: the left bar's to the strip's left end before ↑ Top, the right frame's to the right end after Redo; back into the column when shown | click the icon at the top of the right frame: the frame goes, and the icon reappears at the right end of the strip; click it there, and the frame returns |
+| A3 | **A rail, as Domorium has**: a narrow column of icons at each edge, always, whether the frame is shown or not | the icons never move; each edge always carries a rail one button wide, and the frames hide and show beside it |
+
+**P9b, a title for the right frame.** The left bar's header is its tab row, which needs no title;
+the right frame has none.
+
+| P9b | Variant | Worked example |
+|---|---|---|
+| **B1**, recommended | **The selected line's number**, changing with the selection; "Line" alone when none is selected | select the NAME line: the right frame's header reads Line 66, with the icon at its right end, and the frame's content below as today |
+| B2 | **A fixed word**, Details | the header reads Details whatever is selected |
+| B3 | **No title**: a header row holding the icon alone | the icon sits alone at the frame's top right |
+
+Assumed unless he says otherwise: the strip's right group reads Go to Line…, Edit, Undo, Redo; the
+file's name stays in the top bar (the tab is a line in section 18); at narrow widths the strip's
+right group wraps under its left group until item 8's drawers (0.6); built as 0.5.7, by Sonnet,
+after 0.5.6 is tagged, since both touch `index.html`, `style.css` and `ui.js`; the walk's steps
+that name the top bar (Open GEDCOM leaving it, Edit in it, the icons at its ends) are rewritten
+with it, and `tests/page.test.js` pins the hidden-until-loaded rule.
