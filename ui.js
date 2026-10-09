@@ -14,9 +14,10 @@
   const $ = (id) => document.getElementById(id);
   const fmt = (n) => n.toLocaleString('en-US');
   const root = document.documentElement;
-  // Save in place needs the three pickers (Chrome); without them Save is off and Save a copy
-  // downloads the copy (10.3).
-  const PICKERS = 'showOpenFilePicker' in window && 'showSaveFilePicker' in window && 'showDirectoryPicker' in window;
+  // The computer's own Open and Save dialogs (Chrome, Edge). Without them a file is opened through
+  // the file box, and Save is Download a copy (10.2).
+  const PICKERS = 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
+  const GEDCOM_TYPES = [{ description: 'GEDCOM', accept: { 'application/x-gedcom': ['.ged', '.gedcom'] } }];
 
   // Remembered between visits: preferences only, never a file's name, content or handle. Storage
   // may be missing or refused (a private window); then nothing is remembered.
@@ -47,9 +48,9 @@
   const POINTERS_SHOWN = 1000;
   const LINES_SHOWN = 60;             // of one change, in the Save dialog
   const ID_WHOLE = /^@[^@ ]+@$/;
-  const SHA_TITLE = 'sha256: a fingerprint of the file\'s exact bytes, as it is on disk (opened or last saved). ' +
+  const SHA_TITLE = 'sha256: a fingerprint of the file\'s exact bytes, as it was opened. ' +
     'Change one character anywhere and it changes completely; two files with the same sha256 are the same, ' +
-    'byte for byte. Save checks it before it writes, and every backup must match it.';
+    'byte for byte. GEDCOM Viewer never writes this file; a copy\'s own is shasum -a 256 and the copy\'s name, in Terminal.';
   const CANCEL = { label: 'Cancel', value: '' };
   // 3.6 — what each check means, why it matters, and what is usually done about it. The owner's
   // to change.
@@ -77,9 +78,8 @@
     doc: null,                        // the document: the file as read, and the lines typed over it
     m: null,                          // its lines as they now are, checked (the document's view)
     fileName: '',
-    handle: null,                     // the file's handle, from the picker or a drop; never stored
-    dir: null,                        // the folder granted for Save (10.2 step 2); never stored
-    disk: null,                       // the file on disk, as opened or last saved: sha256, bytes, lines
+    handle: null,                     // the file's handle, from the picker or a drop: where the Save dialog opens, and what it may not pick (10.2); never stored
+    disk: null,                       // the file as it was opened, the original: sha256, bytes, lines
     hashing: null,                    // the hash at open, while it is being taken
     sel: -1,                          // the selected line
     back: [],
@@ -373,7 +373,7 @@
 
   // ---------------------------------------------------------------------------------------------
   // The main frame's rows. Most are lines; the rest are the row of a line being added, a section's
-  // row between two record types, and — with Edit on — a line removed since the last save, shown
+  // row between two record types, and, with Edit on, a line removed since the file was opened, shown
   // struck through where it was. A line with lines under it (its subtree, 6.4) shows ▾ open or ▸
   // shut; a shut line hides its subtree and says how many lines it holds; a shut section hides
   // every record of its type. Go to Line… with a range shows those lines alone.
@@ -1175,9 +1175,13 @@
     }
   }
 
+  // Whether Save asks where, in the computer's Save dialog: the browser has it, and the file opened
+  // has a handle, for step 6 to tell the original apart. Otherwise Save downloads the copy (10.2).
+  function canPick() { return PICKERS && (!state.doc || !!state.handle); }
+
   function updateBar() {
     const doc = state.doc;
-    const changed = !!doc && C.isChanged(doc);
+    const changed = !!doc && C.changedSinceCopy(doc);               // since the last copy, or since the open (10.2)
     $('edit').disabled = !doc;
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
     $('fold-all').hidden = !doc;
@@ -1185,9 +1189,11 @@
     $('file-name').setAttribute('aria-expanded', String(state.showFacts));
     $('facts').hidden = !doc || !state.showFacts;
     $('dirty').hidden = !changed;
-    $('save').disabled = !changed || !PICKERS;
-    $('save').title = PICKERS ? 'Save, in place (⌘S)' : 'This browser cannot write a file in place; Save a copy downloads one';
-    $('save-copy').disabled = !doc;
+    $('dirty').title = doc && doc.copiedOrder ? 'Changed since the last copy' : 'Changed since it was opened';
+    $('save').disabled = !changed;
+    $('save').textContent = canPick() ? 'Save' : 'Download a copy';
+    $('save').title = canPick() ? 'Save a dated copy, where you choose; the original is never written (⌘S)'
+      : 'Download a dated copy; the original is never written (⌘S)';
     $('undo').disabled = !doc || !doc.done.length;
     $('redo').disabled = !doc || !doc.undone.length;
     $('undo').title = doc && doc.done.length ? `Undo: ${doc.done[doc.done.length - 1].label} (⌘Z)` : 'Undo (⌘Z)';
@@ -1249,22 +1255,34 @@
     b.type = 'button';
     b.title = 'Copy';
     b.setAttribute('aria-label', 'Copy');
+    wireCopy(b, text, () => {
+      const range = document.createRange();
+      range.selectNodeContents(box);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      notice('The clipboard refused, so the text is selected instead: ⌘C copies it.', 'error');
+    });
+    box.appendChild(b);
+    return b;
+  }
+
+  // A copy button's click: what `text()` gives (a text, or a promise of one) to the clipboard, and
+  // the icon a check mark for 1.5 seconds; refused, `refused(text)` offers the text another way.
+  function wireCopy(b, text, refused) {
     const icon = (id) => $(id).content.firstElementChild.cloneNode(true);
     b.appendChild(icon('icon-copy'));
     b.addEventListener('click', async (e) => {
       e.stopPropagation();
+      let t = text();
+      if (typeof t !== 'string') t = await t;
       let copied = false;
       try {
-        await navigator.clipboard.writeText(text());
+        await navigator.clipboard.writeText(t);
         copied = true;
       } catch (err) { copied = false; }
       if (!copied) {
-        const range = document.createRange();
-        range.selectNodeContents(box);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        notice('The clipboard refused, so the text is selected instead: ⌘C copies it.', 'error');
+        refused(t);
         return;
       }
       b.textContent = '';
@@ -1276,8 +1294,6 @@
         b.classList.remove('is-done');
       }, 1500);
     });
-    box.appendChild(b);
-    return b;
   }
 
   // A box of text with its copy button: the text as written, its special characters marked.
@@ -1697,8 +1713,9 @@
     checksList.setCount(rows.length, keepScroll);
   }
 
-  // Changes: the net change since the file was opened or last saved, run by run (9.4). A run
-  // shows the line it is at now — a removed run, the line now below where it was.
+  // Changes: the net change from the original, as it was opened, run by run (9.4), however many
+  // copies have been written since (10.2). A run shows the line it is at now: a removed run, the
+  // line now below where it was.
   const changesList = Virtual($('changes-list'), (row, k) => {
     const run = state.runs[k];
     row.className = `item is-${run.kind}`;
@@ -1730,8 +1747,34 @@
   function renderChanges() {
     $('changes-count').textContent = state.runs.length ? fmt(state.runs.length) : '';
     $('changes-sum').textContent = changeCounts(state.runs);
+    $('changes-copy').hidden = !state.doc;
     changesList.setCount(state.runs.length, true);
   }
+
+  // 10.3: the Changes tab's copy button: the list below it as text (save.js, changesText), on the
+  // clipboard and nowhere else. The original's sha256 is taken as the file opens, so it is all but
+  // always there by the first click. Refused, the text is shown in a box, selected, for ⌘C.
+  function changesAsText() {
+    const build = (sha256) => S.changesText({ when: new Date(), file: state.fileName,
+      original: { sha256, bytes: state.disk.bytes, lines: state.disk.lines }, runs: state.runs });
+    return state.disk.sha256 ? build(state.disk.sha256) : state.hashing.then(build);
+  }
+  wireCopy($('changes-copy'), changesAsText, (text) => {
+    let box;
+    dialog('The changes, as text', (body) => {
+      body.appendChild(el('div', 'dialog-sum', 'The clipboard refused, so the text is here, selected: ⌘C copies it.'));
+      box = el('textarea', 'report');
+      box.value = text;
+      box.readOnly = true;
+      box.rows = 11;
+      box.spellcheck = false;
+      box.setAttribute('translate', 'no');
+      box.setAttribute('aria-label', 'The changes, as text');
+      body.appendChild(box);
+    }, [{ label: 'Close', value: '', primary: true }]);
+    box.focus();
+    box.select();
+  });
 
   const tagsList = Virtual($('tags-list'), (row, k) => {
     const [tg, n] = state.tagRows[k];
@@ -1862,7 +1905,8 @@
       version, where, browser: browserName(),
       bytes: state.disk ? state.disk.bytes : null,
       sha256: state.disk ? (state.disk.sha256 || await state.hashing) : null,
-      editing: !!state.editing, unsaved: state.runs.length, settings,
+      editing: !!state.editing, settings,
+      unsaved: state.doc ? C.changeRuns(state.doc, null, state.doc.copiedOrder).length : 0,   // not in any copy yet
     };
     const encoder = new TextEncoder();
     const text = C.report(state.m, info);
@@ -1940,7 +1984,7 @@
       }, { once: true });
       d.returnValue = '';
       d.showModal();
-      const first = body.querySelector('input[type=text]');
+      const first = body.querySelector('input[type=text]:not(:disabled)');
       (first || primary || d).focus();
     });
   }
@@ -1983,19 +2027,20 @@
   const STAMP_HOW = {
     adds: 'gains 1 CHAN · 2 DATE · 3 TIME · 2 NOTE',
     sets: 'its CHAN: DATE and TIME set, a NOTE added',
-    resets: 'the stamp GEDCOM Viewer gave it since the last save, set anew',
+    resets: 'its stamp from an earlier copy, set anew',
   };
 
-  // 10.2 step 4: the changes, the change stamps (F1: ticked unless unticked, and remembered), and
-  // the note for this save. Resolves with { note, stamps }, or null.
-  async function saveDialog(kind) {
+  // 10.2 step 2: every change since the original, the change stamps to come (F1: ticked unless
+  // unticked, and remembered), and the note for them. With the stamps unticked the note box is
+  // off: there is nowhere for a note to go. `picks` says whether the computer's Save dialog comes
+  // next, or a download. Resolves with { note, stamps }, or null.
+  async function saveDialog(picks) {
     const doc = state.doc;
     let note;
     let box;
-    const title = kind === 'copy' ? `Save a copy of ${state.fileName}` : `Save ${state.fileName}`;
-    const go = await dialog(title, (body) => {
+    const go = await dialog(`${picks ? 'Save' : 'Download'} a copy of ${state.fileName}`, (body) => {
       body.appendChild(el('div', 'dialog-sum', state.runs.length ? changeCounts(state.runs)
-        : 'No change since the file was opened or last saved: the copy is the file as it is'));
+        : 'No change from the original: the copy is the original, byte for byte'));
       if (state.runs.length) {
         const list = el('div', 'dialog-list');
         putRuns(list, state.runs);
@@ -2007,7 +2052,7 @@
       box.type = 'checkbox';
       box.checked = state.stamps;
       label.appendChild(box);
-      label.appendChild(el('span', null, `Change stamps${plan.length ? ` · ${plural(plan.length, 'record', 'records')}` : ' · none needed'}`));
+      label.appendChild(el('span', null, `Change stamps, ${plan.length ? plural(plan.length, 'record', 'records') : 'none needed'}`));
       body.appendChild(label);
       const stamps = el('div', 'dialog-stamps');
       for (const p of plan) {
@@ -2021,8 +2066,6 @@
         row.appendChild(el('span', 'muted', `  ${STAMP_HOW[p.how]}`));
         stamps.appendChild(row);
       }
-      stamps.hidden = !box.checked;
-      box.addEventListener('change', () => { stamps.hidden = !box.checked; });
       body.appendChild(stamps);
       const noteRow = el('label', 'dialog-note');
       noteRow.appendChild(el('span', null, 'Note'));
@@ -2030,111 +2073,73 @@
       note.type = 'text';
       note.maxLength = C.STAMP_NOTE_MAX;
       note.placeholder = C.STAMP_NOTE;                               // what is written when nothing is typed
-      note.title = 'For the change stamps and the log; one line, 200 characters at most';
+      note.title = 'For the change stamps; one line, 200 characters at most';
       noteRow.appendChild(note);
       body.appendChild(noteRow);
-    }, [CANCEL, { label: kind === 'copy' ? 'Save a copy' : 'Save', value: 'go', primary: true }]);
+      const ticked = () => {
+        stamps.hidden = !box.checked;
+        note.disabled = !box.checked;
+        noteRow.classList.toggle('is-off', !box.checked);
+      };
+      ticked();
+      box.addEventListener('change', ticked);
+    }, [CANCEL, { label: picks ? 'Save' : 'Download', value: 'go', primary: true }]);
     if (!go) return null;
     state.stamps = box.checked;
     store.set('stamps', state.stamps);
-    return { note: note.value, stamps: box.checked };
-  }
-
-  // A save that wrote nothing takes its stamps back, so the document is as it was before it.
-  function takeBackStamps(stepsBefore) {
-    const doc = state.doc;
-    if (doc.done.length > stepsBefore && doc.done[doc.done.length - 1].label === 'Change stamps') C.undo(doc);
+    return { note: box.checked ? note.value : '', stamps: box.checked };
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Saving (10.2, 10.3)
+  // Saving (10.2): a dated copy, never the original
   // ---------------------------------------------------------------------------------------------
 
-  // 10.2 step 2: the folder, asked for once, opening at the file, and proved to hold it; from then
-  // on the file, its backup and its log are reached through it, under the one grant.
-  async function grantFolder() {
-    if (state.dir) return true;
-    let dir;
-    try {
-      const opts = { id: 'gedview-save', mode: 'readwrite' };
-      if (state.handle) opts.startIn = state.handle;
-      dir = await window.showDirectoryPicker(opts);
-    } catch (e) {
-      // Chrome's own picker says "Can't open this folder" for those folders, and the page sees
-      // the same AbortError as for a Cancel.
-      if (e.name === 'AbortError') {
-        notice('No folder was chosen, so there is no save in place. Chrome will not let a page write into Downloads, Desktop or ' +
-          'Documents themselves, or into the home folder, only into a folder inside them. Put the file in a folder of its own and ' +
-          'open it from there, or use Save a copy.');
-      } else notice(`${e.name}: ${e.message}`, 'error');
-      return false;
-    }
-    let holds;
-    if (state.handle) {
-      const path = await dir.resolve(state.handle).catch(() => null);
-      holds = !!path && path.length === 1 && path[0] === state.fileName;
-    } else {
-      // opened through the file box, with no handle: the folder's file of that name must be this
-      // one, byte for byte
-      holds = (await S.checkDisk({ dir, name: state.fileName, diskHash: state.disk.sha256, hash: sha256 })).done;
-    }
-    if (!holds) {
-      notice(`That folder does not hold ${state.fileName}. Save again, and pick the folder it is in.`, 'error');
-      return false;
-    }
-    state.dir = dir;
-    return true;
-  }
-
-  // 10.2 step 3 refused: the file changed on disk. Nothing is written; the owner picks.
-  async function changedOnDisk() {
-    const buttons = [CANCEL];
-    if (state.handle) buttons.push({ label: 'Reload it, and drop my changes', value: 'reload' });
-    buttons.push({ label: 'Save a copy', value: 'copy', primary: true });
-    const pick = await dialog(`${state.fileName} changed on disk since it was opened`, (body) => {
-      body.appendChild(el('div', null, 'Another program changed it. GEDCOM Viewer will not write over it.'));
-    }, buttons);
-    if (pick === 'copy') await doSaveCopy();
-    if (pick === 'reload') await openFile(await state.handle.getFile(), state.handle);
-  }
-
+  // Step 1 and the page's dialog (step 2) here; the rest in save.js, given the computer's Save
+  // dialog to ask where, opening at the original, or, in a browser without it, the bytes back to
+  // download. Nothing asks for a folder. One save at a time: ⌘S while one is under way does nothing.
+  let saving = false;
   async function doSave() {
-    if (!state.doc || $('dialog').open) return;
+    if (!state.doc || $('dialog').open || saving) return;
+    saving = true;
+    try { await saveNow(); } finally { saving = false; }
+  }
+
+  async function saveNow() {
     if (state.edit && !commitEdit(false)) return;
-    // 1. nothing changed: say so, write nothing
-    if (!C.isChanged(state.doc)) {
-      notice('Nothing has changed since the file was opened or last saved. Nothing was written.');
+    // 1. nothing changed since the last copy: say so, write nothing
+    if (!C.changedSinceCopy(state.doc)) {
+      notice(S.nothingSince(state.doc));
       return;
     }
-    if (!PICKERS) {
-      notice('This browser cannot write a file in place. Save a copy downloads one.');
-      return;
-    }
-    await state.hashing;
-    // 2. the folder
-    if (!(await grantFolder())) return;
-    // 3. the file on disk is the file as opened or last saved
-    const check = await S.checkDisk({ dir: state.dir, name: state.fileName, diskHash: state.disk.sha256, hash: sha256 });
-    if (!check.done) {
-      if (check.changedOnDisk) await changedOnDisk();
-      else notice(check.say, 'error');
-      return;
-    }
-    // 4. the dialog
-    const choice = await saveDialog('save');
+    // 2. the dialog
+    const picks = canPick();
+    const choice = await saveDialog(picks);
     if (!choice) return;
-    // 5–10, in save.js
-    const stepsBefore = state.doc.done.length;
-    const r = await S.save({ doc: state.doc, dir: state.dir, name: state.fileName, disk: state.disk,
-      when: new Date(), note: choice.note, stamps: choice.stamps, hash: sha256 });
-    if (r.done) state.disk = r.disk;
-    else if (!r.loud) takeBackStamps(stepsBefore);
+    // 3 to 8: the stamps, the bytes, where, not the original, written and read back, the last copy
+    const pick = picks ? (name) => window.showSaveFilePicker({ suggestedName: name, startIn: state.handle, types: GEDCOM_TYPES }) : null;
+    const r = await S.save({ doc: state.doc, original: { name: state.fileName, handle: state.handle },
+      when: new Date(), note: choice.note, stamps: choice.stamps, hash: sha256, pick });
     afterAct(state.sel);
-    if (r.done) {
-      notice(`Saved. The file as it was is in ${r.backup}. ${r.logFailed || `The log is ${r.log}.`}`, r.logFailed ? 'error' : 'ok');
-    } else if (r.changedOnDisk) await changedOnDisk();
-    else if (r.loud) await saidLoudly('Save did not finish', r.say);
-    else notice(r.say, 'error');
+    if (r.done && r.download) {
+      download(r.bytes, r.name);
+      notice(`Downloaded as ${r.name}, where your browser keeps downloads.`, 'ok');
+    } else if (r.done) notice(`Saved as ${r.name}.`, 'ok');
+    else if (r.original) await refusedOriginal(r);
+    else if (r.loud) await saidLoudly('The copy did not finish', r.say);
+    else notice(r.say, r.cancelled ? '' : 'error');
+  }
+
+  // 10.2 step 6: the original was picked, and nothing was saved into it. If the browser had emptied
+  // it, save.js put it back, and the dialog says so; if it could not, the original's bytes as they
+  // were are offered as a download, to put in place of the empty file.
+  async function refusedOriginal(r) {
+    if (!r.restore) {
+      await saidLoudly('No copy was written', r.say);
+      return;
+    }
+    const get = await dialog('No copy was written', (body) => body.appendChild(el('div', null, r.say)),
+      [{ label: 'Close', value: '' }, { label: `Download ${state.fileName}`, value: 'get', primary: true }]);
+    if (get) download(r.restore, state.fileName);
   }
 
   function download(bytes, name, type) {
@@ -2148,68 +2153,6 @@
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
-  // 10.3 — Save a copy: into the folder when Save has been granted it; else where the owner picks,
-  // the log block offered as a second file; in a browser with no pickers, both downloaded.
-  async function doSaveCopy() {
-    if (!state.doc || $('dialog').open) return;
-    if (state.edit && !commitEdit(false)) return;
-    await state.hashing;
-    const choice = await saveDialog('copy');
-    if (!choice) return;
-    const stepsBefore = state.doc.done.length;
-    const args = { doc: state.doc, name: state.fileName, disk: state.disk, when: new Date(),
-      note: choice.note, stamps: choice.stamps, hash: sha256 };
-    if (state.dir) {
-      const r = await S.saveCopy({ ...args, dir: state.dir });
-      if (!r.done) takeBackStamps(stepsBefore);
-      afterAct(state.sel);
-      if (!r.done) await saidLoudly('Save a copy did not finish', r.say);
-      else notice(`The copy is ${r.copy}, beside the file. ${r.logFailed || `Its log block is in ${r.log}.`}`, r.logFailed ? 'error' : 'ok');
-      return;
-    }
-    const r = await S.copyFiles(args);
-    if (!r.done) {
-      takeBackStamps(stepsBefore);
-      afterAct(state.sel);
-      notice(r.say, 'error');
-      return;
-    }
-    afterAct(state.sel);
-    if (PICKERS) {
-      let handle;
-      try {
-        const opts = { suggestedName: r.copy, types: [{ description: 'GEDCOM', accept: { 'application/x-gedcom': ['.ged', '.gedcom'] } }] };
-        if (state.handle) opts.startIn = state.handle;
-        handle = await window.showSaveFilePicker(opts);
-      } catch (e) {
-        takeBackStamps(stepsBefore);
-        afterAct(state.sel);
-        notice(e.name === 'AbortError' ? 'No copy was written.' : `${e.name}: ${e.message}`, e.name === 'AbortError' ? '' : 'error');
-        return;
-      }
-      if (!(await S.writeChecked(handle, r.bytes, sha256))) {
-        await saidLoudly('Save a copy did not finish', `${handle.name} did not read back as it was written.`);
-        return;
-      }
-      const more = await dialog('The copy is written', (body) => body.appendChild(el('div', 'mono', handle.name)),
-        [{ label: 'Close', value: '' }, { label: 'Save its log block', value: 'log', primary: true }]);
-      if (!more) return;
-      try {
-        const logHandle = await window.showSaveFilePicker({ suggestedName: r.logName });
-        const w = await logHandle.createWritable();
-        await w.write(new TextEncoder().encode(r.logText(handle.name)));
-        await w.close();
-      } catch (e) {
-        if (e.name !== 'AbortError') notice(`${e.name}: ${e.message}`, 'error');
-      }
-      return;
-    }
-    download(r.bytes, r.copy);
-    const more = await dialog('The copy is downloaded', (body) => body.appendChild(el('div', 'mono', r.copy)),
-      [{ label: 'Close', value: '' }, { label: 'Download its log block', value: 'log', primary: true }]);
-    if (more) download(new TextEncoder().encode(r.logText(r.copy)), r.logName, 'text/plain;charset=utf-8');
-  }
-
   // ---------------------------------------------------------------------------------------------
   // Opening a file
   // ---------------------------------------------------------------------------------------------
@@ -2218,7 +2161,6 @@
     state.doc = null;
     state.m = null;
     state.handle = null;
-    state.dir = null;
     state.disk = null;
     state.sel = -1;
     state.back = [];
@@ -2242,6 +2184,7 @@
     $('checks-sum').textContent = '';
     $('changes-count').textContent = '';
     $('changes-sum').textContent = '';
+    $('changes-copy').hidden = true;
     $('search-count').textContent = '';
     $('detail').textContent = '';
     $('goto').disabled = true;
@@ -2261,10 +2204,10 @@
     $('message').textContent = message || '';
   }
 
-  // Changes not yet saved are dropped only when the owner says so.
+  // Changes not in any copy yet are dropped only when the owner says so.
   async function mayDropChanges() {
     if (state.edit && !commitEdit(false)) return false;
-    if (!state.doc || !C.isChanged(state.doc)) return true;
+    if (!state.doc || !C.changedSinceCopy(state.doc)) return true;
     const go = await dialog(`${state.fileName} has changes that are not saved`, (body) => {
       body.appendChild(el('div', null, 'Opening another file drops them.'));
     }, [CANCEL, { label: 'Drop them, and open', value: 'go', primary: true }]);
@@ -2291,7 +2234,6 @@
     state.m = doc.view;
     state.fileName = file.name;
     state.handle = handle || null;
-    state.dir = null;
     state.disk = { sha256: null, bytes: bytes.length, lines: doc.m.n };
     state.hashing = sha256(bytes).then((hex) => {
       if (state.doc === doc && state.disk.sha256 === null) state.disk.sha256 = hex;
@@ -2351,9 +2293,7 @@
     }
     let handle;
     try {
-      [handle] = await window.showOpenFilePicker({
-        types: [{ description: 'GEDCOM', accept: { 'application/x-gedcom': ['.ged', '.gedcom'] } }],
-      });
+      [handle] = await window.showOpenFilePicker({ types: GEDCOM_TYPES });
     } catch (e) {
       if (e.name !== 'AbortError') notice(`${e.name}: ${e.message}`, 'error');
       return;
@@ -2372,8 +2312,9 @@
     if (file) openFile(file, null);
   });
 
-  // A file dropped anywhere on the page. Its handle (to save in place) must be asked for while the
-  // drop is still being handled; the browser forgets the dropped items after.
+  // A file dropped anywhere on the page. Its handle (where the Save dialog opens, and what it may
+  // not pick) must be asked for while the drop is still being handled; the browser forgets the
+  // dropped items after.
   let dragDepth = 0;
   const carriesFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
   document.addEventListener('dragenter', (e) => {
@@ -2405,9 +2346,10 @@
     });
   });
 
-  // Leaving with changes not saved: the browser asks first.
+  // Leaving with changes not in any copy yet: the browser asks first. A copy written, or downloaded,
+  // holds the changes made before it (10.2, step 8).
   window.addEventListener('beforeunload', (e) => {
-    if (state.doc && C.isChanged(state.doc)) {
+    if (state.doc && C.changedSinceCopy(state.doc)) {
       e.preventDefault();
       e.returnValue = '';
     }
@@ -2570,12 +2512,11 @@
 
   $('back').addEventListener('click', goBack);
   $('save').addEventListener('click', doSave);
-  $('save-copy').addEventListener('click', doSaveCopy);
   $('undo').addEventListener('click', doUndo);
   $('redo').addEventListener('click', doRedo);
 
   // Edit: off, the file is read, and a double-click highlights a word; on, lines can be typed over,
-  // added and deleted, and the lines removed since the last save show where they were.
+  // added and deleted, and the lines removed since the file was opened show where they were.
   function setEditing(on) {
     if (!state.doc || on === state.editing) return;
     if (!on && state.edit && !commitEdit(false)) return;
@@ -2751,9 +2692,9 @@
     if ($('dialog').open) return;                                    // a dialog takes its own keys
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (mod && !e.altKey && key === 's') {                           // ⌘S, ⇧⌘S: from anywhere
+    if (mod && !e.shiftKey && !e.altKey && key === 's') {            // ⌘S: from anywhere
       e.preventDefault();
-      if (e.shiftKey) doSaveCopy(); else doSave();
+      doSave();
       return;
     }
     if (mod && !e.shiftKey && !e.altKey && key === 'o') {           // ⌘O: open a file
@@ -3001,4 +2942,5 @@
   openPanel('records');
   updateBack();
   applyTabName();
+  updateBar();                                                       // Save, or Download a copy, as this browser has it
 })();

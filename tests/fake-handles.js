@@ -1,7 +1,8 @@
-// In-memory stand-ins for the browser's file and folder handles (BUILD-BRIEF section 12): the few
-// methods save.js uses, with the same names and shapes. Every read and every finished write goes
-// into the folder's `journal`, in order, so a test can hold save.js to the order of 10.2; and a
-// file can be made to fail, to show what save.js does then.
+// In-memory stand-ins for the browser's file handles and its Save dialog (BUILD-BRIEF section 12):
+// the few methods save.js uses, with the same names and shapes. Every read and every finished
+// write goes into the folder's `journal`, in order, so a test can hold save.js to the order of
+// 10.2; a file can be made to fail, to show what save.js does then; and the Save dialog empties
+// the file picked in it before it hands back its handle, as Chromium's does.
 'use strict';
 
 const fail = (name, message) => Object.assign(new Error(message), { name });
@@ -48,6 +49,11 @@ class FakeFile {
       },
     };
   }
+
+  // Like the browser's: two handles are one entry when they name the same file in the same folder.
+  async isSameEntry(other) {
+    return !!other && other.kind === 'file' && other.dir === this.dir && other.name === this.name;
+  }
 }
 
 class FakeDir {
@@ -75,33 +81,40 @@ class FakeDir {
     return f;
   }
 
-  async getDirectoryHandle(name, opts = {}) {
-    const e = this.entries.get(name);
-    if (e) {
-      if (e.kind !== 'directory') throw fail('TypeMismatchError', `${name} is a file`);
-      return e;
-    }
-    if (!opts.create) throw fail('NotFoundError', `there is no ${name}`);
-    const d = new FakeDir(name, this);
-    this.entries.set(name, d);
-    return d;
-  }
-
-  // For the tests: put a file here; find a file by its path ('gedcom-viewer-history/x.bak'); list names.
+  // For the tests: put a file here; find a file by its name; list names.
   put(name, bytes) {
     const f = new FakeFile(this, name, new Uint8Array(bytes));
     this.entries.set(name, f);
     return f;
   }
 
-  at(p) {
-    const [first, ...rest] = p.split('/');
-    const e = this.entries.get(first);
-    if (!e) return undefined;
-    return rest.length ? e.at(rest.join('/')) : e;
-  }
+  at(name) { return this.entries.get(name); }
 
   names() { return [...this.entries.keys()].sort(); }
 }
 
-module.exports = { FakeDir, FakeFile };
+// The computer's Save dialog, as Chromium's showSaveFilePicker is: the person keeps the name it
+// offers, or types `answer`, in `dir`; null is Cancel (an AbortError). The file picked is created
+// when it is not there and, when it is, emptied before its handle is handed back (Chromium's
+// file_system_access_manager_impl.cc: "Create file if it doesn't yet exist, and truncate file if
+// it does exist"); `empties: false` is a browser that leaves it as it was. `offered` keeps every
+// name the dialog was given to offer.
+function saveDialog(dir, answer, { empties = true } = {}) {
+  const pick = async (offered) => {
+    pick.offered.push(offered);
+    if (answer === null) throw fail('AbortError', 'The user aborted a request.');
+    const name = answer === undefined ? offered : answer;
+    const there = dir.entries.get(name);
+    const file = await dir.getFileHandle(name, { create: true });
+    if (!there) dir.journal.push(`create ${file.path}`);
+    else if (empties) {
+      file.bytes = new Uint8Array(0);
+      dir.journal.push(`empty ${file.path}`);
+    }
+    return file;
+  };
+  pick.offered = [];
+  return pick;
+}
+
+module.exports = { FakeDir, FakeFile, saveDialog };

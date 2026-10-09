@@ -14,8 +14,9 @@
 // rest of the page (Records, Search, the keys, a dropped file, a file too long to show) and its
 // editing (the facts line, blocks shut and opened, an edit, undo and redo, a line added, a record
 // deleted with its pointers) are walked on a fictional file written to the system's temp folder
-// and removed after; and, in a browser with its file pickers taken away, Save a copy downloads the
-// copy and its log. The third round (0.5) is walked on a fictional file of its own: the frames
+// and removed after; Save, with the computer's Open and Save dialogs stood in for, writes a dated
+// copy and refuses the original; and, in a browser with its file pickers taken away, Save is
+// Download a copy. The third round (0.5) is walked on a fictional file of its own: the frames
 // hidden and shown across a reload, the lines scrolled sideways, the copy buttons, a _META drawn
 // as it reads, blocks and sections dragged, Collapse all, a check's meaning, Back over the lines,
 // Bold surnames, a link selected whole, a clipped row's count, and E. Release 0.5.4 is walked in the
@@ -28,9 +29,10 @@
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
 // third, scroll, drags, save, copy, look. Exit 0 when every step passes.
 //
-// Save in place is not walked here: its folder picker and its permission prompts need a person's
-// click. tests/save.test.js walks every other step of section 15's editing walk, over in-memory
-// files.
+// The computer's Save dialog itself is not walked here: a person picks the name and the place in
+// it. The walk stands in for it as Chromium's behaves, the file picked created, or emptied when it
+// is there, before the page gets it (release 0.5.6, the part named save). tests/save.test.js walks
+// the saving steps of the phase-5 walk over in-memory files.
 'use strict';
 const fs = require('node:fs');
 const os = require('node:os');
@@ -1244,12 +1246,12 @@ async function fourthDrags(page, dir, shots) {
   const r1 = await page.ev(ROW_RECT(nameLine));
   await dragRow(page, r2, { x: r1.x, y: r1.top + 2 });
   await page.waitFor("document.getElementById('changes-count').textContent === '1'");
-  await page.key('S', 'KeyS', 83, 12);                               // ⇧⌘S: the Save a copy dialog, to read, then Cancel
+  await page.key('s', 'KeyS', 83, 4);                                // ⌘S: the Save dialog, to read, then Cancel
   await page.waitFor("document.getElementById('dialog').open");
   const dialogSays = await page.ev("({ lines: [...document.querySelectorAll('#dialog .chg, #dialog .chg-line')].map((x) => x.textContent), stamps: (document.querySelector('#dialog .dialog-check span') || {}).textContent })");
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(dialogSays.lines[0].startsWith('moved') && dialogSays.lines[1] === 'NAME · 1 line · among its 2 NAME lines the first is read as preferred' && dialogSays.stamps === 'Change stamps · 1 record',
+  check(dialogSays.lines[0].startsWith('moved') && dialogSays.lines[1] === 'NAME · 1 line · among its 2 NAME lines the first is read as preferred' && dialogSays.stamps === 'Change stamps, 1 record',
     `the second NAME dragged first: the Save dialog says "${dialogSays.lines[1]}", and the record is stamped (${dialogSays.stamps})`);
   await page.key('z', 'KeyZ', 90, 4);
   await page.waitFor("document.getElementById('changes-count').textContent === ''");
@@ -1261,12 +1263,12 @@ async function fourthDrags(page, dir, shots) {
   const secMid = await dragRow(page, famRow, { x: indiRow.x, y: indiRow.top + 2 });
   await page.waitFor("document.getElementById('changes-count').textContent === '1'");
   const section = await page.ev(`({ order: [...document.querySelectorAll('#grid .row.is-section')].map((r) => r.querySelector('.tg').textContent), changes: ${CHANGES}, first: (${SELECTED}).id })`);
-  await page.key('S', 'KeyS', 83, 12);
+  await page.key('s', 'KeyS', 83, 4);                                // ⌘S: the Save dialog, to read, then Cancel
   await page.waitFor("document.getElementById('dialog').open");
   const secDialog = await page.ev("(document.querySelector('#dialog .dialog-check span') || {}).textContent");
   await page.click(BUTTON('#dialog', 'Cancel'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(secMid.line && secMid.dim >= 1 && JSON.stringify(section.order.slice(0, 4)) === '["SUBM","FAM","INDI","OBJE"]' && section.changes[0] === 'moved: section FAM · 2 records · 6 lines' && secDialog === 'Change stamps · none needed',
+  check(secMid.line && secMid.dim >= 1 && JSON.stringify(section.order.slice(0, 4)) === '["SUBM","FAM","INDI","OBJE"]' && section.changes[0] === 'moved: section FAM · 2 records · 6 lines' && secDialog === 'Change stamps, none needed',
     `the FAM row dragged to the INDI row's edge: the 2 families now stand before the people (${section.order.join(' · ')}); Changes reads "${section.changes[0]}"; ${secDialog}`);
   await shot('section-moved');
   await page.key('z', 'KeyZ', 90, 4);
@@ -1317,51 +1319,52 @@ async function fourthDrags(page, dir, shots) {
   await page.click("document.getElementById('edit')");
 
 }
-// Save in place through the page (10.2), with the folder picker stood in for by a folder held in
-// the page's memory: the picker and its permission prompt are a person's clicks, and they are the
-// owner's in phase 5; every step after them is walked here. Then the file is changed from outside,
-// and Save refuses.
-const STAND_IN_FOLDER = `(() => {
+// Save (10.2) through the page, with the computer's two dialogs stood in for: Open hands the page
+// the file's handle, as Chrome's does, and Save hands it the file the person would pick in it,
+// created when it is not there and emptied when it is, before the page sees it, as Chromium does
+// (content/browser/file_system_access/file_system_access_manager_impl.cc: "Create file if it
+// doesn't yet exist, and truncate file if it does exist"). The picks are a person's clicks in
+// phase 5; every step around them is walked here. `__answer` is the name the person keeps or types
+// in the Save dialog (unset, the name offered; null, Cancel), and `__failNew` how a file made there fails.
+const STAND_IN_DIALOGS = `(() => {
   const fail = (name, message) => Object.assign(new Error(message), { name });
   class F {
-    constructor(name, bytes) { this.kind = 'file'; this.name = name; this.bytes = bytes || new Uint8Array(0); }
+    constructor(dir, name, bytes) { this.kind = 'file'; this.dir = dir; this.name = name; this.bytes = bytes || new Uint8Array(0); this.fail = null; }
     async getFile() { return new File([this.bytes.slice()], this.name); }
-    async createWritable(o = {}) {
-      const f = this; let data = o.keepExistingData ? f.bytes.slice() : new Uint8Array(0); let pos = 0;
+    async createWritable() {
+      const f = this; let data = new Uint8Array(0);
+      if (f.fail === 'open') throw fail('NotAllowedError', f.name + ' may not be written');
       return {
-        async seek(p) { pos = p; },
         async write(c) {
-          const b = typeof c === 'string' ? new TextEncoder().encode(c) : new Uint8Array(c.buffer ? c.buffer.slice(c.byteOffset, c.byteOffset + c.byteLength) : c);
-          if (pos + b.length > data.length) { const d = new Uint8Array(pos + b.length); d.set(data); data = d; }
-          data.set(b, pos); pos += b.length;
+          const b = c.buffer ? new Uint8Array(c.buffer.slice(c.byteOffset, c.byteOffset + c.byteLength)) : new TextEncoder().encode(c);
+          const d = new Uint8Array(data.length + b.length); d.set(data); d.set(b, data.length); data = d;
         },
-        async close() { f.bytes = data; },
+        async close() { f.bytes = f.fail === 'garble' ? data.map((x, k) => (k === 0 ? x ^ 1 : x)) : data; window.__writes.push(f.name); },
       };
     }
+    async isSameEntry(other) { return !!other && other.dir === this.dir && other.name === this.name; }
   }
-  class D {
-    constructor(name) { this.kind = 'directory'; this.name = name; this.entries = new Map(); }
-    async getFileHandle(n, o = {}) {
-      const e = this.entries.get(n);
-      if (e) { if (e.kind !== 'file') throw fail('TypeMismatchError', n); return e; }
-      if (!o.create) throw fail('NotFoundError', n);
-      const f = new F(n); this.entries.set(n, f); return f;
-    }
-    async getDirectoryHandle(n, o = {}) {
-      const e = this.entries.get(n);
-      if (e) { if (e.kind !== 'directory') throw fail('TypeMismatchError', n); return e; }
-      if (!o.create) throw fail('NotFoundError', n);
-      const d = new D(n); this.entries.set(n, d); return d;
-    }
-    async resolve(h) { for (const [n, e] of this.entries) if (e === h) return [n]; return null; }
-  }
-  window.__folder = new D('folder');
-  window.__File = F;
-  window.showDirectoryPicker = async () => window.__folder;
+  const folder = { entries: new Map() };
+  Object.assign(window, { __folder: folder, __File: F, __writes: [], __asked: [], __answer: undefined, __failNew: null });
+  window.showOpenFilePicker = async () => [folder.entries.get(window.__opened)];
+  window.showSaveFilePicker = async (opts) => {
+    window.__asked.push({ name: opts.suggestedName, atOriginal: opts.startIn === folder.entries.get(window.__opened), types: JSON.stringify(opts.types) });
+    if (window.__answer === null) throw fail('AbortError', 'The user aborted a request.');
+    const name = window.__answer === undefined ? opts.suggestedName : window.__answer;
+    let f = folder.entries.get(name);
+    if (f) f.bytes = new Uint8Array(0);
+    else { f = new F(folder, name); f.fail = window.__failNew; folder.entries.set(name, f); }
+    return f;
+  };
   return true;
 })()`;
-const IN_FOLDER = (p) => `(() => { let e = window.__folder; for (const n of ${JSON.stringify(p)}.split('/')) e = e && e.entries.get(n);
-  return e && e.kind === 'file' ? btoa(Array.from(e.bytes, (b) => String.fromCharCode(b)).join('')) : null; })()`;
+const IN_FOLDER = (name) => `(() => { const e = window.__folder.entries.get(${JSON.stringify(name)});
+  return e ? btoa(Array.from(e.bytes, (b) => String.fromCharCode(b)).join('')) : null; })()`;
+const FOLDER_NAMES = '[...window.__folder.entries.keys()].sort()';
+// Whether leaving the page now would have the browser ask first: the page's own beforeunload, asked.
+const LEAVE_ASKS = "(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()";
+const SMALL = '0 HEAD\n1 SOUR gedview-walk\n2 VERS 1.0\n1 DATE 28 SEP 2026\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n' +
+  '0 @I1@ INDI\n1 NAME Jane /Fixture/\n1 SEX F\n0 @I2@ INDI\n1 NAME Joe /Fixture/\n0 TRLR\n';
 
 // Enter on the selected line, and the box to type it in: what the page is doing instead, if not.
 async function openEditBox(page) {
@@ -1374,113 +1377,217 @@ async function openEditBox(page) {
   }
 }
 
-async function saveInPlace(page, dir) {
-  console.log('\n== Save, in place, the folder picker stood in for');
-  const file = path.join(dir, 'small.ged');
-  const text = '0 HEAD\n1 SOUR gedview-walk\n2 VERS 1.0\n1 DATE 28 SEP 2026\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n' +
-    '0 @I1@ INDI\n1 NAME Jane /Fixture/\n1 SEX F\n0 @I2@ INDI\n1 NAME Joe /Fixture/\n0 TRLR\n';
-  fs.writeFileSync(file, text);
-  await page.openFile(file);
-  await page.click("document.getElementById('edit')");
-  await page.ev(STAND_IN_FOLDER);
-  await page.ev(`window.__folder.entries.set('small.ged', new window.__File('small.ged', Uint8Array.from(atob(${JSON.stringify(Buffer.from(text).toString('base64'))}), (c) => c.charCodeAt(0))))`);
-  await gotoLine(page, 12);
+// Line n typed over with `text`, and the change shown.
+async function retype(page, n, text) {
+  await gotoLine(page, n);
   await openEditBox(page);
   await page.clearBox();
-  await page.type('1 NAME Joe /Fixtures/');
+  await page.type(text);
   await page.key('Enter', 'Enter', 13);
   await page.waitFor("document.querySelector('#grid .row.is-sel.is-changed')");
-  await page.click("document.getElementById('save')");
-  await page.waitFor("document.getElementById('dialog').open");
-  const title = await page.ev("document.querySelector('#dialog .dialog-title').textContent");
-  await page.ev("document.querySelector('#dialog .dialog-note input').value = 'Walked.'");
-  await page.click(BUTTON('#dialog', 'Save'));
-  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
-  const said = await page.ev("document.getElementById('notice').textContent");
-  const saved = Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8');
-  const backupPath = (said.match(/in (gedcom-viewer-history\/\S+\.bak)\./) || [])[1];
-  const backup = backupPath ? Buffer.from(await page.ev(IN_FOLDER(backupPath)), 'base64').toString('utf8') : null;
-  const log = (Buffer.from(await page.ev(IN_FOLDER('small.ged.edits.log')) || '', 'base64').toString('utf8')).split('\n');
-  const lines = saved.split('\n');
-  check(title === 'Save small.ged' && said.startsWith('Saved.'), `Save: the folder granted, the dialog, then "${said}"`);
-  check(backup === text, `the backup, ${backupPath}, is the file as it was`);
-  check(lines.slice(10, 16).join(' | ').startsWith('0 @I2@ INDI | 1 NAME Joe /Fixtures/ | 1 CHAN | 2 DATE ') && lines[15] === '2 NOTE Walked.' && lines[16] === '0 TRLR',
-    `the file: the edit, and @I2@'s change stamp with the note typed: ${lines.slice(12, 16).join(' · ')}`);
-  check(/^=== \S+  save  small\.ged$/.test(log[0]) && log[1] === 'note     Walked.' && log.includes(`backup   ${backupPath}`),
-    `the log beside it: "${log[0]}", then its note and its backup`);
-  const facts = await page.ev("document.getElementById('facts').textContent");
-  check(facts.includes(`${Buffer.byteLength(saved)} B · 17 lines`), `the facts line is the file as saved: ${facts}`);
-
-  await gotoLine(page, 9);
-  await openEditBox(page);
-  await page.type(' x');
-  await page.key('Enter', 'Enter', 13);
-  await page.waitFor("!document.getElementById('dirty').hidden");
-  await page.ev(`window.__folder.entries.get('small.ged').bytes = new Uint8Array([...window.__folder.entries.get('small.ged').bytes, ...new TextEncoder().encode('0 @N1@ NOTE from elsewhere\\n')])`);
-  await page.click("document.getElementById('save')");
-  await page.waitFor("document.getElementById('dialog').open");
-  const refused = await page.ev("document.querySelector('#dialog .dialog-title').textContent");
-  await page.click(BUTTON('#dialog', 'Cancel'));
-  await page.waitFor("!document.getElementById('dialog').open");
-  const after = Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8');
-  check(refused === 'small.ged changed on disk since it was opened' && after.endsWith('0 @N1@ NOTE from elsewhere\n'),
-    `the file changed from outside: Save refuses — "${refused}" — and writes nothing`);
-  await page.click("document.getElementById('undo')");
-  await page.waitFor("document.getElementById('dirty').hidden");
 }
 
-// Save a copy in a browser with no file pickers (10.3): it downloads the copy under its dated
-// name, and then its log block; Save itself is off. The page is loaded again with the pickers
-// taken away, on a small fictional file.
+// What the Save dialog shows: its title, the lines of the changes, the change-stamp box and the
+// stamps to come, the note box, and its buttons.
+const SAVE_DIALOG = `({ title: document.querySelector('#dialog .dialog-title').textContent,
+  sum: (document.querySelector('#dialog .dialog-sum') || {}).textContent,
+  lines: [...document.querySelectorAll('#dialog .chg-line')].map((l) => l.textContent),
+  check: document.querySelector('#dialog .dialog-check span').textContent,
+  ticked: document.querySelector('#dialog input[type=checkbox]').checked,
+  stamps: [...document.querySelectorAll('#dialog .dialog-stamps > div')].map((d) => d.textContent),
+  noteOff: document.querySelector('#dialog .dialog-note input').disabled,
+  noteDim: document.querySelector('#dialog .dialog-note').classList.contains('is-off'),
+  buttons: [...document.querySelectorAll('#dialog .dialog-buttons button')].map((b) => b.textContent) })`;
+const DIALOG_SAYS = "({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.querySelector('#dialog .dialog-body').textContent })";
+
+async function saveWithDialog(page) {
+  console.log('\n== Save: a dated copy, never the original, with the computer\'s Open and Save dialogs stood in for');
+  const sha = crypto.createHash('sha256').update(SMALL).digest('hex');
+  await page.ev(STAND_IN_DIALOGS);
+  await page.ev(`window.__opened = 'small.ged'; window.__folder.entries.set('small.ged', new window.__File(window.__folder, 'small.ged',
+    Uint8Array.from(atob(${JSON.stringify(Buffer.from(SMALL).toString('base64'))}), (c) => c.charCodeAt(0)))); true`);
+  await page.click("document.getElementById('open-empty')");
+  await page.waitFor("document.getElementById('file-name').textContent === 'small.ged' && document.querySelector('#grid .row.is-sel')");
+  const bar = await page.ev("({ label: document.getElementById('save').textContent, title: document.getElementById('save').title, off: document.getElementById('save').disabled, copy: !!document.getElementById('save-copy') })");
+  check(bar.label === 'Save' && bar.off && !bar.copy && bar.title === 'Save a dated copy, where you choose; the original is never written (⌘S)',
+    `opened through the Open dialog, with its handle: one button, "${bar.label}", off until a change; no Save a copy`);
+
+  await page.click("document.getElementById('edit')");
+  await retype(page, 12, '1 NAME Joe /Fixtures/');
+  check(await page.ev(`!document.getElementById('dirty').hidden && !document.getElementById('save').disabled && ${LEAVE_ASKS}`),
+    'an edit: ●, Save on, and leaving would ask first');
+
+  // 20: Save; the page's dialog; the stamps unticked turn the note box off; ticked again, a note; Save
+  await page.click("document.getElementById('save')");
+  await page.waitFor("document.getElementById('dialog').open");
+  const shows = await page.ev(SAVE_DIALOG);
+  check(shows.title === 'Save a copy of small.ged' && JSON.stringify(shows.lines) === JSON.stringify(['−1 NAME Joe /Fixture/', '+1 NAME Joe /Fixtures/'])
+    && shows.check === 'Change stamps, 1 record' && shows.ticked && shows.stamps.length === 1 && shows.stamps[0].startsWith('@I2@ INDI') && !shows.noteOff
+    && JSON.stringify(shows.buttons) === JSON.stringify(['Cancel', 'Save']),
+  `the Save dialog: "${shows.title}", the change, "${shows.check}" (${shows.stamps[0]}), a note box, Cancel and Save`);
+  await page.click("document.querySelector('#dialog input[type=checkbox]')");
+  const unticked = await page.ev(SAVE_DIALOG);
+  check(unticked.noteOff && unticked.noteDim && !unticked.ticked, 'the change stamps unticked: the note box is off, for there is nowhere for a note to go');
+  await page.click("document.querySelector('#dialog input[type=checkbox]')");
+  check(!(await page.ev(SAVE_DIALOG)).noteOff, 'ticked again: the note box is on');
+  await page.ev("document.querySelector('#dialog .dialog-note input').value = 'Walked.'; true");
+  await page.click(BUTTON('#dialog', 'Save'));
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
+  const asked = await page.ev('window.__asked');
+  const copyName = asked[0].name;
+  const said = await page.ev("document.getElementById('notice').textContent");
+  check(asked.length === 1 && /^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/.test(copyName) && asked[0].atOriginal && asked[0].types.includes('.ged') && asked[0].types.includes('.gedcom'),
+    `the computer's Save dialog, asked once: ${copyName} offered, opening at the original, for .ged and .gedcom`);
+  check(said === `Saved as ${copyName}.`, `then "${said}"`);
+  const copy = Buffer.from(await page.ev(IN_FOLDER(copyName)), 'base64').toString('utf8').split('\n');
+  check(copy.slice(10, 13).join(' | ') === '0 @I2@ INDI | 1 NAME Joe /Fixtures/ | 1 CHAN' && /^2 DATE \d{1,2} [A-Z]{3} \d{4}$/.test(copy[13]) && /^3 TIME \d\d:\d\d:\d\d$/.test(copy[14])
+    && copy[15] === '2 NOTE Walked.' && copy[16] === '0 TRLR', `the copy: the edit, and @I2@'s change stamp with the note typed (${copy.slice(12, 16).join(', ')})`);
+  check(Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8') === SMALL, 'the original is not written: byte for byte as it was opened');
+
+  // 21: the copy is the last copy; the page stays on the original
+  const after = await page.ev(`({ off: document.getElementById('save').disabled, dirty: !document.getElementById('dirty').hidden, title: document.title,
+    changes: document.getElementById('changes-count').textContent, facts: document.getElementById('facts').textContent, name: document.getElementById('file-name').textContent, leave: ${LEAVE_ASKS} })`);
+  check(!after.dirty && after.off && after.title === 'GEDCOM Viewer' && !after.leave, 'the copy is the last copy: ● gone, Save off, no ● in the tab, and leaving asks nothing');
+  if (await page.ev("document.getElementById('facts').hidden")) await page.click("document.getElementById('file-name')");
+  await page.click("document.querySelector('#facts .sha')");
+  const shown = await page.ev("(document.querySelector('#facts .hash') || {}).textContent");
+  check(after.changes === '2' && after.name === 'small.ged' && after.facts.includes(`${Buffer.byteLength(SMALL)} B`) && shown === sha,
+    `the page stays on the original: Changes ${after.changes} (the name and the stamp, counted from the original); the facts name small.ged, its size as opened and its sha256 (${shown.slice(0, 12)}…)`);
+
+  // 23: the Changes tab's copy button
+  await page.ev("navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }; true");
+  await page.click("document.querySelector('.tab[data-panel=changes]')");
+  await page.click("document.getElementById('changes-copy')");
+  await page.waitFor("typeof window.__copied === 'string' && document.getElementById('changes-copy').classList.contains('is-done')");
+  const pasted = (await page.ev('window.__copied')).split('\n');
+  check(/^GEDCOM Viewer {2}changes to small\.ged {2}as of \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(pasted[0])
+    && pasted[1] === `original  sha256 ${sha}  ${Buffer.byteLength(SMALL)} bytes  13 lines`
+    && /^changed {2}12 -> 12 +@I2@ INDI$/.test(pasted[2]) && pasted[3] === '  - 1 NAME Joe /Fixture/' && pasted[4] === '  + 1 NAME Joe /Fixtures/'
+    && /^added +13-16 {2}@I2@ INDI {2}\(change stamp\)$/.test(pasted[5]) && pasted[9] === '  + 2 NOTE Walked.',
+  `the Changes tab's copy button: the original's name and sha256, then the change and the stamp, as text ("${pasted[1].slice(0, 26)}…", "${pasted[2]}", "${pasted[5]}")`);
+  await page.click("document.querySelector('.tab[data-panel=records]')");
+
+  // nothing changed since the copy: Save is off, and ⌘S says so; ⇧⌘S is no key of the page's
+  await page.key('s', 'KeyS', 83, 4);
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent.startsWith('Nothing')");
+  check((await page.ev("document.getElementById('notice').textContent")) === 'Nothing has changed since the last copy. Nothing was written.' && !(await page.ev("document.getElementById('dialog').open")),
+    '⌘S with nothing changed since the copy: "Nothing has changed since the last copy. Nothing was written."');
+  await retype(page, 9, '1 NAME Jane /Fixtures/');
+  await page.key('S', 'KeyS', 83, 12);
+  await sleep(300);
+  check(!(await page.ev("document.getElementById('dialog').open")), '⇧⌘S opens nothing: Save a copy and its key are gone');
+
+  // 33: the original's own name picked: refused in the brief's words; emptied by the browser, put back byte for byte
+  await page.ev("window.__answer = 'small.ged'; window.__writes.length = 0; true");
+  await page.key('s', 'KeyS', 83, 4);
+  await page.waitFor("document.getElementById('dialog').open");
+  const second = await page.ev(SAVE_DIALOG);
+  check(second.check === 'Change stamps, 1 record' && second.stamps.length === 1 && second.stamps[0].startsWith('@I1@ INDI') && second.stamps[0].includes('gains 1 CHAN'),
+    `⌘S: the Save dialog's stamps name @I1@ alone, changed since the copy; @I2@'s stamp from the copy is left as it was ("${second.stamps.join('; ')}")`);
+  const before = await page.ev("({ changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })");
+  await page.click(BUTTON('#dialog', 'Save'));
+  await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'No copy was written'");
+  const refused = await page.ev(DIALOG_SAYS);
+  await page.click(BUTTON('#dialog', 'Close'));
+  await page.waitFor("!document.getElementById('dialog').open");
+  const back = await page.ev(`({ original: ${IN_FOLDER('small.ged')}, names: ${FOLDER_NAMES}, writes: window.__writes.slice(), dirty: !document.getElementById('dirty').hidden,
+    changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })`);
+  check(refused.text === 'That is the original. GEDCOM Viewer never writes over it. Pick another name. Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte.',
+    `the original picked in the Save dialog: "${refused.title}": "${refused.text}"`);
+  check(Buffer.from(back.original, 'base64').toString('utf8') === SMALL && JSON.stringify(back.writes) === JSON.stringify(['small.ged']) && JSON.stringify(back.names) === JSON.stringify([copyName, 'small.ged'].sort()),
+    'the original, emptied by the browser as Chromium does, is put back byte for byte, and nothing else is written');
+  check(back.dirty && back.changes === before.changes && back.redo === before.redo && back.undo === before.undo,
+    `the stamps taken back: Changes ${back.changes} as before, Undo "${back.undo}", Redo as it was, and ● still on`);
+
+  // Cancel in the Save dialog
+  await page.ev("window.__answer = null; window.__writes.length = 0; window.__asked.length = 0; true");
+  await page.click("document.getElementById('save')");
+  await page.waitFor("document.getElementById('dialog').open");
+  await page.click(BUTTON('#dialog', 'Save'));
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent === 'No copy was written.'");
+  check((await page.ev('window.__writes.length')) === 0 && (await page.ev('window.__asked.length')) === 1 && (await page.ev("document.getElementById('changes-count').textContent")) === before.changes,
+    'Cancel in the computer\'s Save dialog: "No copy was written."; nothing written, the stamps taken back');
+
+  // 7: a copy that does not read back as written
+  await page.ev("window.__answer = 'small.bad.ged'; window.__failNew = 'garble'; window.__writes.length = 0; true");
+  await page.click("document.getElementById('save')");
+  await page.waitFor("document.getElementById('dialog').open");
+  await page.click(BUTTON('#dialog', 'Save'));
+  await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'The copy did not finish'");
+  const loud = await page.ev(DIALOG_SAYS);
+  await page.click(BUTTON('#dialog', 'Close'));
+  await page.waitFor("!document.getElementById('dialog').open");
+  check(loud.text === 'The copy, small.bad.ged, did not read back as it was written: do not rely on it. The original, small.ged, is as it was.'
+    && Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8') === SMALL && (await page.ev("!document.getElementById('dirty').hidden")),
+  `a copy that reads back wrong, said loudly: "${loud.text}"`);
+
+  // a second copy: @I1@ stamped with the note typed now; @I2@'s stamp as the first copy wrote it
+  await page.ev("window.__answer = undefined; window.__failNew = null; window.__asked.length = 0; true");
+  await sleep(1100);                                                 // a second later, so the copy has a name of its own
+  await page.click("document.getElementById('save')");
+  await page.waitFor("document.getElementById('dialog').open");
+  await page.ev("document.querySelector('#dialog .dialog-note input').value = 'Second.'; true");
+  await page.click(BUTTON('#dialog', 'Save'));
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
+  const secondName = (await page.ev('window.__asked'))[0].name;
+  const two = Buffer.from(await page.ev(IN_FOLDER(secondName)), 'base64').toString('utf8').split('\n');
+  check(two[8] === '1 NAME Jane /Fixtures/' && two[10] === '1 CHAN' && two[13] === '2 NOTE Second.' && two.slice(14, 21).join(' | ') === copy.slice(10, 17).join(' | '),
+    `a second copy, ${secondName}: @I1@ stamped with its note, and @I2@'s record, stamp and all, as the first copy wrote it`);
+  await retype(page, two.indexOf('0 @I2@ INDI') + 2, '1 NAME Joseph /Fixtures/');
+  await page.click("document.getElementById('save')");
+  await page.waitFor("document.getElementById('dialog').open");
+  const third = await page.ev(SAVE_DIALOG);
+  await page.click(BUTTON('#dialog', 'Cancel'));
+  await page.waitFor("!document.getElementById('dialog').open");
+  check(third.stamps.length === 1 && third.stamps[0].startsWith('@I2@ INDI') && third.stamps[0].endsWith('its stamp from an earlier copy, set anew'),
+    `@I2@ changed again: the dialog's stamp is "${third.stamps[0]}"`);
+}
+
+// Download a copy, in a browser with no file pickers (10.2): the button says so and ⌘S does the
+// same; the copy is downloaded under its dated name; and the download is the last copy, so leaving
+// warns only for changes made since. The page is loaded again with the pickers taken away.
 async function copyWithoutPickers(page, dir, shots) {
-  console.log('\n== Save a copy, in a browser with no file pickers');
+  console.log('\n== Download a copy, in a browser with no file pickers');
   const file = path.join(dir, 'small.ged');
-  const text = '0 HEAD\n1 SOUR gedview-walk\n2 VERS 1.0\n1 DATE 28 SEP 2026\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n' +
-    '0 @I1@ INDI\n1 NAME Jane /Fixture/\n1 SEX F\n0 @I2@ INDI\n1 NAME Joe /Fixture/\n0 TRLR\n';
-  fs.writeFileSync(file, text);
+  fs.writeFileSync(file, SMALL);
   const downloads = path.join(dir, 'downloads');
   fs.mkdirSync(downloads);
   await page.browser('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads, eventsEnabled: true });
   await page.addScript("for (const k of ['showOpenFilePicker', 'showSaveFilePicker', 'showDirectoryPicker']) { delete Window.prototype[k]; delete window[k]; }");
   await page.goto(`file://${path.join(ROOT, 'index.html')}`);
-  check(await page.ev("!('showSaveFilePicker' in window) && !('showDirectoryPicker' in window)"), 'the page, loaded again with no pickers');
+  check(await page.ev("!('showSaveFilePicker' in window) && !('showOpenFilePicker' in window)"), 'the page, loaded again with no pickers');
+  const empty = await page.ev("({ label: document.getElementById('save').textContent, title: document.getElementById('save').title })");
+  check(empty.label === 'Download a copy' && empty.title === 'Download a dated copy; the original is never written (⌘S)', `before a file is open, the button reads "${empty.label}"`);
   await page.openFile(file);
   await page.click("document.getElementById('edit')");
-  await gotoLine(page, 9);
-  await openEditBox(page);
-  await page.clearBox();
-  await page.type('1 NAME Jane /Fixtures/');
-  await page.key('Enter', 'Enter', 13);
-  await page.waitFor("document.querySelector('#grid .row.is-sel.is-changed')");
-  check(await page.ev("document.getElementById('save').disabled && !document.getElementById('save-copy').disabled"),
-    'Save is off — this browser cannot write in place — and Save a copy is on');
+  await retype(page, 9, '1 NAME Jane /Fixtures/');
+  check(await page.ev("document.getElementById('save').textContent === 'Download a copy' && !document.getElementById('save').disabled"), 'an edit: Download a copy turns on');
 
-  await page.click("document.getElementById('save-copy')");
+  await page.key('s', 'KeyS', 83, 4);                                // ⌘S does the same
   await page.waitFor("document.getElementById('dialog').open");
-  const dialogShows = await page.ev(`({ lines: [...document.querySelectorAll('#dialog .chg-line')].map((l) => l.textContent),
-    stamps: [...document.querySelectorAll('#dialog .dialog-stamps > div')].map((d) => d.textContent),
-    ticked: document.querySelector('#dialog input[type=checkbox]').checked })`);
-  check(JSON.stringify(dialogShows.lines) === JSON.stringify(['−1 NAME Jane /Fixture/', '+1 NAME Jane /Fixtures/']),
-    `the Save dialog lists the change: ${dialogShows.lines.join(' / ')}`);
-  check(dialogShows.ticked && dialogShows.stamps.length === 1 && dialogShows.stamps[0].startsWith('@I1@ INDI'),
-    `…and, ticked, the stamp it will add: ${dialogShows.stamps.join('; ')}`);
+  const shows = await page.ev(SAVE_DIALOG);
+  check(shows.title === 'Download a copy of small.ged' && JSON.stringify(shows.lines) === JSON.stringify(['−1 NAME Jane /Fixture/', '+1 NAME Jane /Fixtures/'])
+    && shows.check === 'Change stamps, 1 record' && shows.stamps[0].startsWith('@I1@ INDI') && JSON.stringify(shows.buttons) === JSON.stringify(['Cancel', 'Download']),
+  `⌘S: "${shows.title}", the change, "${shows.check}", Cancel and Download`);
   if (shots) await page.screenshot(path.join(shots, 'small-save-dialog.png'));
   await page.click("document.querySelector('#dialog input[type=checkbox]')");         // unticked, for bytes that can be foretold
-  await page.click(BUTTON('#dialog', 'Save a copy'));
+  check((await page.ev(SAVE_DIALOG)).noteOff, 'the stamps unticked: the note box is off');
+  await page.click(BUTTON('#dialog', 'Download'));
   const copy = await waitForFile(downloads, /^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/);
-  const doc = core.openDocument(new Uint8Array(Buffer.from(text)));
+  const doc = core.openDocument(new Uint8Array(Buffer.from(SMALL)));
   core.editLine(doc, 8, '1 NAME Jane /Fixtures/');
   check(copy && Buffer.compare(fs.readFileSync(path.join(downloads, copy)), Buffer.from(core.saveBytes(doc))) === 0,
-    `Save a copy downloads ${copy}: the file with its one edit, byte for byte`);
-  await page.waitFor("document.getElementById('dialog').open");
-  await page.click(BUTTON('#dialog', 'Download its log block'));
-  const logName = await waitForFile(downloads, /^small\.ged\.\d{4}-\d\d-\d\dT\d{6}\.edits\.log$/);
-  const log = logName ? fs.readFileSync(path.join(downloads, logName), 'utf8').split('\n') : [];
-  check(new RegExp(`^=== \\S+  copy  small\\.ged -> ${copy.replace(/\./g, '\\.')}$`).test(log[0] || '') && log.includes('  + 1 NAME Jane /Fixtures/'),
-    `…then its log block, as ${logName}: "${log[0]}"`);
-  check(await page.ev("!document.getElementById('dirty').hidden"), 'the file itself is untouched, so its changes are still unsaved');
+    `downloaded as ${copy}: the file with its one edit, byte for byte`);
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
+  const said = await page.ev("document.getElementById('notice').textContent");
+  check(said === `Downloaded as ${copy}, where your browser keeps downloads.`, `then "${said}"`);
+  check(await page.ev(`document.getElementById('save').disabled && !${LEAVE_ASKS}`), 'a download is the last copy: ● gone, the button off, and leaving asks nothing');
+  check(fs.readdirSync(downloads).length === 1, 'one file downloaded, the copy: no log');
+  await retype(page, 12, '1 NAME Joe /Fixtures/');
+  check(await page.ev(`!document.getElementById('dirty').hidden && ${LEAVE_ASKS}`), 'a change made since: ● again, and leaving asks first');
   await page.click("document.getElementById('undo')");
   await page.waitFor("document.getElementById('dirty').hidden");
+  check(await page.ev(`!${LEAVE_ASKS} && document.getElementById('changes-count').textContent === '1'`), 'undone: back to the last copy, ● gone; Changes 1, counted from the original');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1723,7 +1830,7 @@ async function waitForFile(dir, pattern, timeout = 10000) {
     if (part('third')) await inChrome((page) => thirdRound(page, dir, shots));
     if (part('scroll')) await inChrome((page) => editorScroll(page, dir));
     if (part('drags')) await inChrome((page) => fourthDrags(page, dir, shots));
-    if (part('save')) await inChrome((page) => saveInPlace(page, dir));
+    if (part('save')) await inChrome((page) => saveWithDialog(page));
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
     if (part('look')) await inChrome((page) => theLook(page, dir, shots));
     console.log('\n== the whole walk');

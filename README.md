@@ -20,6 +20,7 @@ page, no server, no account. Nothing is installed, and nothing leaves the machin
 | 0.5.3 | Report a problem, in Settings: a report of counts and codes, never a line of the file, in a box to read, change or cut; What happened, in your own words; Copy. The page sends nothing, and the original is kept nowhere. Its last line is a checksum, so a changed report reads as changed; `tools/report-check.js` reads one back |
 | 0.5.4 | six small fixes: the lines no longer scroll sideways when one opens for typing; the tab's title no longer holds the file's name, unless File name in the tab is turned on in Settings; spell check and page translation are off where the file's words show; the privacy page says plainly what the page sends, what it cannot control, and how to check it yourself; a notice that says why Chrome may refuse a folder for Save, and what to do; the README no longer names a path on one disk |
 | 0.5.5 | easier to read: text and borders reach the contrast the web's accessibility guidelines ask for (WCAG 2.2 AA) in all three looks; larger type (16 px) and rows (24 px), and a Text choice in Settings, Normal or Larger; a System choice for the theme, which follows the computer's light or dark and is what a new visitor gets, and Sunset is now called Dusk (a choice already kept still works); feedback@gedcom-viewer.net, an address that needs no GitHub account, beside the issue route for a report or a question; the line under Open GEDCOM now reads "The file does not leave your computer.", with a Privacy Policy link; less motion when the computer asks for it, and the system's own colors when it forces them; fold arrows at least 24 by 24 pixels to click; the content-security policy no longer allows inline styles; page translation is off for the file's name, facts and counts |
+| 0.5.6 | saving rewritten, so the original is never written: Save, the one button (⌘S), writes a dated copy through the computer's own Save dialog, which opens beside the original; no folder is asked for, and there is no backup and no log. The copy is read back once written. Picking the original itself in the Save dialog is refused, and the original put back as it was if the browser emptied it. In a browser without that dialog, Save is Download a copy. Changes count from the original, and the Changes tab has a copy button that puts them on the clipboard as text. The dot and Save mean changed since the last copy, and so does the warning on leaving. Save a copy and ⇧⌘S are gone |
 | 1.0 | when my own walk of the whole page passes |
 
 The version shows beside the name in the top bar, and each is a git tag (`git tag -n1` lists them).
@@ -60,7 +61,7 @@ keep traces of that.
 | a press on a row, moved | with Edit on: drags the line's block among its siblings (a record by its `0` line, every record of a type by its type row); a gold line shows where it would land; release to move, Esc to let go |
 | ⌫ | with Edit on: delete the selected line and the lines under it (asks first when there are any) |
 | ⌘Z, ⇧⌘Z | Undo, Redo, one act each |
-| ⌘S, ⇧⌘S | Save in place, Save a copy |
+| ⌘S | Save, as a dated copy; Download a copy in a browser without the Save dialog |
 | ⌘O | open another file |
 | ⌘F | Search |
 | ⌘L | Go to Line…: a line number, or two (105-117) for those lines alone, until × |
@@ -136,29 +137,42 @@ shows:
 | the top bar | ● after the file's name; Save turns on | | |
 | the Save dialog | every change, and every change stamp, before anything is written | | |
 
-**Save** writes the file in place. The first time, it asks for the folder the file is in (Chrome
-then asks to let the page edit files there). Before it writes, it checks that the file on disk is
-still the one opened, and refuses if another program changed it. Then:
+**Save** (⌘S) never writes over the file that was opened. It writes a new file, a dated copy,
+through the computer's own Save dialog, which opens beside the original and offers
+`<name>.<YYYY-MM-DDTHHMMSS>.ged`; the name can be changed there, or the file renamed after. No
+folder is asked for. A copy opened and saved again has its timestamp replaced, not added to. The
+copy is read back and compared once it is written. Then the ● goes and Save turns off until the
+next change, while **Changes** goes on counting from the original, and the facts still name it.
 
 | Written | Where |
 |---|---|
-| a backup of the file as it was, read back and compared | `gedcom-viewer-history/<name>.<YYYY-MM-DDTHHMMSS>.ged.bak` |
-| the file, read back and compared | where it was |
-| a block in the log: when, the note, the file's sha256 before and after, the backup, every change | `<name>.ged.edits.log`, beside the file; it only ever grows |
+| the copy, read back and compared | where it is saved in the Save dialog: beside the original, unless another place is picked |
+| nothing else: no backup and no log | the original is the backup, and stays as it was |
 
-**Save a copy** writes `<name>.<YYYY-MM-DDTHHMMSS>.ged` beside the file, and leaves the file itself
-as it was. **Change stamps**, ticked unless unticked, give each changed record a `1 CHAN` with the
-date, time and note of the save. The backup and the log hold what the
-file holds, living people included, and belong beside it, never in a repository.
+If the original itself is picked in the Save dialog, nothing is saved into it: "That is the
+original. GEDCOM Viewer never writes over it. Pick another name." Chrome empties a file the moment
+it is picked there, before the page can refuse it, so GEDCOM Viewer puts the original back as it
+was, byte for byte, and says so.
+
+In a browser without the Save dialog (Safari, Firefox), the button reads **Download a copy**, and
+⌘S does the same: the copy goes wherever the browser keeps downloads, under the same dated name. A
+download counts as the last copy, so leaving the page warns only for changes made since.
+
+**Change stamps**, ticked unless unticked, give each changed record a `1 CHAN` with the date, time
+and note of the save; unticked, the note box is off. A record stamped for an earlier copy is
+stamped again only when it changes again. **Changes** has a **copy** button at its top: it puts
+the list of changes on the clipboard as text, opening with the original's name and sha256, and
+writes it nowhere. `diff <original> <copy>` in Terminal shows every line that differs. The list
+holds what the file holds, living people included, and belongs beside the file, never in a
+repository.
 
 **The file's facts** (GEDCOM version, encoding, exported and by what, size, lines, sha256)
 show under its name when the name is clicked. Each that comes from a line of the header goes to that
 line when clicked.
 
-The **sha256** among them is a fingerprint of the file's exact bytes, as it is on disk:
+The **sha256** among them is a fingerprint of the file's exact bytes, as it was opened:
 change one character and it changes completely; two files with the same sha256 are the same, byte
-for byte. Save checks it before it writes, and a backup must match it. `shasum -a 256 <file>` in
-Terminal gives the same one.
+for byte. `shasum -a 256 <file>` in Terminal gives the same one, for the original or for a copy.
 
 ## Report a problem
 
@@ -188,7 +202,7 @@ node --test tests/*.test.js
 | Tests | `node --test tests/*.test.js` | all pass; the only skips are the tests that need the public files, when they are absent |
 | The real files | `node tools/check-real.js local/RAW.ged local/CLEANED.ged` | every number equals section 3 of the brief, for a file it measured; the probe's numbers for any other; an edit and a record deleted on each, the whole file checked again within 0.3 s, and undone to its sha256 |
 | The second opinion | `node tools/compare.js fixtures local/RAW.ged local/CLEANED.ged` | no number differs between `core.js` and `tools/baseline_probe.py` |
-| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save in place through a folder held in the page's memory; Save a copy downloaded in a browser with no pickers. `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look) |
+| The page | `node tools/walk.js local/RAW.ged local/CLEANED.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save through the page, with the computer's Open and Save dialogs stood in for (a dated copy written and read back, the original refused and put back, the Changes text copied); Download a copy in a browser with no pickers. `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look) |
 
 The tools print counts, tags, ids, line numbers, lengths and hashes only, never a value, so
 they are safe to run over a file that holds living people. The walk drives Google Chrome,
@@ -228,7 +242,7 @@ the computer either way; `privacy.html` says how.
 | `index.html` | the markup; loads `core.js`, `save.js`, then `ui.js`, as classic scripts |
 | `style.css` | the whole look, its properties first |
 | `core.js` | reading: bytes → encoding → lines → shape → records and pointers → checks → counts → labels; editing: the document, the acts, undo, the net change, the change stamps, the bytes of a save; never touches the page, and runs the same under Node |
-| `save.js` | saving: the dated names, Save in place, Save a copy, the log block, over file handles passed to it; never touches the page |
+| `save.js` | saving: the dated name; Save in the order of the brief's section 10, over the file handle the Save dialog gives; the read-back; the original refused, and put back if the browser emptied it; the Changes text; the bytes a browser with no Save dialog downloads; never touches the page |
 | `ui.js` | the page: the main frame, the left bar's panels, the right frame, the dialogs, the keys; the only file that knows the pickers exist |
 | `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script |
 | `favicon.svg`, `favicon.ico`, `apple-touch-icon.png` | the icon: three lines of a file, each a level deeper, on the palette's gold |

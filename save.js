@@ -1,12 +1,14 @@
 // GEDCOM Viewer. Copyright (C) 2026 bunahu. Free software under the GNU General Public License, version 3 or later: see LICENSE.
 /* GEDCOM Viewer — save.js
  *
- * Saving: the names of BUILD-BRIEF 10.1, Save in place in the order of 10.2, Save a copy (10.3)
- * and the log block (10.5). It works over "handles" passed to it — a folder and the files in it,
- * with the few methods the browser's file-system handles have — and never touches the page, so
- * the tests run it under Node over in-memory stand-ins (tests/fake-handles.js), and the page runs
- * it over the real ones. core.js gives it the document, the stamps and the bytes; the caller gives
- * it the hash (the page crypto.subtle, Node node:crypto).
+ * Saving (BUILD-BRIEF section 10): the dated name of 10.1, Save in the order of 10.2, and the
+ * Changes text of 10.3. The original is never written: every save is a new, dated file, where the
+ * person chooses in the computer's Save dialog, or a download in a browser without that dialog.
+ * It works over "handles" passed to it, with the few methods the browser's file handles have, and
+ * over the Save dialog passed to it as a function, and never touches the page; so the tests run it
+ * under Node over in-memory stand-ins (tests/fake-handles.js), and the page runs it over the real
+ * ones. core.js gives it the document, the stamps and the bytes; the caller gives it the hash (the
+ * page crypto.subtle, Node node:crypto).
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./core.js'));
@@ -14,12 +16,10 @@
 })(typeof self !== 'undefined' ? self : this, function (core) {
   'use strict';
 
-  const HISTORY = 'gedcom-viewer-history';
-  const utf8 = new TextEncoder();
   const two = (n) => String(n).padStart(2, '0');
 
   // ---------------------------------------------------------------------------------------------
-  // 10.1 Names
+  // 10.1 The name
   // ---------------------------------------------------------------------------------------------
 
   // Local time, YYYY-MM-DDTHHMMSS.
@@ -27,8 +27,8 @@
     return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
   }
 
-  // The log's time: local, with its offset from UTC — 2026-09-28T15:42:00-04:00.
-  function logTime(d) {
+  // Local time with its offset from UTC, for the Changes text: 2026-10-08T15:12:00-04:00.
+  function localTime(d) {
     const off = -d.getTimezoneOffset();
     const a = Math.abs(off);
     return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}:` +
@@ -42,27 +42,24 @@
     return m ? { stem: m[1], ext: m[2] } : { stem: name, ext: '' };
   }
 
-  // The names of a save made at `when`. A copy's name that is taken gets -2, -3 … before its
-  // extension, so it still ends as the file does; a backup's name the same, so that no backup is
-  // ever written over.
-  function names(fileName, when) {
+  // A stem that ends in a dated copy's timestamp: a copy opened and saved again. The -2 or -3 that
+  // versions before 0.5.6 put after a timestamp already taken counts as part of it.
+  const DATED = /\.\d{4}-\d\d-\d\dT\d{6}(?:-\d+)?$/;
+
+  // The name of a copy saved at `when`: <stem>.<timestamp><ext>. A stem that already ends in a
+  // timestamp has it replaced, not stacked: RAW.2026-10-08T151200.ged saved again is
+  // RAW.2026-10-08T160500.ged. The name is offered; the person may change it.
+  function datedName(fileName, when) {
     const { stem, ext } = split(fileName);
-    const t = timestamp(when);
-    const nth = (k) => (k > 1 ? `-${k}` : '');
-    return {
-      backup: (k) => `${stem}.${t}${nth(k)}${ext}.bak`,              // in gedcom-viewer-history/
-      copy: (k) => `${stem}.${t}${nth(k)}${ext}`,
-      log: `${fileName}.edits.log`,
-      logDownload: `${fileName}.${t}.edits.log`,
-    };
+    return `${stem.replace(DATED, '')}.${timestamp(when)}${ext}`;
   }
 
   // ---------------------------------------------------------------------------------------------
-  // 10.5 The log block
+  // 10.3 The Changes text
   // ---------------------------------------------------------------------------------------------
 
-  // What a moved run carries (3.4a), for the log and the Save dialog: a block by its tag, a record,
-  // or a section by its type and its count of records; and how many lines. Never their text.
+  // What a moved run carries (3.4a), for the Changes panel and the Save dialog: a block by its tag,
+  // a record, or a section by its type and its count of records; and how many lines. Never their text.
   function movedWords(r) {
     const mv = r.moved;
     const lines = `${r.lines.length} ${r.lines.length === 1 ? 'line' : 'lines'}`;
@@ -72,26 +69,35 @@
     return `${mv.tag || 'block'} · ${lines}${same}`;
   }
 
-  // One block: what was saved, when, where, with what note, the file before and after, the backup,
-  // and the net change run by run — each line's place before, then after, its record, and the
-  // lines themselves, - as they were and + as they are; a moved run says what moved and how many
-  // lines, never their text. A copy's block names the copy and has no backup. It holds what the
-  // file holds, living people included: it belongs beside the file, never in a repo (I9).
-  function logBlock(o) {
-    const out = [o.copy ? `=== ${logTime(o.when)}  copy  ${o.file} -> ${o.copy}` : `=== ${logTime(o.when)}  save  ${o.file}`];
-    out.push(`note     ${o.note}`);
-    out.push(`before   sha256 ${o.before.sha256}  ${o.before.bytes} bytes  ${o.before.lines} lines`);
-    out.push(`after    sha256 ${o.after.sha256}  ${o.after.bytes} bytes  ${o.after.lines} lines`);
-    if (o.backup) out.push(`backup   ${o.backup}`);
+  // The same, for the Changes text, which names the record already: a record moved whole is its
+  // count of lines alone.
+  function movedText(r) {
+    const mv = r.moved;
+    const lines = `${r.lines.length} ${r.lines.length === 1 ? 'line' : 'lines'}`;
+    if (mv.what === 'record') return lines;
+    if (mv.what === 'section') return `section ${mv.tag || 'of records'}, ${mv.records} records, ${lines}`;
+    const same = mv.sameKind ? `; among its ${mv.sameKind} ${mv.tag} lines the first is read as preferred` : '';
+    return `${mv.tag || 'block'}, ${lines}${same}`;
+  }
+
+  // What the Changes tab's copy button puts on the clipboard (10.3), and nothing writes anywhere:
+  // the original by its name, as of now; its sha256, size and lines, as it was opened; then the
+  // net change from it, run by run, in the lines the log's blocks had: each run's place in the
+  // original, then its place now, its record, and its lines, - as they were and + as they are. A
+  // move says what moved and how many lines, never their text. It holds what the file holds,
+  // living people included, and belongs beside the file, never in a repo (I9).
+  function changesText({ when, file, original, runs }) {
+    const out = [`GEDCOM Viewer  changes to ${file}  as of ${localTime(when)}`];
+    out.push(`original  sha256 ${original.sha256}  ${original.bytes} bytes  ${original.lines} lines`);
     const span = (first, count) => (first < 0 ? '' : count > 1 ? `${first + 1}-${first + count}` : `${first + 1}`);
-    const rows = o.runs.map((r) => ({ r, b: span(r.before, r.lines.length), a: span(r.after, r.lines.length) }));
+    const rows = runs.map((r) => ({ r, b: span(r.before, r.lines.length), a: span(r.after, r.lines.length) }));
     const wb = Math.max(0, ...rows.map((x) => x.b.length));
     const wa = Math.max(0, ...rows.map((x) => x.a.length));
     for (const { r, b, a } of rows) {
       const record = r.record ? `${r.record.id ? `${r.record.id} ` : ''}${r.record.tag || ''}` : '';
-      const arrow = r.kind === 'changed' || r.kind === 'moved';
-      const head = `${r.kind.padEnd(7)}  ${b.padEnd(wb)}${arrow ? ' -> ' : '    '}${a.padEnd(wa)}`;
-      const tail = r.kind === 'moved' ? `(${movedWords(r)})` : r.stamp ? '(change stamp)' : '';
+      const places = r.kind === 'changed' || r.kind === 'moved' ? `${b} -> ${a}` : `${b.padEnd(wb)}    ${a}`;
+      const head = `${r.kind.padEnd(7)}  ${places.padEnd(wb + 4 + wa)}`;
+      const tail = r.kind === 'moved' ? `(${movedText(r)})` : r.stamp ? '(change stamp)' : '';
       out.push([head, record, tail].filter((x) => x).join('  ').trimEnd());
       for (const l of r.lines) {
         if (l.was !== null) out.push(`  - ${l.was}`);
@@ -99,7 +105,7 @@
         if (l.ending) out.push(`    line ending: ${l.ending[0]} -> ${l.ending[1]}`);
       }
     }
-    return `${out.join('\n')}\n\n`;
+    return `${out.join('\n')}\n`;
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -116,173 +122,130 @@
     await w.close();
   }
 
-  async function exists(dir, name) {
-    try {
-      await dir.getFileHandle(name);
-      return true;
-    } catch (e) {
-      if (e.name === 'NotFoundError') return false;
-      if (e.name === 'TypeMismatchError') return true;               // a folder of that name
-      throw e;
-    }
-  }
-
-  async function freeName(dir, make) {
-    for (let k = 1; ; k += 1) if (!(await exists(dir, make(k)))) return make(k);
-  }
-
-  // The log: opened keeping what is there, written at its end, never rewritten (10.5).
-  async function appendLog(dir, name, text) {
-    const handle = await dir.getFileHandle(name, { create: true });
-    const size = (await handle.getFile()).size;
-    const w = await handle.createWritable({ keepExistingData: true });
-    await w.seek(size);
-    await w.write(utf8.encode(text));
-    await w.close();
+  // A file written through a handle the person picked: written, read back, compared.
+  async function writeChecked(handle, bytes, hash) {
+    await writeAll(handle, bytes);
+    return (await hash(await bytesOfHandle(handle))) === (await hash(bytes));
   }
 
   const failed = (step, say, more) => ({ done: false, step, say, ...more });
   const reason = (e) => `${e.name || 'Error'}: ${e.message}`;
 
   // ---------------------------------------------------------------------------------------------
-  // 10.2 Save, in place; 10.3 Save a copy
+  // 10.2 Save
   // ---------------------------------------------------------------------------------------------
 
-  // 10.2 step 3: the file on disk, read through the folder, must be the file as it was opened or
-  // last saved. The page asks this before it shows the Save dialog, and save() asks it again just
-  // before anything is written, for the file may change while the dialog is open (I7).
-  async function checkDisk({ dir, name, diskHash, hash }) {
-    let handle;
-    let bytes;
-    try {
-      handle = await dir.getFileHandle(name);
-      bytes = await bytesOfHandle(handle);
-    } catch (e) {
-      return failed(3, `${name} could not be read from its folder (${reason(e)}). Nothing was written.`);
-    }
-    const sha256 = await hash(bytes);
-    if (sha256 !== diskHash) {
-      return failed(3, `${name} changed on disk since it was opened or last saved. Nothing was written.`, { changedOnDisk: true });
-    }
-    return { done: true, handle, bytes, sha256 };
+  const REFUSED = 'That is the original. GEDCOM Viewer never writes over it. Pick another name.';
+
+  // Step 1's words: since the last copy, or since the open when none has been written.
+  function nothingSince(doc) {
+    return `Nothing has changed since ${doc.copiedOrder ? 'the last copy' : 'the file was opened'}. Nothing was written.`;
   }
 
-  // 10.2 steps 5 and 6, shared by every way of saving: the change stamps, when they are ticked, as
-  // one step of the history; then the net change as it will be logged, and the bytes.
+  // Steps 3 and 4: the change stamps, when they are ticked, as one step of the history, with the
+  // note for them; then the bytes. Unticked, the note goes nowhere and is not read.
   function prepare(doc, { when, note, stamps }) {
-    const typed = core.stampNote(doc, note);
-    if (typed.reason) return { reason: typed.reason };
+    const undone = doc.undone.slice();
+    let step = null;
     if (stamps) {
       const r = core.applyStamps(doc, when, note);
       if (!r.ok) return { reason: r.reason };
+      step = r.step;
     }
-    return { note: typed.text, runs: core.changeRuns(doc), bytes: core.saveBytes(doc) };
+    return { bytes: core.saveBytes(doc), back: () => core.takeBack(doc, step, undone) };
   }
 
-  // 10.2 — Save, in place, in this order, stopping at the first failure. `dir` is the folder the
-  // owner granted (step 2 is the page's, as is the dialog of step 4); `name` the file's name in it;
-  // `disk` the file as it was opened or last saved: { sha256, bytes, lines }. `stamps` says whether
-  // the change stamps are ticked; `when` is the moment of the save. What happened comes back, for
-  // the page to say: `done`, or the step that stopped it and why.
-  async function save({ doc, dir, name, disk, when, note, stamps, hash }) {
-    // 1. nothing changed: say so, write nothing
-    if (!core.isChanged(doc)) return failed(1, 'Nothing has changed since the file was opened or last saved. Nothing was written.');
-    // 3. the file on disk is still the file as opened or last saved
-    const now = await checkDisk({ dir, name, diskHash: disk.sha256, hash });
-    if (!now.done) return now;
-    // 5, 6. the stamps; the bytes and their hash
-    const nm = names(name, when);
-    const ready = prepare(doc, { when, note, stamps });
-    if (ready.reason) return failed(5, ready.reason);
-    const after = { sha256: await hash(ready.bytes), bytes: ready.bytes.length, lines: doc.order.length };
-    // 7. the backup, from the bytes read in step 3; read back; the hashes equal
-    let backupName;
-    try {
-      const history = await dir.getDirectoryHandle(HISTORY, { create: true });
-      backupName = await freeName(history, nm.backup);
-      const backup = await history.getFileHandle(backupName, { create: true });
-      await writeAll(backup, now.bytes);
-      if ((await hash(await bytesOfHandle(backup))) !== now.sha256) {
-        return failed(7, `The backup ${HISTORY}/${backupName} did not read back as the file. ${name} was not touched.`);
-      }
-    } catch (e) {
-      return failed(7, `The backup could not be written (${reason(e)}). ${name} was not touched.`);
+  // Step 6: whether the file picked is the original's own. A file opened in a browser with the
+  // pickers has a handle, and the browser says whether two handles are one file; a handle that
+  // cannot say, and a file opened with none, are held to the original's name.
+  async function isOriginal(handle, original) {
+    if (original.handle && typeof original.handle.isSameEntry === 'function') {
+      try { return await original.handle.isSameEntry(handle); } catch (e) { /* by its name, below */ }
     }
-    const backupPath = `${HISTORY}/${backupName}`;
-    // 8. the file; read back; its hash equals step 6's
-    try {
-      await writeAll(now.handle, ready.bytes);
-      if ((await hash(await bytesOfHandle(now.handle))) !== after.sha256) {
-        return failed(8, `${name} did not read back as it was written. The file as it was is in ${backupPath}.`, { loud: true, backup: backupPath });
-      }
-    } catch (e) {
-      return failed(8, `${name} could not be written (${reason(e)}). The file as it was is in ${backupPath}.`, { loud: true, backup: backupPath });
-    }
-    // 9. the log block; a failure here is said, and the save stands
-    let logged = null;
-    try {
-      await appendLog(dir, nm.log, logBlock({ when, file: name, note: ready.note, before: disk, after, backup: backupPath, runs: ready.runs }));
-    } catch (e) {
-      logged = `The save stands, but its log block could not be written to ${nm.log} (${reason(e)}).`;
-    }
-    // 10. the new hash is the file's; the lines as they now are are the file on disk
-    core.markSaved(doc);
-    return { done: true, disk: after, backup: backupPath, log: nm.log, logFailed: logged, runs: ready.runs };
+    return handle.name === original.name;
   }
 
-  // 10.3 — Save a copy, into the folder: steps 5 and 6 (the page does 4), then the copy under its
-  // dated name, read back and compared, and a log block appended to the original's log. The
-  // original is untouched, so the document stays unsaved against it. A copy is written even when
-  // nothing changed — a dated copy is what was asked for (section 15's editing walk writes one
-  // after an undo has left nothing changed), so 10.3's step 1 is not taken here.
-  async function saveCopy({ doc, dir, name, disk, when, note, stamps, hash }) {
-    const nm = names(name, when);
-    const ready = prepare(doc, { when, note, stamps });
-    if (ready.reason) return failed(5, ready.reason);
-    const after = { sha256: await hash(ready.bytes), bytes: ready.bytes.length, lines: doc.order.length };
-    let copyName;
+  // The original, picked in the Save dialog, may have been emptied by the browser before the page
+  // could refuse it: Chromium creates the picked file, or truncates it to nothing when it exists,
+  // before it hands the page its handle. Emptied, it is put back from `bytes`, the file as it was
+  // read just before the dialog, and read back. A file that is not empty was left as it was, and
+  // nothing is written into it.
+  async function putBack(handle, bytes, hash) {
     try {
-      copyName = await freeName(dir, nm.copy);
-      const handle = await dir.getFileHandle(copyName, { create: true });
+      if ((await handle.getFile()).size > 0 || bytes.length === 0) return { emptied: false, ok: true };
+      await writeAll(handle, bytes);
+      if ((await hash(await bytesOfHandle(handle))) === (await hash(bytes))) return { emptied: true, ok: true };
+      return { emptied: true, ok: false, why: 'it did not read back as it was' };
+    } catch (e) {
+      return { emptied: true, ok: false, why: reason(e) };
+    }
+  }
+
+  // 10.2: Save, in this order, stopping at the first failure. Step 2, the page's own dialog (the
+  // changes, the note, the change-stamp box), is the page's, before this is called. `original` is
+  // the file as it was opened: its name, and its handle (null when the browser gave none). `pick`
+  // is the computer's Save dialog, given the dated name to offer (the page's showSaveFilePicker,
+  // opening at the original); with none, in a browser without the pickers, the copy comes back to
+  // be downloaded. `stamps` says whether the change stamps are ticked and `note` is what was typed
+  // for them; `when` is the moment of the save. What happened comes back for the page to say:
+  // `done`, or the step that stopped it and why. Whatever stops it after step 3 takes the stamps
+  // back, so the document is as it was before the attempt.
+  async function save({ doc, original, when, note, stamps, hash, pick }) {
+    // 1. nothing changed since the last copy: say so, write nothing
+    if (!core.changedSinceCopy(doc)) return failed(1, nothingSince(doc));
+    // 3. the change stamps; 4. the bytes, and their hash
+    const ready = prepare(doc, { when, note, stamps });
+    if (ready.reason) return failed(3, ready.reason);
+    const name = datedName(original.name, when);
+    const sha256 = await hash(ready.bytes);
+    if (!pick) {
+      // a browser with no pickers: downloaded under the dated name, wherever the browser keeps
+      // downloads; nothing can be read back, and the download is the last copy
+      core.markCopied(doc);
+      return { done: true, download: true, name, bytes: ready.bytes, sha256 };
+    }
+    // 5. where: the Save dialog. The file picked there is emptied before the page sees it, so the
+    // original is read now, while it is whole, in case it is the one picked (step 6)
+    const before = original.handle ? await bytesOfHandle(original.handle).catch(() => null) : null;
+    let handle;
+    try {
+      handle = await pick(name);
+    } catch (e) {
+      ready.back();
+      return failed(5, e.name === 'AbortError' ? 'No copy was written.' : `No copy was written (${reason(e)}).`, { cancelled: e.name === 'AbortError' });
+    }
+    // 6. the file picked must not be the original
+    if (await isOriginal(handle, original)) {
+      ready.back();
+      const bytes = before || doc.m.bytes;
+      const back = await putBack(handle, bytes, hash);
+      if (back.ok) {
+        return failed(6, back.emptied ? `${REFUSED} Your browser emptied it as it was picked, so GEDCOM Viewer put it back as it was, byte for byte.` : REFUSED, { original: true });
+      }
+      return failed(6, `That is the original, ${original.name}. GEDCOM Viewer never writes over it, but your browser emptied it as it was picked, ` +
+        `and GEDCOM Viewer could not put it back (${back.why}). Download it as it was, and put it in place of the empty one.`,
+      { original: true, loud: true, restore: bytes });
+    }
+    // 7. the bytes; read back; the hash equals step 4's
+    let read;
+    try {
       await writeAll(handle, ready.bytes);
-      if ((await hash(await bytesOfHandle(handle))) !== after.sha256) {
-        return failed(6, `The copy ${copyName} did not read back as it was written.`, { loud: true });
-      }
+      read = await hash(await bytesOfHandle(handle));
     } catch (e) {
-      return failed(6, `The copy could not be written (${reason(e)}).`, { loud: true });
+      ready.back();
+      return failed(7, `The copy, ${handle.name}, could not be written (${reason(e)}). The original, ${original.name}, is as it was.`, { loud: true });
     }
-    let logged = null;
-    try {
-      await appendLog(dir, nm.log, logBlock({ when, file: name, copy: copyName, note: ready.note, before: disk, after, runs: ready.runs }));
-    } catch (e) {
-      logged = `The copy stands, but its log block could not be written to ${nm.log} (${reason(e)}).`;
+    if (read !== sha256) {
+      ready.back();
+      return failed(7, `The copy, ${handle.name}, did not read back as it was written: do not rely on it. The original, ${original.name}, is as it was.`, { loud: true });
     }
-    return { done: true, copy: copyName, disk: after, log: nm.log, logFailed: logged, runs: ready.runs };
-  }
-
-  // 10.3 — Save a copy with no folder access, or in a browser with no pickers: the page writes the
-  // copy where the owner picks, or downloads it, and offers the log block as a second file. This
-  // gives it what to write: the copy's bytes and name, and the log block with its name.
-  async function copyFiles({ doc, name, disk, when, note, stamps, hash }) {
-    const nm = names(name, when);
-    const ready = prepare(doc, { when, note, stamps });
-    if (ready.reason) return failed(5, ready.reason);
-    const after = { sha256: await hash(ready.bytes), bytes: ready.bytes.length, lines: doc.order.length };
-    const copyName = nm.copy(1);
-    return {
-      done: true, copy: copyName, bytes: ready.bytes, disk: after, runs: ready.runs, logName: nm.logDownload,
-      logText: (actualName) => logBlock({ when, file: name, copy: actualName || copyName, note: ready.note, before: disk, after, runs: ready.runs }),
-    };
-  }
-
-  // A copy written through a handle the owner picked: written, read back, compared.
-  async function writeChecked(handle, bytes, hash) {
-    await writeAll(handle, bytes);
-    return (await hash(await bytesOfHandle(handle))) === (await hash(bytes));
+    // 8. the copy is the last copy; the page stays on the original
+    core.markCopied(doc);
+    return { done: true, name: handle.name, sha256 };
   }
 
   return {
-    HISTORY, timestamp, logTime, split, names, logBlock, movedWords,
-    checkDisk, save, saveCopy, copyFiles, writeChecked,
+    timestamp, localTime, split, datedName, movedWords, changesText, nothingSince,
+    save, bytesOfHandle, writeChecked,
   };
 });

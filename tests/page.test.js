@@ -130,13 +130,64 @@ describe('the page', () => {
     assert.ok(privacy.includes('refuse requests, images, fonts and scripts from anywhere else'));
   });
 
-  it('Save in place, refused a folder, says which folders Chrome refuses and what to do instead', () => {
+  // 0.5.6: saving as section 10 has it (P5, S3, the log cut)
+  it('one Save, ⌘S, and no Save a copy or ⇧⌘S: Save reads Download a copy in a browser without the Save dialog', () => {
+    const page = read('index.html');
     const ui = read('ui.js');
-    const grant = ui.slice(ui.indexOf('async function grantFolder'), ui.indexOf('// 10.2 step 3 refused'));
-    assert.ok(grant.includes("e.name === 'AbortError'"));
-    for (const words of ['Downloads', 'Desktop', 'Documents', 'home folder', 'a folder of its own', 'Save a copy']) {
-      assert.ok(grant.includes(words), `the refused-folder notice does not say "${words}"`);
+    assert.ok(/<button class="button" id="save" type="button" title="Save a dated copy, where you choose; the original is never written \(⌘S\)" disabled>Save<\/button>/.test(page));
+    for (const gone of ['save-copy', 'Save a copy', '⇧⌘S']) {
+      assert.ok(!page.includes(gone), `index.html still holds "${gone}"`);
+      assert.ok(!ui.includes(gone), `ui.js still holds "${gone}"`);
     }
+    assert.ok(ui.includes("$('save').textContent = canPick() ? 'Save' : 'Download a copy';"), 'the label follows the browser');
+    assert.ok(/function canPick\(\) \{ return PICKERS && \(!state\.doc \|\| !!state\.handle\); \}/.test(ui), 'the Save dialog only for a file with a handle, which step 6 needs');
+    assert.ok(ui.includes("if (mod && !e.shiftKey && !e.altKey && key === 's') {"), '⌘S alone');
+    assert.ok(ui.includes('window.showSaveFilePicker({ suggestedName: name, startIn: state.handle, types: GEDCOM_TYPES })'),
+      'the Save dialog offers the dated name and opens at the original');
+    assert.ok(/updateBar\(\);\s+\/\/ Save, or Download a copy, as this browser has it\n\}\)\(\);/.test(ui), 'the label is set as the page starts');
+  });
+
+  it('nothing asks for a folder, and nothing writes a backup or a log', () => {
+    for (const name of ['ui.js', 'save.js']) {
+      const text = read(name);
+      for (const gone of ['showDirectoryPicker', 'getDirectoryHandle', 'grantFolder', 'gedcom-viewer-history', '.edits.log', '.bak', 'keepExistingData', 'logBlock']) {
+        assert.ok(!text.includes(gone), `${name} still holds "${gone}"`);
+      }
+    }
+    assert.ok(read('save.js').includes('original.handle.isSameEntry(handle)'), 'step 6 asks the browser whether the file picked is the original');
+  });
+
+  it('the Save dialog: with the change stamps unticked the note box is off; the dot and Save mean a change since the last copy, and so does leaving', () => {
+    const ui = read('ui.js');
+    const dlg = ui.slice(ui.indexOf('async function saveDialog'), ui.indexOf('// Saving (10.2)'));
+    assert.ok(dlg.includes('note.disabled = !box.checked;') && dlg.includes("noteRow.classList.toggle('is-off', !box.checked);"));
+    assert.ok(dlg.includes("return { note: box.checked ? note.value : '', stamps: box.checked };"), 'unticked, the note goes nowhere');
+    assert.ok(dlg.includes('`Change stamps, ${plan.length ?'), 'Change stamps, 1 record; Change stamps, none needed');
+    assert.ok(!/\blog\b/.test(dlg), 'the dialog says nothing of a log');
+    assert.ok(/const changed = !!doc && C\.changedSinceCopy\(doc\);/.test(ui));
+    assert.ok(/window\.addEventListener\('beforeunload', \(e\) => \{\s+if \(state\.doc && C\.changedSinceCopy\(state\.doc\)\)/.test(ui), 'leaving warns only for changes made since the last copy');
+    assert.ok(/\.dialog-note\.is-off \{ opacity: var\(--off-opacity\); \}/.test(read('style.css')));
+  });
+
+  it('the Changes tab has a copy button at its top, like every box\'s, that puts the list on the clipboard as text and writes it nowhere', () => {
+    const page = read('index.html');
+    const panel = page.slice(page.indexOf('<section class="panel" id="panel-changes"'), page.indexOf('</section>', page.indexOf('id="panel-changes"')));
+    assert.ok(/<div class="panel-sum has-copy"><span id="changes-sum"><\/span><button class="copy" id="changes-copy" type="button" title="Copy the changes, as text" aria-label="Copy the changes, as text" hidden><\/button><\/div>/.test(panel),
+      'the copy button sits in the line above the list');
+    assert.ok(panel.indexOf('id="changes-copy"') < panel.indexOf('id="changes-list"'), 'at its top');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("wireCopy($('changes-copy'), changesAsText,") && ui.includes('S.changesText({ when: new Date(), file: state.fileName,'));
+    assert.ok(/\.copy\[hidden\] \{ display: none; \}/.test(read('style.css')), 'hidden with no file open');
+  });
+
+  it('privacy.html: Saving says no folder is asked for, a dated copy goes where you choose, the original is never written, and elsewhere it is a download', () => {
+    const privacy = read('privacy.html').replace(/\s+/g, ' ');
+    const saving = (privacy.match(/<li><strong>Saving\.<\/strong>(.*?)<\/li>/) || [])[1];
+    assert.ok(saving, 'no Saving bullet');
+    for (const words of ['dated copy', 'where you choose', 'No folder is asked for', 'never written', 'download']) {
+      assert.ok(saving.includes(words), `the Saving bullet does not say "${words}": ${saving}`);
+    }
+    for (const gone of ['The folder you grant', 'Save a copy', 'in place']) assert.ok(!saving.includes(gone), `the Saving bullet still says "${gone}"`);
   });
 
   // 0.5.5: type, the text size, the theme, motion and forced colours, the one console line

@@ -25,9 +25,10 @@ function sameAsFreshRead(doc) {
   assert.deepEqual(doc.view.labels, fresh.labels);
 }
 
-// The lines as saved with the net change laid over them must be the lines now (see edit.test.js).
-function replayed(doc, items) {
-  const was = doc.savedOrder.map((e) => core.textOf(doc, e));
+// The lines of the original (or of `base`) with the net change laid over them must be the lines now
+// (see edit.test.js).
+function replayed(doc, items, base = doc.savedOrder) {
+  const was = base.map((e) => core.textOf(doc, e));
   const gone = new Set(items.filter((it) => it.kind !== 'added').map((it) => it.before));
   const named = new Set(items.filter((it) => it.kind !== 'removed').map((it) => it.after));
   const out = [];
@@ -147,7 +148,7 @@ describe('a record, and a section, moved whole', () => {
     sameAsFreshRead(doc);
   });
 
-  it('the FAM section before the INDI section: the same bytes in a new order; one entry; no stamp; the log names it', async () => {
+  it('the FAM section before the INDI section: the same bytes in a new order; one entry; no stamp; the Changes text names it', async () => {
     const doc = open('family.ged');
     const bytes = doc.m.bytes;
     ok(core.moveLines(doc, 26, 36, 7));                              // @F1@ and @F2@ (lines 27–36) before @I1@ (line 8)
@@ -163,15 +164,14 @@ describe('a record, and a section, moved whole', () => {
     assert.equal(runs[0].record, null);
     assert.equal(save.movedWords(runs[0]), 'section FAM · 2 records · 10 lines');
     assert.deepEqual(core.stampTargets(doc), []);
-    const log = save.logBlock({ when: AT, file: 'Fixture_Family.ged', note: 'Sources first.', before: { sha256: 'a', bytes: 1, lines: 37 },
-      after: { sha256: 'b', bytes: 1, lines: 37 }, backup: 'x.bak', runs }).split('\n');
-    assert.deepEqual(log.slice(5, 7), ['moved    27-36 -> 8-17  (section FAM · 2 records · 10 lines)', '']);
+    const text = save.changesText({ when: AT, file: 'Fixture_Family.ged', original: { sha256: 'a', bytes: 1, lines: 37 }, runs }).split('\n');
+    assert.deepEqual(text.slice(2), ['moved    27-36 -> 8-17  (section FAM, 2 records, 10 lines)', '']);
     sameAsFreshRead(doc);
     core.undo(doc);
     assert.equal(hash(doc), h.sha256(bytes));
   });
 
-  it('a move stands in the history like any act: undo and redo, and a save in place makes it no change', () => {
+  it('a move stands in the history like any act: undo and redo, and a copy written makes it no change since the copy', () => {
     const doc = open('family.ged');
     ok(core.moveLines(doc, 22, 26, 7));                              // @I43@ first
     ok(core.moveLines(doc, 26, 31, 7));                              // then @F1@ first of all
@@ -182,10 +182,10 @@ describe('a record, and a section, moved whole', () => {
     core.redo(doc);
     core.redo(doc);
     assert.deepEqual(texts(doc), after);
-    core.markSaved(doc);
-    assert.deepEqual(core.netChange(doc), []);
+    core.markCopied(doc);
+    assert.deepEqual(core.netChange(doc, doc.copiedOrder), []);
     ok(core.moveLines(doc, 7, 12, 31));                              // @F1@ back to before @F2@
-    assert.deepEqual(core.changeRuns(doc).map((r) => [r.kind, r.moved.what]), [['moved', 'record']], 'against the save in place, one record moved');
+    assert.deepEqual(core.changeRuns(doc, null, doc.copiedOrder).map((r) => [r.kind, r.moved.what]), [['moved', 'record']], 'against the copy, one record moved');
   });
 });
 
@@ -306,7 +306,7 @@ function moveAtRandom(file, count, seed) {
     else if (roll < 0.86) r = core.addChild(doc, pos, `${doc.view.level[pos] + 1} NOTE child ${k}`);
     else if (roll < 0.94) r = { ok: true, step: core.undo(doc) };
     else if (roll < 0.97) r = core.applyStamps(doc, AT, `stamp ${k}`);
-    else { core.markSaved(doc); r = { ok: true, step: null }; }
+    else { core.markCopied(doc); r = { ok: true, step: null }; }
     if (!r.ok) {
       assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
       continue;
@@ -314,6 +314,11 @@ function moveAtRandom(file, count, seed) {
     sameAsFreshRead(doc);
     const items = core.netChange(doc);
     assert.deepEqual(replayed(doc, items), doc.view.texts, `net change after act ${k}`);
+    if (doc.copiedOrder) {
+      const since = core.netChange(doc, doc.copiedOrder);
+      assert.deepEqual(replayed(doc, since, doc.copiedOrder), doc.view.texts, `net change from the last copy after act ${k}`);
+      core.changeRuns(doc, since, doc.copiedOrder);
+    }
     core.changeRuns(doc, items);
     core.lineMarks(doc, items);
     core.stampTargets(doc, items);

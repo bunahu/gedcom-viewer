@@ -33,10 +33,11 @@ function sameAsFreshRead(doc) {
   assert.deepEqual(doc.view.labels, fresh.labels);
 }
 
-// The lines as saved, with the net change laid over them, must be the lines now: every line the
-// net change does not name is the same line, in the same order.
-function replayed(doc, items) {
-  const was = doc.savedOrder.map((e) => core.textOf(doc, e));
+// The lines of the original (or of `base`, the last copy), with the net change from them laid over
+// them, must be the lines now: every line the net change does not name is the same line, in the
+// same order.
+function replayed(doc, items, base = doc.savedOrder) {
+  const was = base.map((e) => core.textOf(doc, e));
   const gone = new Set(items.filter((it) => it.kind !== 'added').map((it) => it.before));
   const named = new Set(items.filter((it) => it.kind !== 'removed').map((it) => it.after));
   const out = [];
@@ -220,8 +221,10 @@ describe("section 14's rows", () => {
     assert.equal(marks.status[12], 2);
     assert.equal(marks.status[17], 1);
     assert.equal(marks.removedAt[30], 1);
-    core.markSaved(doc);
-    assert.deepEqual(core.netChange(doc), [], 'after a save in place, nothing is changed');
+    core.markCopied(doc);
+    assert.equal(core.changedSinceCopy(doc), false);
+    assert.deepEqual(core.netChange(doc, doc.copiedOrder), [], 'against the copy just written, nothing is changed');
+    assert.equal(core.netChange(doc).length, 4, 'against the original, every change stands');
   });
 
   it('net change: an edit of an edit is one change; a new line edited is still one line added', () => {
@@ -231,14 +234,16 @@ describe("section 14's rows", () => {
     ok(core.addChild(doc, 16, '2 GIVN x'));
     ok(core.editLine(doc, 17, '2 GIVN y'));
     assert.deepEqual(core.netChange(doc).map((it) => [it.kind, it.before, it.after]), [['changed', 16, 16], ['added', -1, 17]]);
-    core.markSaved(doc);
+    core.markCopied(doc);
     ok(core.editLine(doc, 17, '2 GIVN z'));
     ok(core.editLine(doc, 16, '1 NAME Jane /Fixture/'));             // back to the file's own words
     assert.equal(doc.order[16], 16);
-    const items = core.netChange(doc);
+    const items = core.netChange(doc, doc.copiedOrder);
     assert.deepEqual(items.map((it) => [it.kind, it.before, it.after]), [['changed', 16, 16], ['changed', 17, 17]],
-      'against the save in place: the NAME changed back, the GIVN changed again');
-    assert.deepEqual(replayed(doc, items), doc.view.texts);
+      'against the last copy: the NAME changed back, the GIVN changed again');
+    assert.deepEqual(replayed(doc, items, doc.copiedOrder), doc.view.texts);
+    assert.deepEqual(core.netChange(doc).map((it) => [it.kind, it.before, it.after]), [['added', -1, 17]],
+      'against the original: the NAME is its own again, and the GIVN is one line added');
   });
 
   it('no final newline: identity; a line added after the last line — it gains the common terminator, the new one has none', () => {
@@ -377,13 +382,14 @@ describe('change stamps (10.4)', () => {
     assert.equal(core.applyStamps(doc, AT, '').step, null);
   });
 
-  it('a second save with no edit writes nothing', () => {
+  it('a second save with no edit writes nothing, and stamps nothing', () => {
     const doc = open('chan.ged');
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
     ok(core.applyStamps(doc, AT, ''));
-    core.markSaved(doc);
-    assert.equal(core.isChanged(doc), false);
-    assert.deepEqual(core.netChange(doc), []);
+    core.markCopied(doc);
+    assert.equal(core.changedSinceCopy(doc), false);
+    assert.equal(core.isChanged(doc), true, 'the copy holds the change; the original does not');
+    assert.deepEqual(core.stampTargets(doc), []);
     assert.equal(core.applyStamps(doc, LATER, '').step, null);
   });
 
@@ -397,21 +403,50 @@ describe('change stamps (10.4)', () => {
     assert.ok(doc.view.texts.includes('3 TIME 15:42:00'), 'the earlier stamp stays as it was');
   });
 
-  it('a stamp added since the last save in place (a copy saved in between) is set anew, never added to', () => {
+  it('a stamp added for an earlier copy is set anew when its record changes again, never added to, and left as it was when it does not', () => {
+    const doc = open('chan.ged');
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@: no CHAN
+    ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));            // @I1@: a CHAN of its own
+    ok(core.applyStamps(doc, AT, 'first'));
+    core.markCopied(doc);                                            // the first copy
+    assert.deepEqual(core.stampPlan(doc), [], 'nothing changed since the copy: nothing to stamp');
+    ok(core.addChild(doc, doc.view.definedAt.get('@I2@')[0], '1 NOTE about Joe'));   // @I2@ changes again; @I1@ does not
+    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I2@', 'resets']]);
+    ok(core.applyStamps(doc, LATER, 'second'));
+    assert.deepEqual(block(doc, '@I2@').slice(-4), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07', '2 NOTE second'],
+      'its stamp set anew: one NOTE, the second');
+    assert.deepEqual(block(doc, '@I1@').slice(3), ['1 CHAN', '2 DATE 28 SEP 2026', '3 TIME 15:42:00',
+      '2 NOTE an earlier change', '2 NOTE first'], '@I1@ did not change again: its stamp still says when, and why');
+    core.markCopied(doc);                                            // the second copy
+    ok(core.editLine(doc, doc.view.definedAt.get('@I1@')[0] + 1, '1 NAME Janet /Fixtures/'));
+    ok(core.applyStamps(doc, new Date(2026, 9, 3, 10, 0, 0), 'third'));
+    assert.deepEqual(block(doc, '@I1@').slice(3), ['1 CHAN', '2 DATE 3 OCT 2026', '3 TIME 10:00:00',
+      '2 NOTE an earlier change', '2 NOTE third'], 'the file\'s own note stays; the stamp of this visit is set anew');
+    assert.deepEqual(block(doc, '@I2@').slice(-4), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07', '2 NOTE second']);
+    sameAsFreshRead(doc);
+  });
+
+  it('a record changed before a copy written with the stamps unticked is stamped at the next copy that stamps', () => {
+    const doc = open('chan.ged');
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@
+    core.markCopied(doc);                                            // a copy, stamps unticked
+    ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));            // @I1@, after it
+    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I1@', 'sets'], ['@I2@', 'adds']],
+      'both changed from the original, and neither carries a stamp yet');
+  });
+
+  it('a save that wrote nothing takes its stamps back: the lines, the history and Redo as they were', () => {
     const doc = open('chan.ged');
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
     ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));
-    ok(core.applyStamps(doc, AT, 'first'));                          // Save a copy
-    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I1@', 'resets'], ['@I2@', 'resets']]);
-    ok(core.applyStamps(doc, LATER, 'second'));                      // then Save, in place
-    assert.deepEqual(block(doc, '@I2@').slice(3), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07', '2 NOTE second']);
-    assert.deepEqual(block(doc, '@I1@').slice(3), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07',
-      '2 NOTE an earlier change', '2 NOTE second']);
-    core.markSaved(doc);
-    ok(core.addChild(doc, doc.view.definedAt.get('@I2@')[0], '1 NOTE about Joe'));
-    ok(core.applyStamps(doc, new Date(2026, 9, 3, 10, 0, 0), 'third'));
-    assert.deepEqual(block(doc, '@I2@').slice(-5), ['1 CHAN', '2 DATE 3 OCT 2026', '3 TIME 10:00:00', '2 NOTE second',
-      '2 NOTE third'], 'after a save in place, the saved note stays and the next one is added');
+    core.undo(doc);                                                  // Redo now holds the second edit
+    const before = { order: doc.order.slice(), done: doc.done.slice(), undone: doc.undone.slice() };
+    const undone = doc.undone.slice();
+    const r = ok(core.applyStamps(doc, AT, ''));
+    assert.equal(doc.undone.length, 0, 'an act empties Redo');
+    assert.equal(core.takeBack(doc, r.step, undone), true);
+    assert.deepEqual({ order: doc.order, done: doc.done, undone: doc.undone }, before);
+    assert.equal(core.takeBack(doc, r.step, undone), false, 'once only: it is no longer the last step');
     sameAsFreshRead(doc);
   });
 
@@ -520,7 +555,7 @@ function walkAtRandom(file, count, seed) {
     else if (roll < 0.84) r = { ok: true, step: core.undo(doc) };
     else if (roll < 0.9) r = { ok: true, step: core.redo(doc) };
     else if (roll < 0.95) r = core.applyStamps(doc, AT, `stamp ${k}`);
-    else { core.markSaved(doc); r = { ok: true, step: null }; }
+    else { core.markCopied(doc); r = { ok: true, step: null }; }
     if (!r.ok) {
       assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
       continue;
@@ -528,6 +563,9 @@ function walkAtRandom(file, count, seed) {
     made += 1;
     sameAsFreshRead(doc);
     assert.deepEqual(replayed(doc, core.netChange(doc)), doc.view.texts, `net change after act ${k}`);
+    if (doc.copiedOrder) {
+      assert.deepEqual(replayed(doc, core.netChange(doc, doc.copiedOrder), doc.copiedOrder), doc.view.texts, `net change from the last copy after act ${k}`);
+    }
   }
   while (doc.done.length) core.undo(doc);
   assert.equal(h.sha256(core.saveBytes(doc)), h.sha256(bytes), `${path.basename(file)}: everything undone`);

@@ -169,6 +169,7 @@
   --menu-width: 19em;                 /* the Settings menu */
   --copy-color: var(--color-text-muted);   /* the copy button at a box's top right */
   --copy-done: var(--color-success);       /* …once it has copied */
+  --off-opacity: 0.4;                 /* a control that is off: a button that cannot be pressed, the Save dialog's note box with the change stamps unticked */
   --surname-weight: 700;              /* Bold surnames */
   --help-max-width: 40em;             /* what a check means, in the right frame */
   --prose-max-width: 38em;            /* the privacy page's column of text */
@@ -227,7 +228,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 }
 .button:hover:not(:disabled) { background: var(--hover-bg); }
 .button[aria-pressed="true"] { background: var(--pressed-bg); border-color: var(--color-accent); }
-.button:disabled { opacity: 0.4; cursor: default; }
+.button:disabled { opacity: var(--off-opacity); cursor: default; }
 .button:focus-visible { outline: var(--focus-ring); outline-offset: -1px; }
 
 /* the sibling project's .sibling-input: half-rem radius, a one-pixel border, the ring when in use */
@@ -747,6 +748,9 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .copy:hover { background: var(--hover-bg); color: var(--color-text); }
 .copy:focus-visible { outline: var(--focus-ring); }
 .copy.is-done { color: var(--copy-done); }
+.copy[hidden] { display: none; }
+/* the Changes tab's copy button (10.3), at the right of the line over the list: the line is as tall as the button */
+.panel-sum.has-copy { min-height: 24px; }
 .surname { font-weight: var(--surname-weight); }
 /* what a check means (3.6) */
 .help { max-width: var(--help-max-width); }
@@ -806,7 +810,7 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .detail-removed { color: var(--mark-removed); text-decoration: line-through; }
 .detail-added { color: var(--mark-added); font-weight: 600; }
 
-/* -- dialogs: Save, Save a copy, deleting, a file changed on disk ------------------------------ */
+/* -- dialogs: Save, deleting, a copy refused, Report a problem --------------------------------- */
 
 .dialog {
   width: min(var(--dialog-width), calc(100vw - 32px));
@@ -857,6 +861,9 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .dialog-stamps { display: flex; flex-direction: column; gap: 2px; padding-left: 24px; font-size: var(--font-size-small); }
 .dialog-stamps[hidden] { display: none; }
 .dialog-note { display: flex; align-items: center; gap: 8px; }
+/* the change stamps unticked: the note has nowhere to go, so its box is off */
+.dialog-note.is-off { opacity: var(--off-opacity); }
+.dialog-note .input:disabled { cursor: default; }
 /* P8 — Report a problem: the report in a box of its own, to read, change or cut; What happened under it */
 .report {
   width: 100%;

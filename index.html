@@ -12,7 +12,7 @@
      (ui.js, metaOf, then says so in one line of its own); the page draws nothing from such a _META. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <title>GEDCOM Viewer</title>
-<meta name="description" content="Read, check and hand-edit a GEDCOM file in your browser, and save it with a log of what changed. Nothing is uploaded: the file never leaves your computer.">
+<meta name="description" content="Read, check and hand-edit a GEDCOM file in your browser, and save the edits as a dated copy, the original left as it was. Nothing is uploaded: the file never leaves your computer.">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -23,15 +23,14 @@
 <header class="bar">
   <div class="bar-top">
     <button class="icon-button" id="hide-left" type="button" aria-pressed="false" aria-label="Hide left bar" title="Hide left bar"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7.5 3.5v13" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
-    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.5.5</span></span>
+    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span> <span class="version" title="Version">0.5.6</span></span>
     <button class="file-name" id="file-name" type="button" aria-expanded="false" translate="no" hidden></button>
-    <span class="dirty" id="dirty" title="Changed since it was opened or last saved" hidden>●</span>
+    <span class="dirty" id="dirty" title="Changed since it was opened, or since the last copy" hidden>●</span>
     <nav class="actions">
       <button class="button" id="edit" type="button" aria-pressed="false" title="Edit on or off (E)" disabled>Edit</button>
       <button class="button" id="undo" type="button" disabled>Undo</button>
       <button class="button" id="redo" type="button" disabled>Redo</button>
-      <button class="button" id="save" type="button" title="Save, in place (⌘S)" disabled>Save</button>
-      <button class="button" id="save-copy" type="button" title="Save a dated copy (⇧⌘S)" disabled>Save a copy</button>
+      <button class="button" id="save" type="button" title="Save a dated copy, where you choose; the original is never written (⌘S)" disabled>Save</button>
       <span class="gap"></span>
       <span class="goto-box">
         <input class="input goto" id="goto" type="text" placeholder="Go to Line…" aria-label="Go to line" autocomplete="off" spellcheck="false" data-gramm="false" disabled>
@@ -116,7 +115,7 @@
     </section>
 
     <section class="panel" id="panel-changes" translate="no" hidden>
-      <div class="panel-sum" id="changes-sum"></div>
+      <div class="panel-sum has-copy"><span id="changes-sum"></span><button class="copy" id="changes-copy" type="button" title="Copy the changes, as text" aria-label="Copy the changes, as text" hidden></button></div>
       <div class="list" id="changes-list"></div>
     </section>
 

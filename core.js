@@ -805,7 +805,9 @@
   // written from its own bytes (I1); n < 0 is added line -n-1, typed in this session and written
   // in the file's encoding. Every act is a list of splices on `order` — some numbers taken out at
   // a place, others put in — and its undo is the same splices run backwards. `savedOrder` is
-  // `order` at open or at the last save in place; what changed is the one against the other (9.4).
+  // `order` at open: the original, which nothing writes over (I6). What changed is the one against
+  // the other (9.4). `copiedOrder` is `order` when the last copy was written (10.2, step 8), or null
+  // before the first; the dot in the top bar and the Save button mean a change since then.
   //
   // An added line keeps its text, its terminator, its lineage, and — when the viewer wrote it for a
   // change stamp — its part in the stamp. Its lineage is the line it stands for: the original line
@@ -827,6 +829,7 @@
       added: [],                                                     // the lines typed in this session
       order,
       savedOrder: order.slice(),
+      copiedOrder: null,                                             // `order` at the last copy written
       done: [],                                                      // Undo takes the last of these
       undone: [],                                                    // Redo takes the last of these
       common: commonTerm(m),
@@ -1184,17 +1187,34 @@
     return step;
   }
 
-  // A save in place is done: the lines as they now are are the file on disk (10.2, step 10).
-  function markSaved(doc) { doc.savedOrder = doc.order.slice(); }
+  // A copy is written: the lines as they now are are the last copy (10.2, step 8). The original
+  // stays what the changes are counted from.
+  function markCopied(doc) { doc.copiedOrder = doc.order.slice(); }
 
-  // Whether the lines differ from the file on disk.
-  function isChanged(doc) {
-    const a = doc.order;
-    const b = doc.savedOrder;
-    if (a.length !== b.length) return true;
-    for (let k = 0; k < a.length; k += 1) if (a[k] !== b[k]) return true;
-    return false;
+  // An act taken back as if it had not been made: a save that wrote nothing takes its stamps back
+  // (10.2). The step runs backwards and leaves the history, and Redo holds again what it held
+  // before the act (`undone`, as it was then). Only the last step can be taken back.
+  function takeBack(doc, step, undone) {
+    if (!step || doc.done[doc.done.length - 1] !== step) return false;
+    doc.done.pop();
+    unmake(doc, step.splices);
+    doc.undone.length = 0;
+    for (const s of undone) doc.undone.push(s);
+    recheck(doc);
+    return true;
   }
+
+  function sameOrder(a, b) {
+    if (a.length !== b.length) return false;
+    for (let k = 0; k < a.length; k += 1) if (a[k] !== b[k]) return false;
+    return true;
+  }
+
+  // Whether the lines differ from the original as it was opened.
+  function isChanged(doc) { return !sameOrder(doc.order, doc.savedOrder); }
+
+  // Whether the lines differ from the last copy written, or from the original before the first.
+  function changedSinceCopy(doc) { return !sameOrder(doc.order, doc.copiedOrder || doc.savedOrder); }
 
   // Which numbers a list holds, and at what place.
   function placesIn(doc, list) {
@@ -1249,9 +1269,9 @@
   // other lines after added. Each item holds the line's place before (in `savedOrder`) and after
   // (in `order`), -1 where it has none. A removed line also holds `at`, the place after where it
   // was; so does a moved line — where it was taken from — and a moved line whose entry differs as
-  // well is `changed` too.
-  function netChange(doc) {
-    const S = doc.savedOrder;
+  // well is `changed` too. Given `base` (the last copy's `copiedOrder`), the same, against it.
+  function netChange(doc, base) {
+    const S = base || doc.savedOrder;
     const O = doc.order;
     const lineS = placesByLineage(doc, S);
     const lineO = placesByLineage(doc, O);
@@ -1326,10 +1346,10 @@
     return movedOut.size ? items.filter((it) => !it.dead) : items;
   }
 
-  // The record a line of `savedOrder` sat in, as its record line's place there (-1: before the
-  // first record). `memo` carries the last answer, so a run of removed lines is walked once.
-  function savedRecordOf(doc, a, memo) {
-    const S = doc.savedOrder;
+  // The record a line of `savedOrder` (or of `base`) sat in, as its record line's place there (-1:
+  // before the first record). `memo` carries the last answer, so a run of removed lines is walked once.
+  function savedRecordOf(doc, a, memo, base) {
+    const S = base || doc.savedOrder;
     let r;
     if (shapeOf(doc, S[a]).level === 0) r = a;
     else if (memo.a === a - 1) r = memo.r;
@@ -1375,10 +1395,10 @@
   // a stamp wrote it. A moved run says what moved (`moved`, describeMove); a moved line that was
   // also edited is in a changed run too, at its new place. The runs come in the order of the
   // lines now: a removed run at the line below where its lines were, a moved run where its lines
-  // now are.
-  function changeRuns(doc, items) {
-    const list = items || netChange(doc);
-    const S = doc.savedOrder;
+  // now are. Given `base`, the runs against it, as netChange.
+  function changeRuns(doc, items, base) {
+    const list = items || netChange(doc, base);
+    const S = base || doc.savedOrder;
     const O = doc.order;
     const v = doc.view;
     const memo = { a: -2, r: -1 };
@@ -1395,7 +1415,7 @@
       }
       let record = null;
       if (kind === 'removed') {
-        const r = savedRecordOf(doc, it.before, memo);
+        const r = savedRecordOf(doc, it.before, memo, S);
         if (r >= 0) { const s = shapeOf(doc, S[r]); record = { id: s.xref, tag: s.tag, key: `saved ${r}` }; }
       } else if (v.recOf[it.after] >= 0) {
         const line = v.records[v.recOf[it.after]];
@@ -1426,7 +1446,7 @@
     return runs.concat(moves).sort((x, y) => (pos(x) - pos(y)) || (rank[x.kind] - rank[y.kind]));
   }
 
-  // For the grid: each line now, 1 changed or 2 added since the last save, 3 moved; and, where
+  // For the grid: each line now, 1 changed or 2 added since the file was opened, 3 moved; and, where
   // lines were removed, or taken from by a move, the place after they were.
   function lineMarks(doc, items) {
     const list = items || netChange(doc);
@@ -1442,13 +1462,13 @@
     return { status, removedAt, movedFrom };
   }
 
-  // Lines removed since the last save put back where they were: lines `before` … `before + count -
-  // 1` of the file as saved, every one of them removed, back in their place, as one step. They are
-  // the saved lines themselves, so once back they are no change at all.
+  // Lines removed since the file was opened put back where they were: lines `before` … `before +
+  // count - 1` of the original, every one of them removed, back in their place, as one step. They
+  // are the original's lines themselves, so once back they are no change at all.
   function restoreLines(doc, before, count) {
     const items = netChange(doc).filter((it) => it.kind === 'removed' && it.before >= before && it.before < before + count);
     if (!count || items.length !== count || items.some((it) => it.at !== items[0].at)) {
-      return refuse('Those lines are not all removed, side by side, since the last save.');
+      return refuse('Those lines are not all removed, side by side, since the file was opened.');
     }
     const done = [];
     cut(doc, done, items[0].at, 0, items.map((it) => doc.savedOrder[it.before]));
@@ -1582,11 +1602,32 @@
   // it, a line it lost, or its own lines reordered (3.4a) — other than by a stamp of the viewer's
   // own, that is still in the file, under a tag that may carry a change date (section 2). A
   // record moved whole, or with its section, is not stamped: nothing in it changed, only its
-  // place. Record numbers of the view, last first.
+  // place. A record stamped for an earlier copy in this visit is stamped again only when it
+  // changed after that copy (10.4): until then its stamp already says when it last changed, and
+  // why. Record numbers of the view, last first.
   function stampTargets(doc, items) {
-    const list = items || netChange(doc);
+    const hit = touchedRecords(doc, items || netChange(doc), doc.savedOrder);
+    if (doc.copiedOrder && hit.size) {
+      const since = touchedRecords(doc, netChange(doc, doc.copiedOrder), doc.copiedOrder);
+      for (const r of [...hit]) if (!since.has(r) && stampedInVisit(doc, r)) hit.delete(r);
+    }
+    return [...hit].sort((x, y) => y - x);
+  }
+
+  // Whether record r of the view carries a stamp the viewer added in this visit: a NOTE of its own
+  // under the record's 1 CHAN. Every stamp adds one, or sets one it added before.
+  function stampedInVisit(doc, r) {
     const v = doc.view;
-    const S = doc.savedOrder;
+    const chan = firstChild(v, v.records[r] + 1, recordEnd(v, r), 1, 'CHAN');
+    if (chan < 0) return false;
+    for (let p = chan + 1; p < subtreeEnd(v, chan); p += 1) if (stampOf(doc, doc.order[p]) === 'note') return true;
+    return false;
+  }
+
+  // The records of the view that the items of a net change against `S` touched, as stampTargets
+  // counts them, under the tags that may carry a change date.
+  function touchedRecords(doc, list, S) {
+    const v = doc.view;
     const O = doc.order;
     const tags = v.v7 ? STAMP_TAGS_7 : STAMP_TAGS;
     const placeNow = placesIn(doc, O);
@@ -1604,7 +1645,7 @@
       } else if (it.kind !== 'removed') {
         if (stampOf(doc, O[it.after]) === null) take(it.after);      // written by him, not by a stamp
       } else {
-        const r = savedRecordOf(doc, it.before, memo);
+        const r = savedRecordOf(doc, it.before, memo, S);
         if (r < 0) continue;
         let b = placeNow(S[r]);
         if (b < 0 && changedTo.has(r)) b = changedTo.get(r);
@@ -1612,15 +1653,15 @@
       }
     }
     if (list.some((it) => it.kind === 'moved')) {
-      for (const run of changeRuns(doc, list)) if (run.kind === 'moved' && run.moved.what === 'block') take(run.after);
+      for (const run of changeRuns(doc, list, S)) if (run.kind === 'moved' && run.moved.what === 'block') take(run.after);
     }
-    return [...hit].sort((x, y) => y - x);
+    return hit;
   }
 
   // What the stamps of a save will do, record by record, for the Save dialog to show before the
-  // save makes them: 'adds' — a `1 CHAN` block at the record's end; 'sets' — its CHAN's DATE and
-  // TIME set, and a NOTE added; 'resets' — a stamp the viewer added since the last save in place,
-  // set anew. First record first.
+  // save makes them. 'adds': a `1 CHAN` block at the record's end. 'sets': its CHAN's DATE and TIME
+  // set, and a NOTE added. 'resets': the stamp the viewer added for an earlier copy in this visit,
+  // set anew because the record changed again. First record first.
   function stampPlan(doc) {
     const v = doc.view;
     const inSaved = placesIn(doc, doc.savedOrder);
@@ -1639,8 +1680,8 @@
   // 10.4 — the stamps of a save made at `when`, as one step of the history. A record with no
   // `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`, `3 TIME`, `2 NOTE`. A record with one has
   // its `2 DATE` and `3 TIME` set (either added when missing) and a `2 NOTE` added at the end of
-  // the block; notes already there stay. A note the viewer added since the last save in place (a copy
-  // was saved in between) is set anew instead, never added to.
+  // the block; notes already there stay. A note the viewer added for an earlier copy in this visit
+  // is set anew instead, never added to.
   function applyStamps(doc, when, typed) {
     const note = stampNote(doc, typed);
     if (note.reason) return refuse(note.reason);
@@ -1944,7 +1985,7 @@
     openDocument, saveBytes, textOf, termOf,
     editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
     moveRefusal, moveLines, landings,
-    markSaved, isChanged, netChange, changeRuns, lineMarks, restoreLines,
+    markCopied, takeBack, isChanged, changedSinceCopy, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, stampTargets, stampPlan, applyStamps,
     nameParts, nameShown, linkAt, clip, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,
