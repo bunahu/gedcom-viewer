@@ -41,7 +41,7 @@ All from the owner, 2026-09-28, in the scoping session.
 | R4 | **Its own folder and its own local git repo**, beside `sibling/`; the name is gedview. | "your recs. gedview is fine." |
 | R5 | **Every assumption put to him stands** (they are the rules of sections 5–10). | "Decided: yes to everything." |
 | R6 | **Indent is a toggle, on/off, in the UI.** | "Indent has a toggle on/off in the UI." |
-| R7 | **The name is GEDCOM Viewer** (2026-09-28, after phase 4): in the top bar, the window's title, the default stamp note and the backup folder. The code keeps its own names. | "Rename gedview to GEDCOM Viewer." |
+| R7 | **The name is GEDCOM Viewer** (2026-09-28, after phase 4): in the top bar, the window's title (from 0.5.4 the file's name joins the title only by a setting), the default stamp note and the backup folder. The code keeps its own names. | "Rename gedview to GEDCOM Viewer." |
 
 **How R3 meets the standard** (read in the two PDFs in `sibling/gedcom/`, 5.5.5 and 7.0.18):
 
@@ -1359,7 +1359,7 @@ The order, as releases, one tag per push, each tagged at the owner's word after 
 | Release | Items | Built by |
 |---|---|---|
 | 0.5.4 | 3 the scroll; 2 the title, with a setting; 9 spell check off and `translate="no"`; 4 the privacy wording (P4, P5) and the half-sentence; the README's local path; from 1, a plain notice when Chrome refuses a folder | Sonnet |
-| 0.5.5 | 7 contrast; 12 type; 15's row height and fold area; 17 System theme and Sunset renamed; reduced motion and forced colors from 19 | Sonnet |
+| 0.5.5 | 7 contrast; 12 type, with a text-size setting; 15's row height and fold area; 17 System theme and Sunset renamed; reduced motion and forced colors from 19; the policy's style allowance dropped; `translate="no"` on the file's name, the facts and the counts | Sonnet |
 | 0.5.6 | P5 (S3) and P6 (H1): the original never written, every save a dated copy; absorbs 1 and 6 | Opus |
 | 0.6 | 5 the first screen with the sample; 8 drawers; 13 Viewing and Editing; 21 | Opus |
 | alongside | 10 the README; 11 the strings; 16 the email | the owner writes, Sonnet applies |
