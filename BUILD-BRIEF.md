@@ -1549,6 +1549,10 @@ His findings, in his words, and what each became.
 | 11 | "I made a change to the FAM header; I would want a red squiggly line underneath... I also didn't see any warnings/issues appear in the left sidebar." | section 18, with the tag table |
 | 12 | "Saving RAW.ged into Downloads, undoing changes, and Saving RAW.ged into Downloads gave me the typical Mac replace or cancel option; I didn't see any issues or errors pop up within the software itself." | as designed: a file in Downloads under another name is not the original, so nothing refuses it and the computer's Replace prompt is the guard; step 33 now says to pick the original file itself |
 
+0.5.6 was tagged on 2026-10-09 after his walk and the fixes above (202 tests; the walk at 163
+steps). The publish workflow's release job ran for the first time and made the release on its own,
+its notes' hashes matching the files the site serves.
+
 ### P10: editing on by default (2026-10-09)
 
 His words: "I think I want the central pane to be by default in 'Edit Mode', like a text editor
