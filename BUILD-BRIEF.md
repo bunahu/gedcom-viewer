@@ -1337,7 +1337,7 @@ What the review could not see from outside:
 
 - Item 1, ask for the file rather than the folder, meets I6: the backup and the log are written
   through the folder handle (10.2 steps 7 and 8, 10.5). A grant on the file alone can write, read
-  back and check the disk, but has no folder to put a backup in. A ruling is open, below.
+  back and check the disk, but has no folder to put a backup in. Answered below: P5 replaces the write itself.
 - Item 3 has two triggers, not one: the focus, and the caret placed at the end of the value, each
   of which scrolls the grid sideways. The fix keeps `scrollLeft` across both.
 - Item 5's sample file cannot be fetched (I5; `connect-src 'none'`; the No-network gate). It ships
@@ -1360,7 +1360,7 @@ The order, as releases, one tag per push, each tagged at the owner's word after 
 |---|---|---|
 | 0.5.4 | 3 the scroll; 2 the title, with a setting; 9 spell check off and `translate="no"`; 4 the privacy wording (P4, P5) and the half-sentence; the README's local path; from 1, a plain notice when Chrome refuses a folder | Sonnet |
 | 0.5.5 | 7 contrast; 12 type; 15's row height and fold area; 17 System theme and Sunset renamed; reduced motion and forced colors from 19 | Sonnet |
-| 0.5.6 | 1 and 6, what Save means in each browser | Opus, after the ruling on I6 |
+| 0.5.6 | P5 (S3) and P6 (H1): the original never written, every save a dated copy; absorbs 1 and 6 | Opus |
 | 0.6 | 5 the first screen with the sample; 8 drawers; 13 Viewing and Editing; 21 | Opus |
 | alongside | 10 the README; 11 the strings; 16 the email | the owner writes, Sonnet applies |
 | later | 14 tag meanings; Move up and down from 15; treegrid and h1 from 19; 20 hashes; 18 the default look | — |
@@ -1368,5 +1368,22 @@ The order, as releases, one tag per push, each tagged at the owner's word after 
 Rulings (2026-10-08): the sample file is baked in; the dated copy names are kept; the
 Co-Authored-By trailers are kept, and the README's disclosure section will say so; Parchment stays
 the default for now, to be looked at again after the contrast work; the email will be a dedicated
-address, to come. Open: the backup when there is no folder (item 1), and a release per tag (item
-20).
+address, to come; a GitHub release per tag, with the SHA-256 of each page file in its notes: yes
+(item 20, when it is built).
+
+Saving, the same day: item 1 was framed against the save in place, which P5 (above, 2026-09-30)
+already replaces: the original is never written, every save a dated copy. Under P5 there is no
+backup, so I6 falls away with the write it guarded, and no folder is asked for. He picked **S3**:
+Save opens the computer's Save dialog with the dated name; the log is offered after, as a second
+dialog, and may be skipped; in a browser without the pickers the same two are downloads. Items 1
+and 6 of the punch list are absorbed by it; 0.5.6 builds P5 (S3) and P6 (H1), and rewrites
+section 10. Whether the log stays at all is his to say; it is kept, opt-in, until he says cut.
+
+The policy's `'unsafe-inline'` for styles: dropped in 0.5.5 after an experiment, at his word. A
+`_META` whose XML does not parse gets nothing drawn, so Chrome's refusal of the style on its own
+error block costs one line in the console; the page then writes a line of its own beside it,
+saying what happened and that nothing was sent. `tests/page.test.js` loses its one allowance,
+and `privacy.html` the half-sentence of 0.5.4.
+
+0.5.4 was built the same day (Sonnet; 155 tests; the walk's parts rest, editing, edges, third,
+scroll, drags, save and copy at 118 steps), walked by him, and tagged.
