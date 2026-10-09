@@ -1414,10 +1414,25 @@ The policy's `'unsafe-inline'` for styles: dropped in 0.5.5 after an experiment,
 `_META` whose XML does not parse gets nothing drawn, so Chrome's refusal of the style on its own
 error block costs one line in the console; the page then writes a line of its own beside it,
 saying what happened and that nothing was sent. `tests/page.test.js` loses its one allowance,
-and `privacy.html` the half-sentence of 0.5.4.
+and `privacy.html` the half-sentence of 0.5.4. Built: the experiment showed a second source of
+refusals, the style attributes and elements in the HTML of a `_META` that does parse (2 on the walk's
+sample, 322 on a story of forty styled spans), so `core.js` gained `stripStyles`, which takes them out
+of the text before the browser reads it; the allowlist dropped them anyway, and the drawn result
+hashes the same. 0 refusals after; the console line for a broken `_META` stays.
 
 0.5.4 was built the same day (Sonnet; 155 tests; the walk's parts rest, editing, edges, third,
 scroll, drags, save and copy at 118 steps), walked by him, and tagged.
+
+0.5.5 was built the same day (Sonnet; 183 tests, among them `tests/contrast.test.js`, which measures
+the palette's pairs and fails on the old values; the walk at 139 steps): every pair in the review's
+table at its ratio in all three looks, three of the review's suggested values corrected by
+measurement; 16, 15 and 14 px type and 24 px rows, with Text (Normal or Larger); System as the theme
+for a new visitor, and Sunset renamed Dusk at the owner's pick; reduced motion and forced colours;
+`'unsafe-inline'` out of the policy; `translate="no"` on the file's name, the facts and the counts;
+feedback@gedcom-viewer.net beside the issue route (item 16); the empty screen's line as he wrote it.
+Left measured and open: the gold wash behind a selected tab or line leaves text there under 4.5 to 1
+in Dusk and Dark, and the sepia of links and the title under it in all three; a lighter wash changes
+the look, so it waits for item 18. Walked by him, and tagged.
 
 ### P5 built as 0.5.6: saving rewritten (2026-10-08)
 
