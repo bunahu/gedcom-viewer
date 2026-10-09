@@ -394,15 +394,14 @@ describe('the places: spot checks', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// The written files of fixtures/synthetic/ are read here with a few lines of their own, so that this
-// test needs nothing but the table. The shape of a line is the brief's 6.3.
+// Files are read here with a few lines of their own, so that this test needs nothing but the table.
+// The shape of a line is the brief's 6.3.
 const SHAPE = /^(0|[1-9][0-9]*) (?:(@[^@ ]+@) )?([A-Za-z0-9_]+)(?: (.*))?$/s;
-const fixtureFiles = () => fs.readdirSync(SYNTHETIC).filter((name) => /\.ged$/i.test(name)).sort();
 
-// The lines of a file that have the shape of a line: level and tag, and the tag of the line they
-// belong to, which is the nearest line above with one level less (none when a level is skipped).
-function linesOf(name) {
-  const text = fs.readFileSync(path.join(SYNTHETIC, name)).toString('latin1');   // one character a byte: no byte is invalid
+// The lines of a text that have the shape of a line: level, tag and value, and the tag of the line
+// each belongs to, which is the nearest line above with one level less ('record' at level 0, and
+// none when a level is skipped).
+function linesOf(text, file) {
   const out = [];
   const stack = [];
   text.split(/\r\n|\n\r|\n|\r/).forEach((raw, i) => {
@@ -410,11 +409,26 @@ function linesOf(name) {
     if (!m) return;
     const level = Number(m[1]);
     stack.length = Math.min(stack.length, level);
-    out.push({ file: name, number: i + 1, level, tag: m[3], parent: level === 0 ? 'record' : stack[level - 1] });
+    out.push({ file, number: i + 1, level, tag: m[3], value: m[4], parent: level === 0 ? 'record' : stack[level - 1] });
     stack[level] = m[3];
   });
   return out;
 }
+
+// The version a file says it is: 7.0 if its GEDC.VERS begins with 7, and 5.5.1 for the rest.
+function versionOf(lines) {
+  const vers = lines.find((l) => l.tag === 'VERS' && l.parent === 'GEDC');
+  return vers && /^7(\.|$)/.test(vers.value || '') ? V7 : V551;
+}
+
+// The lines that the table can judge: the line has a parent, and neither is an extension.
+const judgeable = (lines) => lines.filter((l) => l.parent !== undefined && !l.tag.startsWith('_') && !l.parent.startsWith('_'));
+const notAllowed = (lines, version) => lines.filter((l) => allowedUnder(l.tag, l.parent, version) !== true)
+  .map((l) => `${l.file}:${l.number} ${l.tag} under ${l.parent}`);
+
+// ---------------------------------------------------------------------------------------------
+const fixtureFiles = () => fs.readdirSync(SYNTHETIC).filter((name) => /\.ged$/i.test(name)).sort();
+const readFixture = (name) => linesOf(fs.readFileSync(path.join(SYNTHETIC, name)).toString('latin1'), name);   // one character a byte: no byte is invalid
 
 // A file that is written to be flagged by a later check may use a tag the standards do not have
 // (FAM9), or put a standard tag where it does not belong. Name such tags and files here, so that
@@ -423,10 +437,11 @@ const MADE_UP_ON_PURPOSE = new Set([]);          // tags
 const PLACED_WRONG_ON_PURPOSE = new Set([]);     // file names
 
 describe('the written files of fixtures/synthetic/', () => {
-  const all = fixtureFiles().flatMap(linesOf);
+  const files = fixtureFiles().map((name) => ({ name, lines: readFixture(name) }));
+  const all = files.flatMap((f) => f.lines);
 
   it('every standard tag they use is in the table, and the extension tags they use are not', () => {
-    assert.ok(fixtureFiles().length >= 17, 'the files of the folder');
+    assert.ok(files.length >= 17, 'the files of the folder');
     const used = new Set(all.map((l) => l.tag));
     const extensions = [...used].filter((t) => t.startsWith('_'));
     const standard = [...used].filter((t) => !t.startsWith('_') && !MADE_UP_ON_PURPOSE.has(t));
@@ -440,11 +455,380 @@ describe('the written files of fixtures/synthetic/', () => {
     }
   });
 
-  it('every line whose parent is there sits where 5.5.1 allows it (the files say VERS 5.5.1), bar the lines the files are written to break', () => {
-    const judged = all.filter((l) => l.parent !== undefined && !l.tag.startsWith('_') && !l.parent.startsWith('_')
-      && !MADE_UP_ON_PURPOSE.has(l.tag) && !MADE_UP_ON_PURPOSE.has(l.parent) && !PLACED_WRONG_ON_PURPOSE.has(l.file));
-    assert.ok(judged.length > 100, `${judged.length} lines judged`);
-    const out = judged.filter((l) => allowedUnder(l.tag, l.parent, V551) !== true);
-    assert.deepEqual(out.map((l) => `${l.file}:${l.number} ${l.tag} under ${l.parent}`), []);
+  it('every line whose parent is there sits where its file\'s own version allows it (5.5.1 unless GEDC.VERS says 7), bar the lines the files are written to break', () => {
+    let judged = 0;
+    const out = [];
+    for (const f of files) {
+      if (PLACED_WRONG_ON_PURPOSE.has(f.name)) continue;
+      const lines = judgeable(f.lines).filter((l) => !MADE_UP_ON_PURPOSE.has(l.tag) && !MADE_UP_ON_PURPOSE.has(l.parent));
+      judged += lines.length;
+      out.push(...notAllowed(lines, versionOf(f.lines)));
+    }
+    assert.ok(judged > 100, `${judged} lines judged`);
+    assert.deepEqual(out, []);
+  });
+
+  it('say VERS 5.5.1, every one of them, so the table they are judged by is the 5.5.1 one', () => {
+    for (const f of files) assert.equal(versionOf(f.lines), V551, f.name);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// A small 7.0 file written for the table (the files above are all 5.5.1). Fictional, and wrong in
+// no way a 7.0 reader would mind: each line sits where the 7.0 text puts it. It uses 7.0 tags that
+// 5.5.1 has not (SNOTE, CREA, EXID, UID, NO, SDATE, PHRASE, TRAN, MIME, CROP, SCHMA and the like).
+const FILE_7 = `0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SCHMA
+2 TAG _MEMBER member
+1 SOUR Fixture
+2 VERS 1
+2 NAME Fixture Maker
+2 CORP Fixture Company
+3 ADDR 1 Fixture Street
+3 PHON 555 0100
+3 EMAIL maker@example.test
+3 WWW example.test
+2 DATA Fixture Data
+3 DATE 1 JAN 2020
+4 TIME 10:00:00Z
+3 COPR Fixture
+1 DEST Fixture
+1 DATE 1 JAN 2020
+2 TIME 10:00:00Z
+1 SUBM @U1@
+1 COPR Fixture
+1 LANG en
+1 PLAC
+2 FORM City, Country
+1 NOTE about the file
+2 MIME text/plain
+2 LANG en
+2 TRAN sur le fichier
+3 LANG fr
+0 @U1@ SUBM
+1 NAME Jane Fixture
+1 ADDR 1 Fixture Street
+2 CONT Fixtureville
+2 CITY Fixtureville
+1 PHON 555 0100
+1 LANG en
+1 CHAN
+2 DATE 1 JAN 2020
+0 @N1@ SNOTE shared
+1 MIME text/plain
+1 TRAN partage
+2 LANG fr
+1 UID 11111111-1111-4111-8111-111111111111
+0 @I1@ INDI
+1 RESN PRIVACY
+1 NAME Jane /Fixture/
+2 TYPE BIRTH
+3 PHRASE as at birth
+2 NPFX Dr.
+2 GIVN Jane
+2 NICK Janey
+2 SPFX de
+2 SURN Fixture
+2 NSFX Jr.
+2 TRAN Jane /Fixture/
+3 LANG en
+3 GIVN Jane
+2 NOTE about the name
+2 SNOTE @N1@
+2 SOUR @S1@
+3 PAGE 1
+1 SEX F
+1 OCCU baker
+2 TYPE trade
+2 DATE FROM 1900 TO 1910
+2 AGE 30y
+3 PHRASE thirty
+2 PLAC Fixtureville, Fixtureland
+3 FORM City, Country
+3 LANG en
+3 TRAN Fixtureville, Fixtureland
+4 LANG fr
+3 MAP
+4 LATI N18.150944
+4 LONG E168.150944
+3 EXID 123
+4 TYPE https://example.test/ids
+3 NOTE about the place
+2 ADDR 1 Fixture Street
+2 PHON 555 0100
+2 AGNC Fixture Bakery
+2 CAUS none
+2 RELI none
+2 RESN LOCKED
+2 SDATE 1900
+3 TIME 8:00
+3 PHRASE early
+2 ASSO @I2@
+3 ROLE FRIEND
+3 PHRASE a friend
+2 NOTE about the work
+2 SOUR @S1@
+2 OBJE @O1@
+3 CROP
+4 TOP 1
+4 LEFT 1
+4 HEIGHT 10
+4 WIDTH 10
+3 TITL a picture
+2 UID 22222222-2222-4222-8222-222222222222
+1 BIRT
+2 DATE 1 JAN 1900
+3 TIME 8:00
+3 PHRASE early
+2 FAMC @F1@
+2 SOUR @S1@
+3 PAGE 12
+3 DATA
+4 DATE 1 JAN 1900
+5 PHRASE the day
+4 TEXT the entry
+5 MIME text/plain
+5 LANG en
+3 EVEN BIRT
+4 PHRASE a birth
+4 ROLE CHIL
+5 PHRASE the child
+3 QUAY 3
+3 OBJE @O1@
+3 NOTE about the source
+1 ADOP
+2 FAMC @F1@
+3 ADOP BOTH
+4 PHRASE both
+1 NO MARR
+2 DATE TO 1900
+3 PHRASE up to then
+2 NOTE never
+2 SOUR @S1@
+1 BAPL
+2 DATE 1 JAN 1910
+2 TEMP Fixture Temple
+2 PLAC Fixtureville
+2 STAT COMPLETED
+3 DATE 1 JAN 2000
+4 TIME 9:00
+2 NOTE done
+2 SOUR @S1@
+1 INIL
+1 SLGC
+2 FAMC @F1@
+1 FACT skill
+2 TYPE skills
+1 NCHI 1
+1 RESI here
+1 FAMC @F1@
+2 PEDI BIRTH
+3 PHRASE by birth
+2 STAT PROVEN
+3 PHRASE proven
+2 NOTE about the link
+1 FAMS @F1@
+2 NOTE about the link
+1 SUBM @U1@
+1 ALIA @I2@
+2 PHRASE the same
+1 ANCI @U1@
+1 DESI @U1@
+1 REFN 1
+2 TYPE mine
+1 UID 33333333-3333-4333-8333-333333333333
+1 EXID 456
+2 TYPE https://example.test/ids
+1 NOTE about the person
+2 LANG en
+1 SNOTE @N1@
+1 SOUR @S1@
+1 OBJE @O1@
+1 CHAN
+2 DATE 1 JAN 2020
+3 TIME 10:00:00Z
+2 NOTE changed
+1 CREA
+2 DATE 1 JAN 2019
+0 @I2@ INDI
+1 NAME Joe /Fixture/
+1 BAPM Y
+1 BARM Y
+1 BASM Y
+1 BLES Y
+1 BURI Y
+1 CENS Y
+1 CHR Y
+1 CHRA Y
+1 CONF Y
+1 CREM Y
+1 DEAT Y
+1 EMIG Y
+1 FCOM Y
+1 GRAD Y
+1 IMMI Y
+1 NATU Y
+1 ORDN Y
+1 PROB Y
+1 RETI Y
+1 WILL Y
+1 EVEN a general event
+2 TYPE events
+1 CAST a caste
+1 DSCR tall
+1 EDUC school
+1 IDNO 1
+2 TYPE card
+1 NATI Fixtureland
+1 NMR 1
+1 PROP a house
+1 SSN 123
+1 TITL Duke
+1 CONL
+1 ENDL
+0 @F1@ FAM
+1 RESN PRIVACY
+1 NCHI 1
+2 TYPE counted
+1 RESI together
+1 FACT trait
+2 TYPE traits
+1 MARR
+2 TYPE civil
+2 HUSB
+3 AGE 30y
+4 PHRASE thirty
+2 WIFE
+3 AGE 25y
+2 DATE 1 JAN 1899
+2 PLAC Fixtureville
+1 NO DIV
+1 HUSB @I2@
+2 PHRASE the father
+1 WIFE @I1@
+1 CHIL @I1@
+2 PHRASE the child
+1 ASSO @I2@
+2 ROLE OTHER
+1 SUBM @U1@
+1 SLGS
+2 DATE 1 JAN 1930
+1 REFN 2
+1 UID 44444444-4444-4444-8444-444444444444
+1 EXID 789
+1 NOTE about the family
+1 SNOTE @N1@
+1 SOUR @S1@
+1 OBJE @O1@
+1 CHAN
+2 DATE 1 JAN 2020
+1 CREA
+2 DATE 1 JAN 2019
+0 @F2@ FAM
+1 ANUL Y
+1 CENS Y
+1 DIV Y
+1 DIVF Y
+1 ENGA Y
+1 MARB Y
+1 MARC Y
+1 MARL Y
+1 MARS Y
+1 EVEN a family event
+2 TYPE events
+0 @O1@ OBJE
+1 RESN CONFIDENTIAL
+1 FILE media/fixture.jpg
+2 FORM image/jpeg
+3 MEDI PHOTO
+4 PHRASE a print
+2 TITL a picture
+2 TRAN media/fixture.png
+3 FORM image/png
+1 REFN 3
+1 UID 55555555-5555-4555-8555-555555555555
+1 EXID 12
+1 NOTE about the picture
+1 SOUR @S1@
+1 CHAN
+2 DATE 1 JAN 2020
+1 CREA
+2 DATE 1 JAN 2019
+0 @R1@ REPO
+1 NAME Fixture Library
+1 ADDR 35 Fixture Street
+2 ADR1 35 Fixture Street
+2 ADR2 Fixtureville
+2 ADR3 Fixtureland
+2 CITY Fixtureville
+2 STAE FL
+2 POST 12345
+2 CTRY Fixtureland
+1 PHON 555 0101
+1 EMAIL library@example.test
+1 FAX 555 0102
+1 WWW library.example.test
+1 NOTE about the library
+1 REFN 4
+1 UID 66666666-6666-4666-8666-666666666666
+1 EXID 34
+1 CHAN
+2 DATE 1 JAN 2020
+1 CREA
+2 DATE 1 JAN 2019
+0 @S1@ SOUR
+1 DATA
+2 EVEN BIRT, DEAT
+3 DATE FROM 1800 TO 1900
+4 PHRASE the century
+3 PLAC Fixtureville
+2 AGNC Fixture Archive
+2 NOTE about the data
+1 AUTH Fixture Author
+1 TITL Fixture Records
+1 ABBR Records
+1 PUBL Fixtureville 1990
+1 TEXT the words
+2 MIME text/plain
+2 LANG en
+1 REPO @R1@
+2 NOTE about the shelf
+2 CALN 13B
+3 MEDI BOOK
+4 PHRASE a ledger
+1 REFN 5
+1 UID 77777777-7777-4777-8777-777777777777
+1 EXID 56
+1 NOTE about the source
+1 OBJE @O1@
+1 CHAN
+2 DATE 1 JAN 2020
+1 CREA
+2 DATE 1 JAN 2019
+0 TRLR
+`;
+
+describe('a 7.0 file written for the table', () => {
+  const lines = linesOf(FILE_7, 'FILE_7');
+  const used = new Set(lines.map((l) => l.tag));
+
+  it('says VERS 7.0, and every line sits where 7.0 allows it', () => {
+    assert.equal(versionOf(lines), V7);
+    const judged = judgeable(lines);
+    assert.ok(judged.length > 300, `${judged.length} lines judged`);   // a fixed floor, so that it cannot pass by judging nothing
+    assert.deepEqual(notAllowed(judged, V7), []);
+  });
+
+  it('uses every one of the 141 tags of 7.0 at least once, and no tag that 7.0 lacks', () => {
+    assert.deepEqual(definedBy(V7).filter((t) => !used.has(t)), [], 'tags of 7.0 that the file does not use');
+    assert.deepEqual([...used].filter((t) => !t.startsWith('_') && !definedBy(V7).includes(t)), [], 'tags 7.0 does not have');
+  });
+
+  it('is not a 5.5.1 file: judged as one, a good many of its lines are not allowed', () => {
+    const out = notAllowed(judgeable(lines), V551);
+    assert.ok(out.length >= 60, `${out.length} lines`);   // the 17 tags only 7.0 has, and the places that moved
+    assert.ok(out.some((line) => line.includes('SNOTE under record')));
   });
 });
