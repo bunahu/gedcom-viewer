@@ -385,7 +385,7 @@ the next change, and after every change is undone both go too, since there is no
 | 3 | Apply the change stamps (10.4) as one undo step | — |
 | 4 | Build the bytes; hash them | — |
 | 5 | Ask where: `showSaveFilePicker`, the dated name offered, opening at the original (`startIn` its handle), accepting `.ged` and `.gedcom` | Cancel: the stamps are taken back; "No copy was written." |
-| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's). Chrome empties the picked file before the page sees it (Chromium: create it, or truncate it when it exists), so the page reads the original whole just before the dialog, and when the picked file is the original and is now empty, writes those bytes back and reads them back | "That is the original. It is unchanged. Pick another name." The stamps are taken back; no copy is written; the put-back, when there was one, is silent. If the put-back fails: "That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.", said loudly, with the original offered as a download |
+| 6 | The chosen file must not be the original: `isSameEntry` against the original's handle (every file opened in a browser with the pickers has one: the picker's, or a dropped file's). Chrome empties the picked file before the page sees it (Chromium: create it, or truncate it when it exists), so the page reads the original whole just before the dialog, and when the picked file is the original and is now empty, writes those bytes back and reads them back | "That is the original. It is unchanged. Choose another name." (under the title Save failed) The stamps are taken back; no copy is written; the put-back, when there was one, is silent. If the put-back fails: "That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.", said loudly, with the original offered as a download |
 | 7 | Write the bytes; read them back; the hash equals step 4's | say so loudly and name the file; the original stands regardless |
 | 8 | The copy is the last copy: ● goes, Save turns off until the next change. The facts still name the original and its sha256 as opened; the page stays on the original | — |
 
@@ -487,13 +487,13 @@ the save is cancelled or fails (I8).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ▯ GEDCOM Viewer 0.5.2 (family.ged ▸) ● Edit Undo Redo Save Save a copy [Go to Line…] │
-│                                                                      Settings ▾  ▯          │
+│ GEDCOM Viewer   (family.ged ▸) ●                                      Save   Settings ▾  │
+│   (0.6.0: with no file, the name and Settings alone; the version at the foot of Settings)   │
 │ (a click on the name: GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com… · sha256) │
 ├─────────────────────────────────────────────────────────────────────────────────────────────┤
 │ People 2,345   Media 1,234   Families 1,098   Sources 765   _MTTAG 23   Repositories 7   …   │
 ├──────────────────┬─────────────────────────────────────────────────┬────────────────────────┤
-│ Records          │ ↑ Top  ← Back to 41,190              Collapse all │ 1 NAME            [copy] │
+│ Records        ▯ │ ↑ Top  ← Back to 41,190  Collapse all   [Go to Line…] Edit Undo Redo │ Line 41,202       ▯ │
 │ Checks      3    │  41,201    0 @I42@ INDI                         │ Jane /Fixture/         │
 │ Changes     2    │  41,202        1 NAME Jane /Fixture/            │                        │
 │ Search           │  41,203            2 GIVN Jane                  │ in @I42@ INDI          │
@@ -546,6 +546,16 @@ jumps to a hidden line opens the blocks around it. Display only (I4), and never 
 **Remembered between visits** (`localStorage`): indent on/off and width, theme, panel widths and
 whether each side frame is hidden, Bold surnames, the change-stamp checkbox, whether the file's
 facts show. Never a file's name, content or handle. Edit is on whenever a file opens (P10).
+
+0.6.0 (2026-10-09, from his walk of 0.6): the right frame's actions are three, **Add line under**,
+**Add line after** and **Delete line**, on one row under its title; Edit line went (Enter and a
+double-click edit), and Delete record went, Delete line on a record's first line doing what it did,
+with the preview of the pointers elsewhere and a question that names the record. The "in" line is
+a path: the record without its dates, then each line between it and the selected line, each a link
+that selects it; "Under it:" links to the first line under the selection, "and 3 more" after it. A
+tag clicked in Tags shows its lines in Search, with **← Back to Tags** at its head and Esc the same,
+and the Tags order is never changed by it. The version reads "Version 0.6.0", centred, at the foot
+of Settings, and carries three parts from now on.
 
 ---
 
@@ -921,7 +931,7 @@ is, beside the four files it loads.
 | 7 | ▾ on a `0 @I…@ INDI` line, then ▸; ← and → on a selected line; ⌥-click ▾ on a `0` line; Go to Line… a line inside a shut record | the record shuts and opens; ⌥ shuts every record; the record gone into opens |
 | 8 | Click the row **▾ INDI People …** between the types; again; ⌥-click it | every person shuts; opens; ⌥ shuts every type |
 | 8a | **Collapse all**, in the strip above the lines; then **Expand all** | every record and every type one row; then every block and every type open (3.5) |
-| 8b | The icon at the top bar's left end; the one at its right end; again each | the left bar eases shut, and the right frame; the same icons bring them back. Close the tab and open the page again with one hidden: still hidden (3.1) |
+| 8b | The icon at the right end of the left bar's tabs; the one at the right end of the right frame's header; again each | the left bar shrinks to a strip holding its icon, and the right frame the same; the same icons bring them back at their widths. Close the tab and open the page again with one shrunk: still shrunk (3.1) |
 | 9 | Drag the scrollbar to the end and back | no blank screen on the way |
 
 **B. Find and move**
@@ -989,7 +999,7 @@ The box remembers how it was left: tick it again before a save that should stamp
 
 | # | Do | Expect |
 |---|---|---|
-| 33 | Edit any line, then **Save**; in the computer's dialog go to `local/walk` and pick the original file itself, then confirm Replace | refused: "That is the original. It is unchanged. Pick another name." No copy; `shasum` of the original unchanged; its modified time is new, since Chrome emptied it and the page put it back |
+| 33 | Edit any line, then **Save**; in the computer's dialog go to `local/walk` and pick the original file itself, then confirm Replace | refused: "That is the original. It is unchanged. Choose another name." (under the title Save failed) No copy; `shasum` of the original unchanged; its modified time is new, since Chrome emptied it and the page put it back |
 
 **I. What must refuse, and a clean fix**
 
@@ -1011,7 +1021,7 @@ The box remembers how it was left: tick it again before a save that should stamp
 | # | Do | Expect |
 |---|---|---|
 | 39 | **Theme**: light → sunset → dark | each reads well |
-| 40 | Close the tab; open the page again | Indent, theme, panel widths and whether a side frame is hidden, Bold surnames, and the facts' open or shut as left; Edit off |
+| 40 | Close the tab; open the page again | Indent, theme, panel widths and whether a side frame is hidden, Bold surnames, and the facts' open or shut as left; Edit on, as always when a file opens (P10) |
 
 `local/walk/` then holds the copy, a dated copy, the backups and the log — all real data, all
 ignored by git; delete the folder when the walk is over. He says it is done, and it is v1.0.
@@ -1647,3 +1657,23 @@ original (10.2 step 6). After a download, the same, with no handle. Across the m
 knowing which stamp lines and which header line it wrote this visit, so a later save sets them anew
 rather than doubling them (10.4, 10.6). 10.2 step 8 and the walk's steps 21 to 24 are rewritten with
 the build; section 18's note on staying on the original is closed by it. Built in 0.6.1.
+
+### 0.6.0, the owner's walk (2026-10-09)
+
+| # | His words | Became |
+|---|---|---|
+| 1 | "It should say 'Version 0.6.0' not 'GEDCOM Viewer 0.6'. And center it instead of align left." | built; versions carry three parts from now on, and the tag is v0.6.0 |
+| 2 | "Agree with rec on Light look." | pointers in Light `#1e4bc9`, the selected line's wash while editing in Light 20%; every pair of the editing look held at 4.5 to 1 in all three looks by `tests/contrast.test.js` |
+| 3 | "The title is there but it's overshadowed by the boxes (which are also messy)... Remove the Edit line button... Rename 'Add inside'... 'Add after'... Delete Record is confusing... I'd be more interested in being able to move 'up' to the level above it... or 'down'... drop the year from the INDI person on 'in...'." | section 11's 0.6.0 paragraph; built |
+| 4 | "#6: I made it about as small as I could." (the frames overlapping the strip at his narrowest window) | not of 0.6: the narrow-width gap the drawers of 0.6.1 close |
+| 5 | "I don't like that when I click on a tag (like ADOP), it moves me from Tags to Search, and I can't just press back." | ← Back to Tags, and Esc; built |
+| 6 | "I don't notice the darker Light look much at all; this may just get revisited later." | logged with item 18, the look pass |
+
+Left by the build, for his word later: years still show on a record's own first line in the right
+frame and in its "Pointed at by" rows; on the selected line while editing in Dusk and Dark, muted
+text, pointers and errors sit under 4.5 to 1 (the gold wash, deferred with item 18); the README's
+palette table does not yet list `--pointer-color` and `--editing-selected`, for the README pass.
+
+0.6.0 was tagged on 2026-10-09 after his walk and the fixes above (270 tests, the tag table's 37
+among them; the walk at 189 steps). Next: 0.6.1, the first screen with the sample, the drawers and
+P11; then the tag table wired in, with the plain meanings and the check for a tag out of place.
