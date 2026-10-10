@@ -582,6 +582,7 @@ stored.
 | `core.js` | bytes → encoding → lines → shape → records and pointers → checks → counts → labels; the document, the edits, undo, the net change, the stamps, the bytes of a save | **no** |
 | `save.js` | the dated name, the save of 10.2 over the handle the dialog gives, the read-back, the refusal of every file of the visit, the move onto the copy, the Changes text (10.3); the bytes a browser with no pickers downloads | **no** |
 | `sample.js` | the sample family, George Washington's, as found: its name and its text in one global, and no code | **no** |
+| `tags.js` | every tag of GEDCOM 5.5.1, 5.5.5 and 7.0 with a plain meaning and the parents each may sit under, the rule for a tag in each version, 29 well-known custom tags with sourced meanings, and the version mapper; loaded before `core.js`, which uses it for E10, N8 and N9; its 7.0 text is Apache 2.0, with the notice in its header | **no** |
 | `ui.js` | the grid, panels, dialogs, keys; the only file that knows the pickers exist | yes |
 | `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script (0.5.2) | — |
 | `favicon.svg` · `favicon.ico` · `apple-touch-icon.png` | the icon (0.5.2) | — |
@@ -596,7 +597,7 @@ stored.
 | `tools/check-real.js` | runs `core.js` over a file given by path and prints the probe's JSON shape — counts only | — |
 | `tools/compare.js` | runs both over a list of files and reports every number that differs | — |
 | `tools/walk.js` | section 15's read-only walk on each file given, then the rest of the page on a fictional file it writes; a real file gets counts, tags, ids and line numbers only, and no picture | drives it, from outside |
-| `tools/chrome.js` | headless Chrome over its DevTools protocol, at the page's `file://` address, for `walk.js` | — |
+| `tools/chrome.js` | headless Chrome over its DevTools protocol, at the page's `file://` address, for `walk.js`; it sends keys as a keyboard does, with no native key code (2026-10-10), and `tools/check-keys.js` proves it | — |
 | `local/` | **git-ignored**; the place for copies of real files | — |
 | `README.md` | how to open it, how to run the tests, how to change the look | — |
 | `.gitignore` | `local/` · `fixtures/corpora/*/` · `gedcom-viewer-history/` (and `gedview-history/`, its name before R7) · `*.edits.log` · `*.bak` · `.DS_Store` | — |
@@ -693,7 +694,7 @@ findings it expects, by code and line number.
 | Save, fake handles | the order of 10.2: the original's own handle refused at step 6 and nothing written; a copy that reads back wrong said loudly, the original untouched; the stamps taken back on a cancel; the dated name, and a stem's old timestamp replaced; the Changes text of 10.3 |
 | The original picked in the Save dialog | step 6 refuses, and puts the file back when the browser emptied it (10.2) |
 | Names | the dated name of 10.1, with `.GED`, `.cleaned.ged`, and a stem's old timestamp replaced |
-| No network | the six files of the page (`index.html`, `style.css`, `core.js`, `save.js`, `sample.js`, `ui.js`) hold no `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `import(`, `@import`, `url(http`, `http://` or `https://` — no exceptions; an inline SVG in HTML needs no namespace; `index.html` and `privacy.html` each carry a content-security policy — `default-src 'none'`, `connect-src 'none'`, scripts the page's own alone; styles may be inline in `index.html`, since Chrome styles its own XML parse-error block inline in the inert document a malformed `_META` is read in, and a style can reach nothing outside the page — ahead of anything they load, which the browser enforces and the test reads (0.5.2) |
+| No network | the seven files of the page (`index.html`, `style.css`, `core.js`, `save.js`, `sample.js`, `tags.js`, `ui.js`) hold no `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `import(`, `@import`, `url(http`, `http://` or `https://` — no exceptions; an inline SVG in HTML needs no namespace; `index.html` and `privacy.html` each carry a content-security policy — `default-src 'none'`, `connect-src 'none'`, scripts the page's own alone; styles may be inline in `index.html`, since Chrome styles its own XML parse-error block inline in the inert document a malformed `_META` is read in, and a style can reach nothing outside the page — ahead of anything they load, which the browser enforces and the test reads (0.5.2) |
 
 ### Gates — all of them, before a phase is called done
 
@@ -863,7 +864,7 @@ Phases 1 and 2 are built and pass every gate: `b6d1cb1` (phase 1), `bb21c71` (ph
 | Node 24 reads `node --test tests/` as one file named `tests` | the tests run as `node --test tests/*.test.js` (section 14) |
 | The Write and Edit tools turn a four-digit Unicode escape (a backslash, `u`, four hex digits) into the raw character. A raw U+2028 or U+2029 ends a JavaScript regular expression, and the file will not parse | write such escapes as `\u{…}` (a regular expression then needs the `u` flag), or build the character with `String.fromCharCode`; after writing, scan for raw U+2028, U+2029, U+0085 and U+FFFD, and run `node --check` |
 | The Claude app's browser pane ran no page tools on a local file outside the session's project folder | `tools/walk.js` walks the page in headless Chrome, at its own `file://` address |
-| In headless Chrome, a press on the scrollbar needs a hover before it and a held button while it drags; on macOS a synthetic ⌘A goes as the `selectAll` command; a list shown a moment ago is laid out at the next frame | all three are handled in `tools/chrome.js` and `tools/walk.js` |
+| In headless Chrome, a press on the scrollbar needs a hover before it and a held button while it drags; on macOS a synthetic ⌘A selects nothing, so a box is cleared with the `selectAll` command; a list shown a moment ago is laid out at the next frame | all three are handled in `tools/chrome.js` and `tools/walk.js` |
 | No script can click the folder picker or a permission prompt (section 4) | `tools/walk.js` has no editing walk yet; those steps of the editing walk are the owner's |
 
 ### Session 2's prompt
@@ -1631,7 +1632,7 @@ file.
 (https://github.com/D-Jeffrey/gedcom-samples, `washington/washington.ged`): 529 people and 114
 families, 1391 to 1799, GEDCOM 5.5, ASCII, 9190 lines, 139,870 bytes, sha256 `f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff`; written by
 FamilyOrigins, no author named, so the collection's rule puts it in the public domain (CC0 1.0). The
-page's reader finds nothing wrong with it, so Checks reads empty on it (N6 keeps quiet on an all-ASCII file whatever its header says, since 0.6.1), and it ships exactly as found:
+page's reader finds no error in it (N6 keeps quiet on an all-ASCII file whatever its header says, since 0.6.1); since 0.6.2 Checks reads 0 errors and 75 notes on it, one for each `SLGC` its exporter wrote under a `CHIL`, which 5.5.1 does not allow, and he ruled on 2026-10-10 that they stay: a real export with a real quirk is what the checks are for. It ships exactly as found:
 nothing planted, nothing cut. It is baked into a page script, `sample.js`, holding the file's text
 and its name, loaded like the others and named in `publish.yml` and `tests/page.test.js` (it makes
 no request and holds no code that could). **Try a sample family** opens it as if it had been
@@ -1758,7 +1759,7 @@ the next stamp; ⌘S with nothing to save says which file holds the lines; a shu
 alone at the strip's end, an open one lies over that end of the strip. From his open ends: N6 keeps
 quiet on an all-ASCII file, so the sample's Checks reads empty; the Changes text's second line reads
 `from <name> sha256 …`, true on the first file and on a copy alike. Left for later: the walk's own
-tooling (`tools/chrome.js`) sends Windows key codes that macOS reads as other keys, which the walk
+tooling (`tools/chrome.js`) sent Windows key codes that macOS read as other keys (fixed 2026-10-10, below), which the walk
 works around, proposed as a card of its own; the time the Save dialog takes on a large file now
 that every file of the visit is read first, his walk to say.
 
@@ -1783,3 +1784,33 @@ a 5.5.5 tag; 5.5.1 defines it"), N8 for a place that version does not allow, N9 
 header's note are written as the file's own version has them (10.4, 10.6), whatever is judged by.
 Not in it: changing the file's declared version, or rewriting lines for the newer standard; those
 are hand edits the findings point at. Built after 0.6.2, by Sonnet, from this entry and P12.
+
+### 0.6.2 built and tagged (2026-10-10)
+
+Built by Sonnet from P12 as picked, walked by him and tagged the same day (379 tests; the walk at
+248 steps and a `tags` part of 22). `tags.js` is loaded before `core.js`, named in `publish.yml`
+and the page tests; `privacy.html` says seven files. E10 **Malformed: not a GEDCOM tag** (an
+error), N8 **Out of place** (a note naming the tag and its parent) and N9 **Extension not declared
+in the header** (a note, 7.0 only) run with the other checks and again on every edit, within
+section 16's budgets: on a made-up file of 300,000 lines the whole read went from 135 to 144 ms and
+an edit's re-check from 79 to 91 ms. E10's words take three forms: "FAM9 is not a GEDCOM tag",
+"SNOTE is not a tag of GEDCOM 5.5.1" for a tag only another version has, and "_PLAC is not a custom
+tag that GEDCOM 5.5.5 allows". A line under a malformed, custom or undeclared parent is not judged,
+so one slip is one finding; N9 is said on every undeclared tag. A wavy line under the tag, red for
+E10 and gold for N8 and N9, with the finding in the tag's hover text; the meaning under the
+selected line's tag in the right frame only (M3): a standard tag's line, a known custom tag's with
+its programs, "A custom tag." for an unknown one, the E10 words for a malformed one. A title in
+Checks longer than its row goes onto a second line, so every title shows whole. His one pick in
+the walk: the sample's 75 notes stay. Three fixtures carry the checks: `e10-n8-tags.ged`,
+`n9-undeclared.ged` (7.0) and `e10-555-afn.ged` (5.5.5). Left for 0.6.3: `malformedWords` is where
+"5.5.1 defines it" goes.
+
+The walk's driver was fixed the same day, on a branch merged into main before this tag: Chrome
+read the Windows key codes the driver sent as Mac key codes, and any native code at all made
+headless Chrome hand a key the page did not take back to the page without end, which was the hang
+behind the entries above. The driver now sends keys as a keyboard does, with no native code, and
+`tools/check-keys.js` reads six cases back from a page before and after. The walk passes as before
+without its retry; the workarounds the fix made unnecessary are listed in the driver session's
+notes (the retry in `inChrome`, the drawers' and drags' orderings), for a cleanup after this
+release; the click on Save for the second save stays, since that one is the dialog's close event,
+not a key.
