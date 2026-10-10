@@ -357,7 +357,8 @@ describe('the page', () => {
     assert.deepEqual(calls, ['factory'], 'nothing is called but the wrapper that sets the global');
     const m = core.read(new Uint8Array(Buffer.from(sample.text, 'utf8')));
     assert.deepEqual(core.recordCounts(m), [['INDI', 529], ['FAM', 114]]);
-    assert.deepEqual([m.findings.errors, m.findings.notes, m.findings.byCode.N6.length], [0, 1, 1], 'no error; one note, N6, for its header\'s CHAR ANSI over ASCII bytes');
+    assert.deepEqual([m.findings.errors, m.findings.notes], [0, 0], 'nothing found: its header says CHAR ANSI, and its bytes are all ASCII, so even N6 has nothing to note');
+    assert.equal(m.encodingLabel, 'ANSI');
   });
 
   it('the story\'s styles are stripped from its HTML, by core.js, right before the page reads it, so a _META that parses draws no refusal; and the What happened label says who can see what', () => {

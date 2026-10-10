@@ -164,7 +164,7 @@ describe('a record, and a section, moved whole', () => {
     assert.equal(runs[0].record, null);
     assert.equal(save.movedWords(runs[0]), 'section FAM · 2 records · 10 lines');
     assert.deepEqual(core.stampTargets(doc), []);
-    const text = save.changesText({ when: AT, file: 'Fixture_Family.ged', original: { sha256: 'a', bytes: 1, lines: 37 }, runs }).split('\n');
+    const text = save.changesText({ when: AT, file: 'Fixture_Family.ged', from: { sha256: 'a', bytes: 1, lines: 37 }, runs }).split('\n');
     assert.deepEqual(text.slice(2), ['moved    27-36 -> 8-17  (section FAM, 2 records, 10 lines)', '']);
     sameAsFreshRead(doc);
     core.undo(doc);

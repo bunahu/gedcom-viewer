@@ -1547,7 +1547,7 @@ async function saveWithDialog(page) {
   await page.waitFor("typeof window.__copied === 'string' && document.getElementById('changes-copy').classList.contains('is-done')");
   const pasted = (await page.ev('window.__copied')).split('\n');
   check(new RegExp(`^GEDCOM Viewer {2}changes to ${copyName.replace(/\./g, '\\.')} {2}as of \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d[+-]\\d\\d:\\d\\d$`).test(pasted[0])
-    && pasted[1] === `original  sha256 ${copySha}  ${copyBytes.length} bytes  18 lines` && pasted.length === 3 && pasted[2] === '',
+    && pasted[1] === `from  ${copyName}  sha256 ${copySha}  ${copyBytes.length} bytes  18 lines` && pasted.length === 3 && pasted[2] === '',
   `the Changes tab's copy button: the copy's name and sha256, and nothing changed since it ("${pasted[0].slice(0, 52)}…")`);
 
   // 24: Undo once: the header's date and the stamp, taken out, are changes from the copy, struck through where they were, and ● is on;
@@ -2264,7 +2264,7 @@ async function theFirstScreen(page, shots) {
   check(opened.save === 'Download a copy (off)' && !opened.leave, `it has no handle, so in this Chrome, which has the Save dialog, its button reads "${opened.save}"`);
   check(['GEDCOM 5.5', 'ANSI', 'exported 12 MAR 1997 by FamilyOrigins 5.0', '139.9 KB', '9,190 lines'].every((x) => facts.text.includes(x)) && facts.sha === SAMPLE_SHA256,
     `its facts: GEDCOM 5.5, ANSI, exported 12 MAR 1997 by FamilyOrigins 5.0, 139.9 KB, 9,190 lines, sha256 ${facts.sha.slice(0, 12)}…, the file as found`);
-  check(/^0 errors \S 1 note$/.test(opened.checks) && JSON.stringify(heads) === '["N6"]', `Checks: ${opened.checks}, N6 alone, for its header's CHAR ANSI over bytes all ASCII`);
+  check(/^0 errors \S 0 notes$/.test(opened.checks) && heads.length === 0, `Checks: ${opened.checks}; its header says CHAR ANSI, and with every byte ASCII there is nothing to note`);
   check(fetched.length === 0, `nothing was asked of the network or the disk to open it (${fetched.length} requests since the click): it is part of the page`);
 }
 
@@ -2396,22 +2396,10 @@ async function theDrawers(page, shots) {
   await page.click("document.getElementById('hide-left')");
   await page.click("document.getElementById('hide-right')");
   const oneAtATime = await page.ev("document.getElementById('work').className");
-  await page.click("document.getElementById('hide-right')");          // shut by its icon: one synthetic Escape a part is all this Chrome takes well
-  await page.click("document.getElementById('hide-left')");
-  await page.click("document.querySelector('.tab[data-panel=checks]')");
-  await page.waitFor(LAID_OUT('checks-list'));
-  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
-  const meaning = await page.ev("({ cls: document.getElementById('work').className, help: (document.querySelector('#detail .help-code') || {}).textContent || null })");
-  await page.click("document.getElementById('hide-right')");
-  await page.click("[...document.querySelectorAll('#counts .count-item')].find((b) => b.title === 'FAM')");
-  const count = await page.ev("({ cls: document.getElementById('work').className, chip: document.getElementById('records-type').textContent })");
-  await page.click("document.getElementById('hide-left')");
   check(oneAtATime === 'work right-drawer left-drawer right-open', 'one drawer at a time: the right icon, with the left drawer open, shuts it and opens the right one');
-  check(meaning.cls === 'work right-drawer left-drawer right-open' && meaning.help === 'N6', 'a check\'s title clicked in the left drawer opens the right one with what it means (N6)');
-  check(count.cls === 'work right-drawer left-drawer left-open' && count.chip === 'Families ×', `a figure of the counts bar opens the left drawer at Records, filtered (${count.chip})`);
 
-  // a file opened shuts a drawer, whatever is stored, and stores nothing
-  await page.click("document.getElementById('hide-right')");
+  // a file opened shuts a drawer, whatever is stored, and stores nothing: a made-up file, whose one
+  // record nothing points at (N3), for the step after
   const beforeDrop = await page.ev("document.getElementById('work').className");
   await page.ev(`(() => {
     const dt = new DataTransfer();
@@ -2423,6 +2411,19 @@ async function theDrawers(page, shots) {
   const afterDrop = await now();
   check(beforeDrop === 'work right-drawer left-drawer right-open' && afterDrop.cls === 'work right-drawer left-drawer' && afterDrop.stored === ',,,',
     'a file opened with a drawer open finds it shut; nothing of the drawers was ever stored');
+
+  // a check's title, clicked in the left drawer, opens the right one with what it means; a figure of the counts bar opens the left one
+  await page.click("document.getElementById('hide-left')");
+  await page.click("document.querySelector('.tab[data-panel=checks]')");
+  await page.waitFor(LAID_OUT('checks-list'));
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
+  const meaning = await page.ev("({ cls: document.getElementById('work').className, help: (document.querySelector('#detail .help-code') || {}).textContent || null })");
+  await page.click("document.getElementById('hide-right')");          // shut by its icon: one synthetic Escape a part is all this Chrome takes well
+  await page.click("[...document.querySelectorAll('#counts .count-item')].find((b) => b.title === 'INDI')");
+  const count = await page.ev("({ cls: document.getElementById('work').className, chip: document.getElementById('records-type').textContent })");
+  await page.click("document.getElementById('hide-left')");
+  check(meaning.cls === 'work right-drawer left-drawer right-open' && meaning.help === 'N3', 'a check\'s title clicked in the left drawer opens the right one with what it means (N3)');
+  check(count.cls === 'work right-drawer left-drawer left-open' && count.chip === 'People ×', `a figure of the counts bar opens the left drawer at Records, filtered (${count.chip})`);
 
   // last of the part, since the page takes ⌘F's own key-down and this Chrome may then hang on a
   // synthetic key (see press in tools/chrome.js): ⌘F opens the left drawer at Search, its box ready

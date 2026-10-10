@@ -466,9 +466,14 @@
     for (const [id, lines] of pointedBy) {
       if (!definedAt.has(id)) for (const line of lines) add('E7', line, id);
     }
-    // E9 and N6 — one finding for the file, shown on its CHAR line when it has one.
+    // E9 and N6: one finding for the file, shown on its CHAR line when it has one. N6 only when
+    // the file holds a byte above 127: read one byte per character, every other byte shows as
+    // itself, so a file of ASCII alone has nothing to note (0.6.1). Judged from the lines, so that
+    // a fresh read and the check after an edit agree.
     for (const flag of decided.flags) add('E9', head.charLine, flag);
-    for (const note of decided.notes) add('N6', head.charLine, note);
+    if (decided.notes.length && texts.some((t) => /[^\x00-\x7f]/.test(t))) {
+      for (const note of decided.notes) add('N6', head.charLine, note);
+    }
     // N7 — more than one kind of terminator. A last line with none is not a kind.
     const termCounts = [0, 0, 0, 0, 0];
     for (let i = 0; i < n; i += 1) termCounts[term[i]] += 1;

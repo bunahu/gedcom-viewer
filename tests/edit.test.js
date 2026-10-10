@@ -668,6 +668,19 @@ describe('change stamps (10.4)', () => {
   });
 });
 
+describe('N6 follows the lines (0.6.1)', () => {
+  it('deleting the one line with a byte above 127 in a one-byte file takes N6 away, as a fresh read of the bytes does; Undo brings it back', () => {
+    const doc = core.openDocument(new Uint8Array([...Buffer.from('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR ANSEL\n0 @N1@ NOTE caf'), 0xe9, ...Buffer.from('\n0 TRLR\n')]));
+    assert.equal(doc.view.findings.byCode.N6.length, 1);
+    ok(core.deleteLine(doc, 4));
+    assert.equal(doc.view.findings.byCode.N6.length, 0);
+    sameAsFreshRead(doc);
+    core.undo(doc);
+    assert.equal(doc.view.findings.byCode.N6.length, 1);
+    sameAsFreshRead(doc);
+  });
+});
+
 describe('refused, loudly (I11)', () => {
   it('a line break inside a line', () => {
     const doc = open('family.ged');

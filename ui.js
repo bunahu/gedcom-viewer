@@ -1820,7 +1820,7 @@
   // the text is shown in a box, selected, for ⌘C.
   function changesAsText() {
     const build = (sha256) => S.changesText({ when: new Date(), file: state.fileName,
-      original: { sha256, bytes: state.disk.bytes, lines: state.disk.lines }, runs: state.runs });
+      from: { sha256, bytes: state.disk.bytes, lines: state.disk.lines }, runs: state.runs });
     return state.disk.sha256 ? build(state.disk.sha256) : state.hashing.then(build);
   }
   wireCopy($('changes-copy'), changesAsText, (text) => {

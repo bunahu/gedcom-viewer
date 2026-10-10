@@ -214,7 +214,8 @@ def probe(path: Path) -> dict:
     c["E7 pointer to nothing"] = sum(v for k, v in pointed.items() if k not in defined)
     c["E9 encoding contradiction"] = len(flags)
     c["N3 record nothing points at"] = sum(1 for k in defined if k not in pointed)
-    c["N6 encoding shown as it can be"] = len(notes)
+    # N6 only when a byte is above 127: read one byte per character, every other byte shows as itself
+    c["N6 encoding shown as it can be"] = len(notes) if any(b >= 0x80 for b in raw) else 0
 
     names = ["E1 no level number", "E2 wrong line shape", "E3 level jumps by more than one",
              "E4 file frame", "E5 blank line", "E6 id defined twice", "E7 pointer to nothing",

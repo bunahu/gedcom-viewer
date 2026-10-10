@@ -123,6 +123,15 @@ describe("the rest of 6.1's table", () => {
       'not Windows-1252: byte 0x80 is U+0080, not the euro sign');
   });
 
+  it('ANSI, or any other one-byte name, over bytes all ASCII: no N6, since every character shows as itself; one byte above 127 and N6 is back (0.6.1)', () => {
+    const plain = readBytes(bytesOf(withChar('ANSI', ['1 NOTE plain words'])));
+    assert.equal(plain.codec, 'one-byte');
+    assert.equal(plain.encodingLabel, 'ANSI');
+    assert.deepEqual(h.findingsOf(plain), { N3: [5] });
+    const high = readBytes(bytesOf(withChar('ANSI', [[...Buffer.from('1 NOTE caf'), 0xe9]])));
+    assert.deepEqual(h.findingsOf(high), { N3: [5], N6: [4] });
+  });
+
   it('version 7 has no CHAR and is UTF-8, with no flag; and no line is too long in version 7', () => {
     const long = `1 NOTE ${'x'.repeat(300)}`;
     const m7 = readBytes(new Uint8Array(Buffer.from(`0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @N1@ SNOTE a\n${long}\n0 TRLR\n`)));

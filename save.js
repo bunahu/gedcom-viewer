@@ -81,15 +81,16 @@
   }
 
   // What the Changes tab's copy button puts on the clipboard (10.3), and nothing writes anywhere:
-  // the file the page is on by its name, as of now (the original, or the last copy: P11's D1); its
-  // sha256, size and lines, as it was opened or saved; then the net change from it, run by run, in
-  // the lines the log's blocks had: each run's place in that file, then its place now, its record,
-  // and its lines, - as they were and + as they are. A
-  // move says what moved and how many lines, never their text. It holds what the file holds,
-  // living people included, and belongs beside the file, never in a repo (I9).
-  function changesText({ when, file, original, runs }) {
+  // the file the page is on by its name, as of now (the original, or the last copy: P11's D1);
+  // then, on a line of its own, the file the changes count from, that same file, by its name, with
+  // its sha256, size and lines as it was opened or saved, so the line is true on the original and
+  // on a copy alike; then the net change from it, run by run, in the lines the log's blocks had:
+  // each run's place in that file, then its place now, its record, and its lines, - as they were
+  // and + as they are. A move says what moved and how many lines, never their text. It holds what
+  // the file holds, living people included, and belongs beside the file, never in a repo (I9).
+  function changesText({ when, file, from, runs }) {
     const out = [`GEDCOM Viewer  changes to ${file}  as of ${localTime(when)}`];
-    out.push(`original  sha256 ${original.sha256}  ${original.bytes} bytes  ${original.lines} lines`);
+    out.push(`from  ${file}  sha256 ${from.sha256}  ${from.bytes} bytes  ${from.lines} lines`);
     const span = (first, count) => (first < 0 ? '' : count > 1 ? `${first + 1}-${first + count}` : `${first + 1}`);
     const rows = runs.map((r) => ({ r, b: span(r.before, r.lines.length), a: span(r.after, r.lines.length) }));
     const wb = Math.max(0, ...rows.map((x) => x.b.length));

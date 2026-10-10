@@ -78,16 +78,16 @@ describe('the name (10.1)', () => {
 });
 
 describe('the Changes text (10.3)', () => {
-  const original = (doc, bytes) => ({ sha256: h.sha256(bytes), bytes: bytes.length, lines: doc.m.n });
+  const opened = (doc, bytes) => ({ sha256: h.sha256(bytes), bytes: bytes.length, lines: doc.m.n });
 
-  it('the original by its name, sha256, size and lines; then each run: its place in the original, then now, its record, and its lines', () => {
+  it('the file by its name; the file the changes count from by its name, sha256, size and lines; then each run: its place in that file, then now, its record, and its lines', () => {
     const { doc, bytes } = setUp();
     core.editLine(doc, 16, '1 NAME Jane /Fixtures/');             // @I42@
     core.deleteLine(doc, 29);                                         // 1 CHIL @I42@ in @F1@, and its _FREL
     core.applyStamps(doc, AT, 'Fixed a name.');
-    assert.equal(save.changesText({ when: AT, file: NAME, original: original(doc, bytes), runs: core.changeRuns(doc) }), [
+    assert.equal(save.changesText({ when: AT, file: NAME, from: opened(doc, bytes), runs: core.changeRuns(doc) }), [
       `GEDCOM Viewer  changes to Fixture_Family.ged  as of ${save.localTime(AT)}`,
-      `original  sha256 ${h.sha256(bytes)}  465 bytes  37 lines`,
+      `from  Fixture_Family.ged  sha256 ${h.sha256(bytes)}  465 bytes  37 lines`,
       'changed  17 -> 17        @I42@ INDI',
       '  - 1 NAME Jane /Fixture/',
       '  + 1 NAME Jane /Fixtures/',
@@ -110,20 +110,20 @@ describe('the Changes text (10.3)', () => {
   it('a move names what moved and how many lines, never their text; a line that gained an ending says so', () => {
     const { doc, bytes } = setUp();
     core.moveLines(doc, 15, 22, 7);                                   // @I42@ before @I1@
-    const moved = save.changesText({ when: AT, file: NAME, original: original(doc, bytes), runs: core.changeRuns(doc) }).split('\n');
+    const moved = save.changesText({ when: AT, file: NAME, from: opened(doc, bytes), runs: core.changeRuns(doc) }).split('\n');
     assert.deepEqual(moved.slice(2), ['moved    16-22 -> 8-14  @I42@ INDI  (7 lines)', '']);
     assert.ok(!moved.some((l) => l.includes('Jane')), 'no line of what moved');
     const end = setUp('no-final-newline.ged');
     core.addSibling(end.doc, 7, '0 @N1@ NOTE after the end');
-    const lines = save.changesText({ when: AT, file: NAME, original: original(end.doc, end.bytes), runs: core.changeRuns(end.doc) }).split('\n');
+    const lines = save.changesText({ when: AT, file: NAME, from: opened(end.doc, end.bytes), runs: core.changeRuns(end.doc) }).split('\n');
     assert.deepEqual(lines.slice(2), ['changed  8 -> 8  TRLR', '  - 0 TRLR', '  + 0 TRLR', '    line ending: none -> LF',
       'added         9  @N1@ NOTE', '  + 0 @N1@ NOTE after the end', '']);
   });
 
-  it('no change: the two lines about the original, and nothing under them', () => {
+  it('no change: the two lines about the file, and nothing under them', () => {
     const { doc, bytes } = setUp();
-    assert.equal(save.changesText({ when: AT, file: NAME, original: original(doc, bytes), runs: core.changeRuns(doc) }),
-      `GEDCOM Viewer  changes to Fixture_Family.ged  as of ${save.localTime(AT)}\noriginal  sha256 ${h.sha256(bytes)}  465 bytes  37 lines\n`);
+    assert.equal(save.changesText({ when: AT, file: NAME, from: opened(doc, bytes), runs: core.changeRuns(doc) }),
+      `GEDCOM Viewer  changes to Fixture_Family.ged  as of ${save.localTime(AT)}\nfrom  Fixture_Family.ged  sha256 ${h.sha256(bytes)}  465 bytes  37 lines\n`);
   });
 });
 
@@ -455,8 +455,8 @@ describe("the phase-5 walk's saving steps, every one but the person's clicks in 
     assert.deepEqual(copy.subarray(head, head + dated.length), new Uint8Array(dated));
     assert.deepEqual(copy.subarray(head + dated.length, head + dated.length + (from - head)), bytes.subarray(head, from));
     assert.deepEqual(copy.subarray(copy.length - (bytes.length - to)), bytes.subarray(to));
-    const pasted = save.changesText({ when: AT, file: page.file.name, original: { sha256: copySha, bytes: r.size, lines: doc.view.n }, runs: core.changeRuns(doc) }).split('\n');
-    assert.deepEqual(pasted, [`GEDCOM Viewer  changes to ${COPY}  as of ${save.localTime(AT)}`, `original  sha256 ${copySha}  ${copy.length} bytes  42 lines`, '']);
+    const pasted = save.changesText({ when: AT, file: page.file.name, from: { sha256: copySha, bytes: r.size, lines: doc.view.n }, runs: core.changeRuns(doc) }).split('\n');
+    assert.deepEqual(pasted, [`GEDCOM Viewer  changes to ${COPY}  as of ${save.localTime(AT)}`, `from  ${COPY}  sha256 ${copySha}  ${copy.length} bytes  42 lines`, '']);
 
     // 24: Undo once: the header's date and the stamp, removed from the copy, and ● on; again: the edit, the lines the original's, so ● goes and Save is off
     // while Changes still lists three changes from the copy; Redo twice: the copy's lines, Changes 0
