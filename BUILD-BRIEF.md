@@ -1768,3 +1768,18 @@ for a tag quoted in its header; `customMeaning` for 29 well-known custom tags, e
 places 5.5.5 changed listed in its notes. Two things from it for 0.6.2: the 7.0 text is Apache
 2.0 and asks a derived work to carry its NOTICE, which `tags.js` holds in its header and the README
 and page do not yet; and `_META` is sourced only to this project's README.
+
+### 0.6.3: judging by another version (2026-10-10, planned; his addition to P12)
+
+His words: "The file's detected version judges it, BUT the user can override it (i.e. if they are
+trying to upgrade from 5.5.1 to 5.5.5, they should be able to see what needs changing. This may be
+its own build)." A choice in Settings, **Judge by**: the file's own version (the default, named:
+"the file's, 5.5.1"), 5.5.1, 5.5.5 or 7.0. Not stored: it is a question asked of one file, and a
+file opens judged by its own version. When another version is picked the checks run again under
+it: E10 for a tag that version does not define (its words then say which version does: "AFN is not
+a 5.5.5 tag; 5.5.1 defines it"), N8 for a place that version does not allow, N9 for an extension a
+7.0 header would have to declare; the Checks list's head says "judged by 5.5.5, not the file's
+5.5.1", the problem report says the same, and the counts bar is untouched. The stamps and the
+header's note are written as the file's own version has them (10.4, 10.6), whatever is judged by.
+Not in it: changing the file's declared version, or rewriting lines for the newer standard; those
+are hand edits the findings point at. Built after 0.6.2, by Sonnet, from this entry and P12.
