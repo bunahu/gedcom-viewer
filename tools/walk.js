@@ -629,9 +629,10 @@ async function editingOnThePage(page, dir, shots) {
 
   // Edit on: a double-click types over the line; kept, it is marked in its row, in Changes and in the right frame
   await page.click("document.getElementById('edit')");
-  const labels = await page.ev("[...document.querySelectorAll('#detail .detail-actions button')].map((b) => b.textContent)");
-  check(JSON.stringify(labels) === JSON.stringify(['Edit line', 'Add inside', 'Add after', 'Delete line', 'Delete record']),
-    `Edit on: the right frame offers ${labels.join(' · ')}`);
+  const labels = await page.ev("[...document.querySelectorAll('#detail .detail-actions button')].map((b) => b.textContent + ': ' + b.title)");
+  check(JSON.stringify(labels) === JSON.stringify(['Add line under: A new line directly under this one, one level deeper', 'Add line after: A new line after this block, at this line\'s level',
+    'Delete line: This line, and the lines under it (⌫)']),
+  `Edit on (0.6.0): the right frame offers three buttons, with Enter and a double-click typing over a line: ${labels.map((l) => l.split(':')[0]).join(', ')}`);
   for (const count of [1, 2]) {
     await page.mouse('mousePressed', at.x, at.y, { clickCount: count });
     await page.mouse('mouseReleased', at.x, at.y, { clickCount: count });
@@ -667,7 +668,7 @@ async function editingOnThePage(page, dir, shots) {
   check((await page.ev("document.querySelector('#grid .row.is-sel .tx').textContent")) === `${m.texts[name]} Jr`, 'Esc drops what was typed');
 
   // a line added inside the name's block
-  await page.click(ACTION('Add inside'));
+  await page.click(ACTION('Add line under'));
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   const offered = await page.ev("document.querySelector('#grid input.edit').value");
   await page.type('NOTE added by the walk');
@@ -676,19 +677,23 @@ async function editingOnThePage(page, dir, shots) {
   const added = await page.ev(`(() => { const r = [...document.querySelectorAll('#grid .row')].find((x) => x.querySelector('.ln') && x.querySelector('.ln').textContent === ${JSON.stringify(fmt(name + 2))});
     return r ? { added: r.classList.contains('is-added'), text: r.querySelector('.tx').textContent } : null; })()`);
   check(offered === '2 ' && added && added.added && added.text === '2 NOTE added by the walk',
-    `Add inside offers "${offered}", one level deeper; the new line ${fmt(name + 2)} is marked added`);
+    `Add line under offers "${offered}", one level deeper; the new line ${fmt(name + 2)} is marked added`);
 
   // a record deleted with the line that points at it, previewed; with Edit on, its lines stay,
-  // struck through; one run restored; the rest undone
+  // struck through; one run restored; the rest undone. 0.6.0: Delete line on the record's first line
+  // does it, and its question names the record as the Records list does (the NAME typed over above,
+  // and a line added under it)
   const record = m.definedAt.get('@I42@')[0];
   await gotoLine(page, record + 1);
-  await page.click(ACTION('Delete record'));
+  const deleteRecordTitle = await page.ev(`${ACTION('Delete line')}.title`);
+  await page.click(ACTION('Delete line'));
   await page.waitFor("document.getElementById('dialog').open");
   const preview = await page.ev(`({ title: document.querySelector('#dialog .dialog-title').textContent,
     ticked: [...document.querySelectorAll('#dialog input[type=checkbox]')].map((b) => b.checked),
     pointers: [...document.querySelectorAll('#dialog .dialog-check .mono')].map((x) => x.textContent) })`);
-  check(preview.title === 'Delete @I42@ INDI?' && JSON.stringify(preview.ticked) === '[true]' && preview.pointers[0] === '1 HUSB @I42@',
-    `Delete record shows what goes: ${preview.title} — its lines, and ${preview.pointers.join(', ')}, ticked`);
+  check(preview.title === 'Delete @I42@ INDI Person42 /Fixture42/ Jr (1842–) and the 11 lines under it?' && JSON.stringify(preview.ticked) === '[true]' && preview.pointers[0] === '1 HUSB @I42@'
+    && deleteRecordTitle === 'This record, and the lines elsewhere that point at it, each shown first, ticked',
+  `Delete line on a record's first line shows what goes: "${preview.title}", its lines, and ${preview.pointers.join(', ')}, ticked`);
   await shot('delete-record');
   const before = await page.ev(ROWS);
   await page.click(BUTTON('#dialog', 'Delete'));
@@ -806,13 +811,13 @@ async function editorScroll(page, dir) {
   check(typed.at > 0 && kept.at === 0 && kept.columns,
     `typed at the far end the grid follows the caret (${Math.round(typed.at)} px); Enter keeps the line, and the grid is back at ${kept.at} px, the columns in view`);
 
-  // Add inside: the same
+  // Add line under: the same
   await gotoLine(page, nameLine);
-  await page.click("[...document.querySelectorAll('#detail button')].find((b) => b.textContent.trim() === 'Add inside')");
+  await page.click("[...document.querySelectorAll('#detail button')].find((b) => b.textContent.trim() === 'Add line under')");
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   await sleep(80);
   w = await page.ev(WHERE);
-  check(w.at === 0 && w.columns && w.box, `Add inside: the new line's box opens with the grid at ${w.at} px and the columns in view`);
+  check(w.at === 0 && w.columns && w.box, `Add line under: the new line's box opens with the grid at ${w.at} px and the columns in view`);
 }
 
 // The edges of typing a line, on two of the written files (fictional people): a click elsewhere
@@ -837,18 +842,18 @@ async function editingEdges(page) {
     `a click on line 20 while line 17 is typed in keeps what was typed, and lands: line ${s.ln} is selected`);
 
   await gotoLine(page, 7);
-  await page.click(ACTION('Add inside'));
+  await page.click(ACTION('Add line under'));
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   await page.type('NOTE added');
   await page.click(row(20), 60);
   await page.waitFor("!document.querySelector('#grid input.edit')");
   s = await page.ev(SELECTED);
   check((await page.ev(`${row(8)}.querySelector('.tx').textContent`)) === '2 NOTE added' && s.ln === 21 && s.tag === m.tag[19],
-    `…and after an Add inside: the new line is 8, and the line clicked, now line ${s.ln} (${s.tag}), is selected`);
+    `…and after an Add line under: the new line is 8, and the line clicked, now line ${s.ln} (${s.tag}), is selected`);
 
   await page.click("document.querySelector('.tab[data-panel=records]')");
   await page.waitFor(LAID_OUT('records-list'));
-  await page.click(ACTION('Add after'));
+  await page.click(ACTION('Add line after'));
   await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
   const rowsBefore = await page.ev(`${VISIBLE('grid')}.length`);
   await page.click(`${VISIBLE('records-list')}.find((r) => r.firstChild.textContent === '@F2@')`);
@@ -891,9 +896,8 @@ async function editingEdges(page) {
   await page.openFile(path.join(ROOT, 'fixtures', 'synthetic', 'e8-bad-bytes.ged'));   // Edit on as it opens
   await gotoLine(page, 8);
   await page.key('Enter', 'Enter', 13);
-  const e8 = await page.ev(`({ box: !!document.querySelector('#grid input.edit'), said: document.getElementById('notice').textContent,
-    off: ${ACTION('Edit line')}.disabled })`);
-  check(!e8.box && e8.off && /\(E8\)/.test(e8.said), `a line whose bytes could not be read is not opened for typing, and Edit is off: "${e8.said}"`);
+  const e8 = await page.ev("({ box: !!document.querySelector('#grid input.edit'), said: document.getElementById('notice').textContent })");
+  check(!e8.box && /\(E8\)/.test(e8.said), `a line whose bytes could not be read is not opened for typing, and the notice says why: "${e8.said}"`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1865,7 +1869,9 @@ async function theLook(page, dir, shots) {
 const VERSION = (fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').match(/<span id="version">([^<]+)<\/span>/) || [])[1];
 
 // A hundred and twenty made-up people in sixty families, and a source nothing points at: enough
-// lines for a number with a comma in it.
+// lines for a number with a comma in it. At the end (0.6.0), a picture whose file sits four levels
+// deep, for the right frame's path, and a note holding forty tags of its own, so that the Tags list
+// scrolls.
 function barsFiction() {
   const L = ['0 HEAD', '1 SOUR gedview-walk', '2 VERS 1.0', '1 DATE 9 OCT 2026', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 SUBM @U1@', '0 @U1@ SUBM', '1 NAME Walk /Fixture/'];
   for (let k = 1; k <= 120; k += 1) {
@@ -1873,7 +1879,11 @@ function barsFiction() {
       `2 DATE ${1 + (k % 28)} JAN ${1850 + k}`, '2 PLAC Fixtureville', `1 FAMS @F${Math.ceil(k / 2)}@`);
   }
   for (let f = 1; f <= 60; f += 1) L.push(`0 @F${f}@ FAM`, `1 HUSB @I${2 * f}@`, `1 WIFE @I${2 * f - 1}@`, '1 MARR', `2 DATE ${1870 + f}`);
-  L.push('0 @S1@ SOUR', '1 TITL The Fixture Register', '0 TRLR');
+  L.push('0 @S1@ SOUR', '1 TITL The Fixture Register');
+  L.push('0 @O1@ OBJE', '1 FILE photographs/a-very-long-folder-name/fixture-family-picnic-1950.jpg', '2 FORM jpg', '3 TYPE photo', '3 MEDI print', '2 TITL The picnic');
+  L.push('0 @N1@ NOTE tags of its own');
+  for (let t = 1; t <= 40; t += 1) L.push(`1 _TAG${String(t).padStart(2, '0')} x`);
+  L.push('0 TRLR');
   return `${L.join('\n')}\n`;
 }
 
@@ -1913,11 +1923,13 @@ async function theBars(page, dir, shots) {
   const before = await page.ev(`({ bar: ${TOP_BAR}, icons: document.querySelectorAll('.bar .icon-button').length,
     gone: ['goto-box', 'edit', 'undo', 'redo', 'save'].filter((id) => !document.getElementById(id).hidden || document.getElementById(id).getClientRects().length),
     strip: [...document.querySelectorAll('#strip button, #strip input')].filter((e) => e.getClientRects().length).map((e) => e.id + (e.disabled ? ' off' : '')).join(),
-    title: ${FRAME_TITLE}, icon: getComputedStyle(document.getElementById('hide-right')).visibility, foot: document.querySelector('#settings-menu .menu-foot').textContent })`);
+    title: ${FRAME_TITLE}, icon: getComputedStyle(document.getElementById('hide-right')).visibility, foot: document.querySelector('#settings-menu .menu-foot').textContent,
+    centred: getComputedStyle(document.querySelector('#settings-menu .menu-foot')).textAlign })`);
   await shot('empty');
   check(before.bar === 'app-name,settings' && before.icons === 0 && before.gone.length === 0 && before.strip === 'top off' && before.title === '' && before.icon === 'visible',
     `with no file open the top bar holds ${before.bar.replace(',', ' and ')} alone, no icon; the strip holds Top, off; Go to Line…, Edit, Undo, Redo and Save are hidden, not just off; the right frame's header holds its icon alone`);
-  check(before.foot === `GEDCOM Viewer ${VERSION}`, `the version is out of the top bar and at the foot of Settings: "${before.foot}"`);
+  check(before.foot === `Version ${VERSION}` && /^\d+\.\d+\.\d+$/.test(VERSION) && before.centred === 'center',
+    `the version is out of the top bar and at the foot of Settings, in three parts, centred: "${before.foot}"`);
 
   // a file opens with Edit on, and the lines in their editing look; Edit off gives them the frames' colour back
   await page.openFile(file);
@@ -1980,6 +1992,35 @@ async function theBars(page, dir, shots) {
   check(shutTitle === `Lines ${fmt(rec + 1)}-${fmt(core.subtreeEnd(m, rec))}` && rangeTitle === 'Lines 23-31' && gotoFocused,
     `more than one line in hand: a shut block reads "${shutTitle}", from its line through the last it hides; Go to Line… (⌘L, in the strip) 23-31 reads "${rangeTitle}"`);
   check(helpTitle.help && helpTitle.title === '', 'a check\'s meaning in the right frame: no title, the icon alone');
+
+  // 0.6.0, from his walk of 0.6: the right frame's three buttons on one row under the title, with
+  // room; where the line sits, as a path, each part a link to its line, with no dates; and Under it,
+  // a link to the first line under the one selected, with how many more
+  const obje = m.texts.indexOf('0 @O1@ OBJE');
+  const PATH_NOW = `(() => { const r = (e) => e.getBoundingClientRect(); const head = r(document.querySelector('.frame-head')); const right = r(document.getElementById('right'));
+    const btns = [...document.querySelectorAll('#detail .detail-actions button')]; const b = btns.map(r);
+    return { labels: btns.map((x) => x.textContent).join(), rows: new Set(b.map((x) => Math.round(x.top))).size, room: Math.round(b[0].top - head.bottom), fits: b.every((x) => x.right <= right.right - 8),
+      path: [...document.querySelectorAll('#detail .detail-path:not(.detail-under) .path-link')].map((x) => x.textContent),
+      under: (document.querySelector('#detail .detail-under') || {}).textContent || null, selected: (${SELECTED}).ln }; })()`;
+  const PATH_LINK = (k) => `document.querySelectorAll('#detail .detail-path:not(.detail-under) .path-link')[${k}]`;
+  await gotoLine(page, obje + 4);                                    // 3 TYPE photo, four levels into the picture
+  const deep = await page.ev(PATH_NOW);
+  await page.click(PATH_LINK(1));
+  const onFile = await page.ev(PATH_NOW);
+  await page.click("document.querySelector('#detail .detail-under .path-link')");
+  const onForm = await page.ev(PATH_NOW);
+  await page.click(PATH_LINK(0));
+  const onRecord = await page.ev(PATH_NOW);
+  await gotoLine(page, rec + 7);                                     // 2 DATE, under 1 BIRT, in @I114@
+  const dated = await page.ev(PATH_NOW);
+  check(deep.labels === 'Add line under,Add line after,Delete line' && deep.rows === 1 && deep.room >= 12 && deep.fits,
+    `the right frame offers ${deep.labels.replace(/,/g, ', ')}, on one row ${deep.room} px under the title, inside the frame`);
+  check(JSON.stringify(deep.path) === JSON.stringify(['@O1@ OBJE The picnic', '1 FILE photographs/a-very-long-folder…', '2 FORM jpg']) && deep.under === null,
+    `a line four levels in: its path, each value clipped to about 30 characters: ${deep.path.join(' › ')}`);
+  check(onFile.selected === obje + 2 && onFile.under === 'Under it: 2 FORM jpg and 3 more' && onForm.selected === obje + 3 && onRecord.selected === obje + 1,
+    `each part of the path is a link to its line (1 FILE: line ${fmt(onFile.selected)}; the record: line ${fmt(onRecord.selected)}); on the FILE line, "${onFile.under}", a link to line ${fmt(onForm.selected)}`);
+  check(JSON.stringify(dated.path) === JSON.stringify(['@I114@ INDI Person114 /Fixture/', '1 BIRT']) && /\(1964–\)$/.test(m.labels[m.recOf[rec]]),
+    `no dates in the path ("${dated.path.join(' › ')}"); the Records list keeps them ("${m.labels[m.recOf[rec]]}")`);
 
   // A1: each side frame shrinks to a strip one icon button wide, at the window's edge, holding its icon
   // alone; the bar beside it does not drag; a click brings it back at its width
@@ -2047,6 +2088,47 @@ async function theBars(page, dir, shots) {
   await page.click(BUTTON('#dialog', 'Close'));
   await page.waitFor("!document.getElementById('dialog').open");
   check(first.startsWith(`GEDCOM Viewer ${VERSION} `), `the problem report still carries the version: "${first.slice(0, 40)}…"`);
+
+  // 0.6.0: a tag clicked in Tags shows its lines in Search, with Back to Tags at its head; it, or Esc
+  // in the search box, returns to the list in its order and at its place, and the order is the one
+  // set before; a search of one's own takes the button away. Last of the part: an Escape goes into a
+  // box here (see `press` in tools/chrome.js)
+  await page.click("document.querySelector('.tab[data-panel=tags]')");
+  await page.waitFor(LAID_OUT('tags-list'));
+  await page.click("document.getElementById('tags-order')");
+  await page.click("document.getElementById('tags-order')");         // A to Z
+  await page.ev("document.getElementById('tags-list').scrollTop = 200; true");
+  await page.ev('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))');
+  const TAGS_NOW = `({ shown: !document.getElementById('panel-tags').hidden, order: document.getElementById('tags-order').title, stored: localStorage.getItem('gedview.tagsOrder'),
+    top: document.getElementById('tags-list').scrollTop, first: ${VISIBLE('tags-list')}[0].firstChild.textContent })`;
+  const SEARCH_NOW = `({ shown: !document.getElementById('panel-search').hidden, back: document.getElementById('search-back').hidden ? null : document.getElementById('search-back').textContent,
+    box: document.getElementById('search-box').value, tag: document.getElementById('search-tag').getAttribute('aria-pressed'), at: (${SELECTED}).tag })`;
+  const tagsBefore = await page.ev(TAGS_NOW);
+  const picked = await page.ev(`${VISIBLE('tags-list')}[3].firstChild.textContent`);
+  await page.click(`${VISIBLE('tags-list')}[3]`);
+  const inSearch = await page.ev(SEARCH_NOW);
+  const SETTLED = 'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))';   // the list shown again is laid out at the next frame
+  await page.click("document.getElementById('search-back')");
+  await page.waitFor(LAID_OUT('tags-list'));
+  await page.ev(SETTLED);
+  const viaButton = await page.ev(TAGS_NOW);
+  await page.click(`${VISIBLE('tags-list')}[5]`);
+  await page.ev("(() => { const b = document.getElementById('search-box'); b.value = 'Fixture'; b.dispatchEvent(new Event('input', { bubbles: true })); return true; })()");
+  const ownSearch = await page.ev(SEARCH_NOW);
+  await page.click("document.querySelector('.tab[data-panel=tags]')");
+  await page.waitFor(LAID_OUT('tags-list'));
+  await page.ev(SETTLED);
+  await page.click(`${VISIBLE('tags-list')}[3]`);
+  await page.click("document.getElementById('search-box')");
+  await page.key('Escape', 'Escape', 27);
+  await page.waitFor(LAID_OUT('tags-list'));
+  await page.ev(SETTLED);
+  const viaEsc = await page.ev(TAGS_NOW);
+  check(tagsBefore.order === 'A to Z' && inSearch.shown && inSearch.back === '← Back to Tags' && inSearch.box === picked && inSearch.tag === 'true' && inSearch.at === picked,
+    `a tag clicked in Tags (${picked}) shows its lines in Search, with "${inSearch.back}" at its head`);
+  check([viaButton, viaEsc].every((t) => t.shown && t.order === tagsBefore.order && t.stored === tagsBefore.stored && t.top === tagsBefore.top && t.first === tagsBefore.first),
+    `Back to Tags, and Esc in the search box, return to the list as it was: ${viaEsc.order}, ${viaEsc.top} px down, ${viaEsc.first} first; going to Search never changed the order`);
+  check(ownSearch.shown && ownSearch.back === null, 'a search of one\'s own, typed in the box, takes Back to Tags away');
 }
 
 async function waitForFile(dir, pattern, timeout = 10000) {

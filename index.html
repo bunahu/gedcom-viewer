@@ -80,7 +80,7 @@
     </span>
   </div>
   <!-- the version, written here once: Report a problem reads it from this line -->
-  <div class="menu-foot">GEDCOM Viewer <span id="version">0.6</span></div>
+  <div class="menu-foot">Version <span id="version">0.6.0</span></div>
 </div>
 
 <nav class="counts" id="counts" aria-label="Records by type" translate="no"></nav>
@@ -118,6 +118,8 @@
     </section>
 
     <section class="panel" id="panel-search" translate="no" hidden>
+      <!-- while the search on show came from a tag clicked in Tags: the way back to the list as it was -->
+      <button class="button search-back" id="search-back" type="button" hidden>← Back to Tags</button>
       <div class="panel-head">
         <input class="input" id="search-box" type="search" aria-label="Search" spellcheck="false" data-gramm="false">
         <button class="button" id="search-tag" type="button" aria-pressed="false">Tag</button>

@@ -112,6 +112,55 @@ describe('the delete question names what goes', () => {
   });
 });
 
+// 0.6.0, from the owner's walk of 0.6: the right frame's path to a line, and the first line under
+// it. Fictional people only.
+describe('the right frame\'s path: the record and each line between, and the first line under', () => {
+  const m = h.readText(['0 HEAD', '1 CHAR UTF-8',
+    '0 @I1@ INDI', '1 NAME Jane /Fixture/', '1 BIRT', '2 DATE 1 JAN 1900', '2 SOUR @S1@', '3 PAGE p. 7', '3 NOTE a page note', '1 DEAT', '2 DATE 2 FEB 1950',
+    '0 @I2@ INDI', '1 NAME Joe /Fixture/', '1 BIRT', '2 DATE 1899',
+    '0 @F1@ FAM', '1 HUSB @I2@', '1 WIFE @I1@', '1 MARR', '2 PLAC Fixtureville',
+    '0 @O1@ OBJE', '1 FILE photographs/a-very-long-folder-name/fixture-family-picnic.jpg', '2 FORM jpg', '3 TYPE photo', '3 MEDI print', '4 NOTE kept dry', '2 TITL The picnic',
+    '0 @S1@ SOUR', '1 PAGE 1', '0 @N1@ NOTE a short note', '0 TRLR'].join('\n') + '\n');
+  const at = (text) => m.texts.indexOf(text);
+  const words = (p) => ({ record: p.record && p.record.text, steps: p.steps.map((s) => s.text), under: p.under && `${p.under.text}${p.under.more ? ` and ${p.under.more} more` : ''}` });
+
+  it('the record by its id, tag and name without the years; then each line between, by level, tag and value; each part names the line it selects', () => {
+    assert.equal(m.labels[m.recOf[at('3 PAGE p. 7')]], 'Jane /Fixture/ (1900–1950)', 'the Records list keeps the years');
+    const p = core.linePath(m, at('3 PAGE p. 7'));
+    assert.deepEqual(words(p), { record: '@I1@ INDI Jane /Fixture/', steps: ['1 BIRT', '2 SOUR @S1@'], under: null });
+    assert.deepEqual([p.record.line, ...p.steps.map((s) => s.line)], [at('0 @I1@ INDI'), at('1 BIRT'), at('2 SOUR @S1@')]);
+    assert.deepEqual([p.record.id, p.record.tag, p.record.name], ['@I1@', 'INDI', 'Jane /Fixture/'], 'the name a part of its own, for Bold surnames');
+    assert.deepEqual(words(core.linePath(m, at('1 NAME Jane /Fixture/'))), { record: '@I1@ INDI Jane /Fixture/', steps: [], under: null }, 'a level 1 line: the record alone');
+  });
+
+  it('a family by its two people, without their years', () => {
+    assert.equal(m.labels[m.recOf[at('0 @F1@ FAM')]], 'Joe /Fixture/ (1899–) & Jane /Fixture/ (1900–1950)');
+    assert.deepEqual(words(core.linePath(m, at('2 PLAC Fixtureville'))), { record: '@F1@ FAM Joe /Fixture/ & Jane /Fixture/', steps: ['1 MARR'], under: null });
+  });
+
+  it('a value clipped to about 30 characters; under a line, the first of the lines it holds and how many more', () => {
+    const file = at('1 FILE photographs/a-very-long-folder-name/fixture-family-picnic.jpg');
+    assert.deepEqual(words(core.linePath(m, at('3 TYPE photo'))), { record: '@O1@ OBJE The picnic', steps: ['1 FILE photographs/a-very-long-folder…', '2 FORM jpg'], under: null });
+    const p = core.linePath(m, file);
+    assert.deepEqual(words(p), { record: '@O1@ OBJE The picnic', steps: [], under: '2 FORM jpg and 4 more' });
+    assert.equal(p.under.line, file + 1, 'the link selects the first line under it');
+    assert.deepEqual(words(core.linePath(m, at('2 FORM jpg'))).under, '3 TYPE photo and 2 more', 'the lines under it, at every depth');
+    assert.deepEqual(words(core.linePath(m, at('3 MEDI print'))).under, '4 NOTE kept dry', 'one line under it: no more');
+  });
+
+  it('a record\'s own first line has no path, only the line under it; a record with only its line as a name is its id and tag', () => {
+    assert.deepEqual(words(core.linePath(m, at('0 @I1@ INDI'))), { record: null, steps: [], under: '1 NAME Jane /Fixture/ and 7 more' });
+    assert.deepEqual(words(core.linePath(m, at('1 PAGE 1'))), { record: '@S1@ SOUR', steps: [], under: null });
+    assert.deepEqual(words(core.linePath(m, at('0 TRLR'))), { record: null, steps: [], under: null });
+  });
+
+  it('the delete question for a record with nothing under its first line names it without a count', () => {
+    assert.equal(core.deleteQuestion(m, at('0 @N1@ NOTE a short note')).map((p) => p.text).join(''), 'Delete @N1@ NOTE a short note?');
+    assert.equal(core.deleteQuestion(m, at('0 TRLR')).map((p) => p.text).join(''), 'Delete TRLR?');
+    assert.equal(core.deleteQuestion(m, at('3 PAGE p. 7')).map((p) => p.text).join(''), `Delete line ${at('3 PAGE p. 7') + 1}, 3 PAGE p. 7?`);
+  });
+});
+
 // The _META of a Find a Grave record, as batch 20's export has them (fictional people): a story
 // in web formatting, a transcription, the persons, the cemetery and the record id.
 const STORY_HTML = [

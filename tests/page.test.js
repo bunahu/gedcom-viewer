@@ -421,7 +421,7 @@ describe('the page', () => {
     assert.ok(open.includes('state.editing = true;') && !open.includes('state.editing = false'), 'a file opens with Edit on');
     assert.ok(ui.includes("$('middle').classList.toggle('is-edit-on', !!doc && state.editing);"));
     const css = read('style.css');
-    assert.ok(css.includes('.middle.is-edit-on { --lines-bg: var(--editing-bg); }'), 'Edit on: the lines\' background is the editing look');
+    assert.ok(css.includes('.middle.is-edit-on { --lines-bg: var(--editing-bg); --row-selected: var(--editing-selected); }'), 'Edit on: the lines\' background is the editing look, the selected line its own wash');
     for (const b of K.blocksOf(css).filter((x) => [':root', '.dusk', '.dark'].includes(x.selector) && x.props.has('--color-bg'))) {
       assert.ok(/^#[0-9a-f]{6}$/.test(b.props.get('--editing-bg') || ''), `${b.selector} has no editing look of its own`);
     }
@@ -450,11 +450,58 @@ describe('the page', () => {
     assert.ok(/updateTagsOrder\(\);\n {2}openPanel\('records'\);/.test(ui), 'named as the page starts');
   });
 
-  it('the version is out of the title bar and at the foot of the Settings menu, written once, and the problem report reads it there; the README has a row for it', () => {
+  // 0.6.0, from the owner's walk of 0.6: the right frame, and the way back from Search to Tags
+  it('the right frame offers three buttons, Add line under, Add line after and Delete line, with their hover texts; Edit line and Delete record are gone', () => {
+    const ui = read('ui.js');
+    const acts = between(ui, '// what can be done to it, with Edit on (0.6.0)', 'd.appendChild(acts);');
+    const labels = [...acts.matchAll(/actionButton\(acts, '([^']+)'/g)].map((x) => x[1]);
+    assert.deepEqual(labels, ['Add line under', 'Add line after', 'Delete line']);
+    assert.ok(acts.includes("actionButton(acts, 'Add line under', 'A new line directly under this one, one level deeper', () => startAdd('inside'));"));
+    assert.ok(acts.includes("actionButton(acts, 'Add line after', 'A new line after this block, at this line\\'s level', () => startAdd('after'));"));
+    for (const gone of ["'Edit line'", "'Delete record'", "'Add inside'", "'Add after'"]) assert.ok(!ui.includes(gone), `ui.js still offers ${gone}`);
+    assert.ok(/\.detail-actions \{ display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 16px; \}/.test(read('style.css')), 'one row under the title, with room above and below');
+  });
+
+  it('Delete line on a record\'s first line deletes the record, with the pointers elsewhere shown first and the question naming the record; ⌫ keeps its meaning', () => {
+    const ui = read('ui.js');
+    assert.ok(ui.includes('() => (record ? deleteRecordAsked() : deleteSelected())'), 'the button: the record on its first line, the line elsewhere');
+    assert.ok(ui.includes('const isRecordLine = (i) => state.m.recOf[i] >= 0 && state.m.records[state.m.recOf[i]] === i;'));
+    const asked = between(ui, 'async function deleteRecordAsked() {', 'afterAct(plan.from);');
+    assert.ok(asked.includes('dialog((title) => putQuestion(title, C.deleteQuestion(m, plan.from)),'), 'the question names the record as the delete question does');
+    assert.ok(asked.includes('The lines elsewhere that point at it:') && asked.includes("box.checked = p.ticked;"), 'the same preview of the pointers elsewhere, ticked');
+    assert.ok(/\} else if \(key === 'Backspace' \|\| key === 'Delete'\) \{\s+e\.preventDefault\(\);\s+deleteSelected\(\);/.test(ui), '⌫ deletes the line and the lines under it, as before');
+  });
+
+  it('the right frame\'s path: core.linePath\'s parts, each a link that selects its line; "Under it" with the first line under and how many more; no "in" line', () => {
+    const ui = read('ui.js');
+    const render = between(ui, 'function renderDetail() {', '// ---');
+    assert.ok(render.includes('const path = C.linePath(m, i);') && render.includes("sec.appendChild(el('span', 'path-word', 'Under it: '));")
+      && render.includes("sec.appendChild(el('span', 'path-word', ` and ${fmt(path.under.more)} more`));"));
+    assert.ok(!render.includes("document.createTextNode('in ')"), 'the "in" line is gone');
+    assert.ok(between(ui, 'function pathLink(parent, line) {', 'function putStep').includes("b.addEventListener('click', () => select(line, 'jump'));"), 'each part selects its line, and Back returns');
+    assert.ok(/function linePath\(m, i\)/.test(read('core.js')) && /function pathName\(m, r, depth = 0\)/.test(read('core.js')), 'the wording is core.js\'s, held by tests/screen.test.js');
+  });
+
+  it('Tags to Search and back: a tag clicked shows Back to Tags at the head of Search; it, or Esc in the search box, returns to the list as it was; a search of one\'s own takes it away; the order is not touched', () => {
+    const page = read('index.html');
+    const panel = between(page, '<section class="panel" id="panel-search"', '</section>');
+    assert.ok(/<button class="button search-back" id="search-back" type="button" hidden>← Back to Tags<\/button>/.test(panel), 'the button, hidden until a tag is clicked');
+    assert.ok(panel.indexOf('id="search-back"') < panel.indexOf('class="panel-head"'), 'at the head of the panel');
+    const ui = read('ui.js');
+    const click = between(ui, "$('tags-list').addEventListener('click', (e) => {", '});');
+    assert.ok(click.includes("fromTags = { top: $('tags-list').scrollTop };") && click.includes("$('search-back').hidden = false;"));
+    assert.ok(!/tagsOrder|renderTags|TAG_ORDERS/.test(click), 'going to Search never touches the list\'s order');
+    assert.ok(between(ui, 'function backToTags() {', '}\n').includes("openPanel('tags');") && ui.includes("if (was) $('tags-list').scrollTop = was.top;"), 'back to the list, at its place');
+    assert.ok(ui.includes("if (e.target === $('search-box') && fromTags) backToTags();"), 'Esc in the search box, when the search came from Tags');
+    assert.equal((ui.match(/leaveTagsSearch\(\);/g) || []).length, 5, 'the way back goes for a search of one\'s own (typed, Tag turned), a file opened or refused, and once it is taken');
+  });
+
+  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.0", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
     const page = read('index.html');
     const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
-    const foot = menu.match(/<div class="menu-foot">GEDCOM Viewer <span id="version">(\d+(?:\.\d+)+)<\/span><\/div>\s*$/);
-    assert.ok(foot, 'no version line at the foot of the Settings menu');
+    const foot = menu.match(/<div class="menu-foot">Version <span id="version">(\d+\.\d+\.\d+)<\/span><\/div>\s*$/);
+    assert.ok(foot, 'no version line, three parts, at the foot of the Settings menu');
+    assert.ok(/\.menu-foot \{[^}]*text-align: center;/.test(read('style.css')), 'the line is centred');
     assert.ok(menu.lastIndexOf('class="menu-row"') < menu.indexOf('class="menu-foot"'), 'at its foot');
     assert.equal((page.match(/\bid="version"/g) || []).length, 1, 'the version is written once');
     const ui = read('ui.js');

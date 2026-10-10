@@ -2012,20 +2012,80 @@
   // "Delete line 405, 1 BIRT, and the 3 lines under it?". In parts, so that the page shows a label
   // as labels show (3.8) and a line's special characters marked: { text } for the words between,
   // { text, as: 'label' }, { text, as: 'line' }.
+  // A text clipped to `limit` characters, with … when anything was cut.
+  function clipped(text, limit) {
+    const c = clip(text, limit);
+    return c.more ? `${text.slice(0, c.end)}…` : text;
+  }
+
+  // A record with nothing under its first line (asked about by the right frame's Delete line, 0.6.0)
+  // is asked about without the count: "Delete @N1@ NOTE A note?".
   const QUESTION_CHARS = 60;
   function deleteQuestion(m, i) {
     const under = subtreeEnd(m, i) - i - 1;
-    const tail = `the ${num(under)} ${under === 1 ? 'line' : 'lines'} under it?`;
+    const count = `the ${num(under)} ${under === 1 ? 'line' : 'lines'} under it`;
     const own = m.texts[i].slice(m.lead[i]);
-    const short = (t) => { const c = clip(t, QUESTION_CHARS); return c.more ? `${t.slice(0, c.end)}…` : t; };
     const r = m.recOf[i];
     if (r >= 0 && m.records[r] === i) {
       const name = [m.xref[i], m.tag[i]].filter((x) => x).join(' ');
       const label = m.labels[r];
-      if (!label || label === own) return [{ text: `Delete ${name} and ${tail}` }];
-      return [{ text: `Delete ${name} ` }, { text: short(label), as: 'label' }, { text: ` and ${tail}` }];
+      if (!label || label === own) return [{ text: `Delete ${name}${under ? ` and ${count}` : ''}?` }];
+      return [{ text: `Delete ${name} ` }, { text: clipped(label, QUESTION_CHARS), as: 'label' }, { text: under ? ` and ${count}?` : '?' }];
     }
-    return [{ text: `Delete line ${num(i + 1)}, ` }, { text: short(own), as: 'line' }, { text: `, and ${tail}` }];
+    return [{ text: `Delete line ${num(i + 1)}, ` }, { text: clipped(own, QUESTION_CHARS), as: 'line' }, { text: under ? `, and ${count}?` : '?' }];
+  }
+
+  // A record's name for the right frame's path (0.6.0): its label (8) without the years an INDI's
+  // label adds, there or in a family's, since dates are for the Records list. Its first line as
+  // written when it has nothing else to show.
+  function pathName(m, r, depth = 0) {
+    const line = m.records[r];
+    const from = line + 1;
+    const to = recordEnd(m, r);
+    const own = m.texts[line].slice(m.lead[line]);
+    if (m.tag[line] === 'INDI') {
+      const name = firstChild(m, from, to, 1, 'NAME');
+      return (name >= 0 && valueOf(m, name)) || own;
+    }
+    if (m.tag[line] === 'FAM' && depth === 0) {
+      const parts = [];
+      for (const role of ['HUSB', 'WIFE']) {
+        const at = firstChild(m, from, to, 1, role);
+        const def = at < 0 ? null : m.definedAt.get(valueOf(m, at));
+        if (def) parts.push(pathName(m, m.recOf[def[0]], depth + 1));
+      }
+      return parts.length ? parts.join(' & ') : own;
+    }
+    return m.labels[r];
+  }
+
+  // The right frame's path to line i (0.6.0), each part naming the line it selects: the record line
+  // i is in, by its id, tag and name (pathName), unless line i is the record's own first line; then
+  // each line between that first line and line i, by its level, tag and value, the value clipped to
+  // about 30 characters; and, when line i has lines under it, the first of them, with how many more
+  // there are. A line that did not parse is its text as written, clipped the same.
+  const PATH_CHARS = 30;
+  function pathStep(m, j) {
+    if (m.level[j] < 0) {
+      const raw = clipped(m.texts[j], PATH_CHARS);
+      return { line: j, level: null, tag: null, value: raw, text: raw };
+    }
+    const value = clipped(valueOf(m, j), PATH_CHARS);
+    return { line: j, level: m.level[j], tag: m.tag[j], value, text: `${m.level[j]} ${m.tag[j]}${value ? ` ${value}` : ''}` };
+  }
+  function linePath(m, i) {
+    const out = { record: null, steps: [], under: null };
+    const r = m.recOf[i];
+    if (r >= 0 && m.records[r] !== i) {
+      const line = m.records[r];
+      const name = pathName(m, r);
+      const shown = name === m.texts[line].slice(m.lead[line]) ? '' : name;
+      out.record = { line, id: m.xref[line], tag: m.tag[line], name: shown, text: [m.xref[line], m.tag[line], shown].filter((x) => x).join(' ') };
+      for (let j = parentOf(m, i); j > line; j = parentOf(m, j)) out.steps.unshift(pathStep(m, j));
+    }
+    const end = subtreeEnd(m, i);
+    if (end > i + 1) out.under = { ...pathStep(m, i + 1), more: end - i - 2 };
+    return out;
   }
 
   // 3.3 — a _META value drawn as it reads. The page reads the value's XML, and the HTML inside
@@ -2209,7 +2269,7 @@
     moveRefusal, moveLines, landings,
     markCopied, takeBack, isChanged, changedSinceCopy, unsaved, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
-    nameParts, nameShown, linkAt, clip, deleteQuestion, stripStyles, metaRebuild, metaParts, lineShape,
+    nameParts, nameShown, linkAt, clip, deleteQuestion, linePath, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,
   };
 });

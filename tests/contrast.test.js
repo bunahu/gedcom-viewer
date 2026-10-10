@@ -116,9 +116,30 @@ describe('contrast, measured from style.css', () => {
     }
   });
 
-  it('Edit on: the lines\' text, numbers, levels, ids and muted text hold 4.5:1 on the editing look, in every theme; the text on the selected line too', () => {
-    for (const fg of ['--color-text', '--tag-color', '--value-color', '--line-number-color', '--level-color', '--id-color', '--color-text-muted', '--more-color']) holds(fg, [EDITING], 4.5);
-    holds('--color-text', [[...EDITING, '--row-selected']], 4.5);
+  it('Edit on: the lines\' text, numbers, levels, ids, muted text and pointers hold 4.5:1 on the editing look, in every theme', () => {
+    for (const fg of ['--color-text', '--tag-color', '--value-color', '--line-number-color', '--level-color', '--id-color', '--color-text-muted', '--more-color', '--pointer-color']) holds(fg, [EDITING], 4.5);
+  });
+
+  // 0.6.0, from the owner's walk of 0.6: the selected line takes a wash of its own while Edit is on
+  // (lighter in Light), and the pointer blue is set for each look (deeper in Light)
+  const SELECTED_EDITING = [...EDITING, '--editing-selected'];
+  it('Edit on: ids and text on the selected line hold 4.5:1, in every theme', () => {
+    holds('--id-color', [SELECTED_EDITING], 4.5);
+    holds('--color-text', [SELECTED_EDITING], 4.5);
+  });
+
+  it('pointers hold 4.5:1 on the frames\' colour as well as on the editing look, in every theme', () => {
+    holds('--pointer-color', [CARD, EDITING], 4.5);
+  });
+
+  it('the pointer colour and the editing wash are set for each look, and the block after the palettes does not set them again (it would override every theme)', () => {
+    const blocks = K.blocksOf(css);
+    for (const selector of [':root', '.dusk', '.dark']) {
+      const palette = blocks.find((b) => b.selector === selector && b.props.has('--color-bg'));
+      for (const name of ['--pointer-color', '--editing-selected']) assert.ok(palette.props.has(name), `${selector} does not set ${name}`);
+    }
+    const own = blocks.filter((b) => b.selector === ':root' && !b.props.has('--color-bg'));
+    for (const b of own) for (const name of ['--pointer-color', '--editing-selected', '--editing-bg']) assert.ok(!b.props.has(name), `the shared block sets ${name} again`);
   });
 
   it('Edit on: the box a line is typed in is lighter than the editing look, so it stands out, and its text holds 4.5:1', () => {
@@ -131,7 +152,7 @@ describe('contrast, measured from style.css', () => {
 
   it('the rules: Edit on sets the lines\' background to the editing look, and the grid and its number column draw it', () => {
     const rules = css.slice(css.indexOf('/* -------'));
-    assert.ok(/\.middle\.is-edit-on \{ --lines-bg: var\(--editing-bg\); \}/.test(rules));
+    assert.ok(/\.middle\.is-edit-on \{ --lines-bg: var\(--editing-bg\); --row-selected: var\(--editing-selected\); \}/.test(rules), 'Edit on: the editing look, and its own wash for the selected line');
     assert.ok(/--lines-bg:\s*var\(--color-bg-card\);/.test(css), 'with Edit off, the frames\' own colour');
     assert.ok(/\.grid \{[^}]*background: var\(--lines-bg\);/.test(rules), 'the grid draws --lines-bg');
     assert.ok(/\.fx \{[^}]*var\(--lines-bg\);/.test(rules) && /\.row\.is-dragging \.fx \{ background: var\(--lines-bg\); \}/.test(rules), 'the number column under its tint draws it too, never the frames\' colour');
@@ -142,6 +163,7 @@ describe('contrast, measured from style.css', () => {
     assert.ok(/\.n-note\s*\{[^}]*color:\s*var\(--mark-note\)/.test(rules), '.n-note must use --mark-note');
     assert.ok(/\.n-error\s*\{[^}]*color:\s*var\(--mark-error\)/.test(rules), '.n-error must use --mark-error');
     assert.ok(/\.id\s*\{\s*color:\s*var\(--id-color\)/.test(rules), '.id must use --id-color');
+    assert.ok(/\.ptr\s*\{\s*color:\s*var\(--pointer-color\)/.test(rules), '.ptr must use --pointer-color');
     assert.ok(/--mark-error:\s*var\(--color-danger\)/.test(css), '--mark-error must follow --color-danger');
   });
 });

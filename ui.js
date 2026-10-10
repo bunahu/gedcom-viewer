@@ -1056,12 +1056,8 @@
       return;
     }
     const boxes = [];
-    const go = await dialog(`Delete ${recordName(plan.id, plan.tag)}?`, (body) => {
-      if (m.labels[plan.record] !== m.texts[plan.from].slice(m.lead[plan.from])) {
-        const label = el('div');
-        putLabel(label, m.labels[plan.record]);
-        body.appendChild(label);
-      }
+    // 0.6.0: the question names the record as the delete question does (its id, tag and name), so the body no longer repeats the name
+    const go = await dialog((title) => putQuestion(title, C.deleteQuestion(m, plan.from)), (body) => {
       body.appendChild(el('div', 'dialog-sum',
         `The record: ${plural(plan.to - plan.from, 'line', 'lines')}, ${fmt(plan.from + 1)}–${fmt(plan.to)}`));
       if (!plan.pointers.length) return;
@@ -1399,6 +1395,31 @@
     if (parts.recordId) named(d, 'record_source_gid').appendChild(textBox('detail-value meta-text', parts.recordId));
   }
 
+  // A part of the right frame's path: a link that selects its line, as a jump, so Back returns.
+  function pathLink(parent, line) {
+    const b = el('button', 'path-link');
+    b.type = 'button';
+    b.addEventListener('click', () => select(line, 'jump'));
+    parent.appendChild(b);
+    return b;
+  }
+
+  // A line in the path as the lines show it: its level quiet, its tag strong, then its value; a line
+  // that did not parse, as written.
+  function putStep(parent, step) {
+    if (step.level === null) {
+      putText(parent, step.value);
+      return;
+    }
+    parent.append(el('span', 'lv', String(step.level)), ' ', el('span', 'tg', step.tag));
+    if (!step.value) return;
+    const v = el('span', 'val');
+    putText(v, step.value);
+    parent.append(' ', v);
+  }
+
+  const isRecordLine = (i) => state.m.recOf[i] >= 0 && state.m.records[state.m.recOf[i]] === i;
+
   function actionButton(parent, label, title, act, disabled) {
     const b = el('button', 'button', label);
     b.type = 'button';
@@ -1464,15 +1485,13 @@
     const pointer = live ? valAt >= 0 && isPointerValue(t.slice(valAt)) : C.isPointerLine(m, i);
     const parts = live ? partsFromShape(t, shape, pointer) : partsOf(m, i);
 
-    if (state.editing) {                                             // what can be done to it: with Edit on
+    if (state.editing) {                                             // what can be done to it, with Edit on (0.6.0): Enter and a double-click type over it
       const acts = el('div', 'detail-actions');
-      const cannot = C.editRefusal(state.doc, i);
-      actionButton(acts, 'Edit line', cannot || 'Type over the whole line (Enter, or a double-click)', () => startEdit(state.sel), cannot);
-      actionButton(acts, 'Add inside', 'A new line inside this block: directly under this line, one level deeper', () => startAdd('inside'));
-      actionButton(acts, 'Add after', 'A new line after this block, at this line\'s level', () => startAdd('after'));
-      actionButton(acts, 'Delete line', 'This line, and the lines under it (⌫)', () => deleteSelected());
-      actionButton(acts, 'Delete record', 'The record this line is in, and the lines elsewhere that point at it',
-        () => deleteRecordAsked(), m.recOf[i] < 0);
+      const record = isRecordLine(i);
+      actionButton(acts, 'Add line under', 'A new line directly under this one, one level deeper', () => startAdd('inside'));
+      actionButton(acts, 'Add line after', 'A new line after this block, at this line\'s level', () => startAdd('after'));
+      actionButton(acts, 'Delete line', record ? 'This record, and the lines elsewhere that point at it, each shown first, ticked'
+        : 'This line, and the lines under it (⌫)', () => (record ? deleteRecordAsked() : deleteSelected()));
       d.appendChild(acts);
     }
 
@@ -1517,15 +1536,34 @@
     }
     if (run) section(d, 'Joined').appendChild(textBox('detail-card detail-value', run.text));
 
+    // 0.6.0: where the line sits, as a path: its record, by id, tag and name (no dates: those are
+    // the Records list's), then each line between, each part a link to its line; under it, the
+    // first of the lines it holds. A record's own first line shows the record's name instead.
     const r = m.recOf[i];
-    if (r >= 0 && m.records[r] !== i) {
+    const path = C.linePath(m, i);
+    if (path.record) {
       const sec = section(d);
-      sec.classList.add('detail-link');
-      sec.appendChild(document.createTextNode('in '));
-      recordRef(sec, r);
-      sec.addEventListener('click', () => select(m.records[r], 'jump'));
+      sec.classList.add('detail-path');
+      const rec = pathLink(sec, path.record.line);
+      if (path.record.id) rec.append(el('span', 'id', path.record.id), ' ');
+      rec.appendChild(el('span', 'tg', path.record.tag));
+      if (path.record.name) {
+        rec.appendChild(document.createTextNode(' '));
+        putLabel(rec, path.record.name);
+      }
+      for (const step of path.steps) {
+        sec.appendChild(el('span', 'path-sep', ' › '));
+        putStep(pathLink(sec, step.line), step);
+      }
     } else if (r >= 0 && m.labels[r] !== t.slice(m.lead[i])) {
       putLabel(section(d), m.labels[r]);
+    }
+    if (path.under) {
+      const sec = section(d);
+      sec.classList.add('detail-path', 'detail-under');
+      sec.appendChild(el('span', 'path-word', 'Under it: '));
+      putStep(pathLink(sec, path.under.line), path.under);
+      if (path.under.more) sec.appendChild(el('span', 'path-word', ` and ${fmt(path.under.more)} more`));
     }
 
     if (m.level[i] === 0 && m.xref[i] !== null) {
@@ -2270,6 +2308,7 @@
     $('changes-sum').textContent = '';
     $('changes-copy').hidden = true;
     $('search-count').textContent = '';
+    leaveTagsSearch();
     $('detail').textContent = '';
     $('frame-title').textContent = '';
     $('goto').value = '';
@@ -2342,6 +2381,7 @@
     state.highlight = null;
     $('search-box').value = '';
     $('search-tag').setAttribute('aria-pressed', 'false');
+    leaveTagsSearch();
     $('records-filter').value = '';
     $('message').hidden = true;
     $('notice').hidden = true;
@@ -2718,9 +2758,29 @@
     pickRemoved(state.extras[x]);
   });
 
+  // 0.6.0: a tag clicked in Tags shows its lines in Search, which then offers the way back: Back to
+  // Tags, or Esc in the search box, return to the list as it was, in its order and at its place. Going
+  // to Search never touches the list's order. A search of one's own (typed, or Tag turned off or on)
+  // came from nowhere, and the way back goes.
+  let fromTags = null;                                               // the Tags list's place, while the search on show came from it
+  function leaveTagsSearch() {
+    fromTags = null;
+    $('search-back').hidden = true;
+  }
+  function backToTags() {
+    const was = fromTags;
+    leaveTagsSearch();
+    openPanel('tags');
+    if (was) $('tags-list').scrollTop = was.top;
+    $('grid').focus();
+  }
+  $('search-back').addEventListener('click', backToTags);
+
   $('tags-list').addEventListener('click', (e) => {
     const k = tagsList.rowOf(e.target);
     if (k < 0) return;
+    fromTags = { top: $('tags-list').scrollTop };
+    $('search-back').hidden = false;
     openPanel('search');
     $('search-box').value = state.tagRows[k][0];
     $('search-tag').setAttribute('aria-pressed', 'true');
@@ -2730,6 +2790,7 @@
 
   let searchTimer = 0;
   $('search-box').addEventListener('input', () => {
+    leaveTagsSearch();
     clearTimeout(searchTimer);
     searchTimer = setTimeout(runSearch, 150);
   });
@@ -2740,6 +2801,7 @@
     stepSearch(e.shiftKey ? -1 : 1);
   });
   $('search-tag').addEventListener('click', () => {
+    leaveTagsSearch();
     $('search-tag').setAttribute('aria-pressed', String(!tagMode()));
     runSearch();
   });
@@ -2802,7 +2864,8 @@
     if (e.target.closest && e.target.closest('input, textarea, select')) {
       if (key === 'Escape') {
         e.target.blur();
-        $('grid').focus();
+        if (e.target === $('search-box') && fromTags) backToTags();  // the search came from Tags: back to the list
+        else $('grid').focus();
       }
       return;
     }

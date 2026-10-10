@@ -39,6 +39,8 @@
   --mark-note: #734b00;               /* a note's count and code */
   --id-color: #6f5a40;                /* @I1@ */
   --editing-bg: #ebe2ce;              /* the lines while Edit is on: darker than the frames, an editor's look */
+  --editing-selected: color-mix(in srgb, var(--color-accent) 20%, transparent);   /* the selected line's wash while Edit is on: lighter here, so ids on it hold 4.5 to 1 */
+  --pointer-color: #1e4bc9;           /* a pointer value: a deeper blue than --color-info, holding 4.5 to 1 on the frames and on the editing look */
 }
 
 .dark {
@@ -69,6 +71,8 @@
   --mark-note: #d4a24e;
   --id-color: #c9a876;
   --editing-bg: #151311;
+  --editing-selected: var(--row-selected);
+  --pointer-color: var(--color-info);
   color-scheme: dark;
 }
 
@@ -100,6 +104,8 @@
   --mark-note: #e5c48d;
   --id-color: #e0c79c;
   --editing-bg: #353029;
+  --editing-selected: var(--row-selected);
+  --pointer-color: var(--color-info);
   color-scheme: dark;
 }
 
@@ -133,7 +139,6 @@
   --level-color: var(--color-text-muted);
   --tag-color: var(--color-text);
   --value-color: var(--color-text);
-  --pointer-color: var(--color-info);
   --raw-color: var(--color-danger);   /* a line that did not parse, shown as written */
   --match-bg: color-mix(in srgb, var(--color-warning) 55%, transparent);
   --special-bg: color-mix(in srgb, var(--color-warning) 30%, transparent);
@@ -331,8 +336,8 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .menu-name { color: var(--color-text-muted); }
 .menu-choices { display: inline-flex; align-items: center; gap: 4px; }
-/* the menu's last line, quiet: the name and the version */
-.menu-foot { margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--font-size-small); }
+/* the menu's last line, quiet and centred: the version, in three parts */
+.menu-foot { margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--font-size-small); text-align: center; }
 .facts {
   margin-top: 3px;
   min-height: 1.4em;
@@ -448,6 +453,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .panel-head .input { flex: 1; }
 .panel-sum { flex: none; padding: 0 4px; color: var(--color-text-muted); font-size: var(--font-size-small); }
 .search-nav { flex: none; display: flex; gap: 6px; align-items: center; }
+.search-back { flex: none; align-self: flex-start; }
 .search-count { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
 .chip {
   padding: 2px 8px;
@@ -501,7 +507,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 /* the main frame: the strip, then the lines below it, as tall as the strip leaves them */
 .middle { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* Edit on (P10, on whenever a file opens): the lines take their editor's look */
-.middle.is-edit-on { --lines-bg: var(--editing-bg); }
+.middle.is-edit-on { --lines-bg: var(--editing-bg); --row-selected: var(--editing-selected); }
 .grid {
   position: relative;
   flex: 1;
@@ -852,8 +858,14 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   border-radius: var(--radius);
   background: var(--color-bg);
 }
-.detail-link { cursor: pointer; }
-.detail-link:hover .id, .detail-link:hover .main { text-decoration: underline; }
+/* where the selected line sits (0.6.0): its record, then each line between, each a link to its line;
+   and the first of the lines under it */
+.detail-path { overflow-wrap: anywhere; line-height: 1.6; }
+.path-link { display: inline; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.path-link:hover { text-decoration: underline; }
+.path-link:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.path-sep, .path-word { color: var(--color-text-muted); }
+.detail-under { margin-top: 4px; }
 .detail-list { display: flex; flex-direction: column; gap: 2px; }
 .detail-row { display: flex; gap: 8px; cursor: pointer; }
 .detail-row:hover { background: var(--row-hover); }
@@ -863,7 +875,8 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .finding .code { flex: none; font-weight: 600; }
 .finding.is-error .code { color: var(--mark-error); }
 .finding.is-note .code { color: var(--mark-note); }
-.detail-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+/* what can be done to the line (0.6.0): three buttons on one row under the title, with room above and below; a frame dragged too narrow for them wraps them */
+.detail-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 16px; }
 .detail-actions .button { padding: 0.15rem 0.55rem; }
 .detail-was { box-shadow: inset var(--mark-bar) 0 0 var(--mark-changed); padding-left: 10px; }
 .detail-moved { color: var(--mark-moved); font-weight: 600; }
