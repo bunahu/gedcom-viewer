@@ -216,35 +216,45 @@ async function launch({ width = 1600, height = 1000 } = {}) {
         if (!at) throw new Error(`nothing to click: ${expr}`);
         await page.clickAt(at.x, at.y, modifiers);
       },
-      // A key: its key-down, then its key-up — except Escape's key-up, which is never sent: see
-      // `press` below for what it does to this Chrome.
+      // A key, with no character: its key-down, then its key-up, as for a shortcut or a key that moves
+      // (Enter, Escape, the arrows). `vk` is the Windows virtual key code (83 for S, 27 for Escape),
+      // which the page reads as the event's keyCode; `key` and `code` are the page's own key and code.
+      // `modifiers` as for `clickAt`. No native key code goes with it: see `press` below.
       async key(key, code, vk, modifiers = 0) {
-        const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers };
+        const base = { key, code, windowsVirtualKeyCode: vk, modifiers };
         await input('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
-        if (key !== 'Escape') await input('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+        await input('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
       },
       async type(text) { await input('Input.insertText', { text }); },
-      // A key pressed with the character it produces, as a real press in a text box does. Found in
-      // Chrome 154, headless, on 2026-09-30, with the page at 0.4.1 as well as 0.5, and never with
-      // a real keyboard or mouse: a raw key-down of a printable key sent into a text box with no
-      // character leaves the tab unable to finish its next navigation; after a key-down whose
-      // default the page prevented (E, or ⌘E before it), a synthetic Escape sent into a text box
-      // that was typed in leaves the renderer dispatching key events named Unidentified without
-      // end; and once a few dozen synthetic clicks have gone into a tab, a drag of a row let go
-      // with a synthetic Escape leaves the renderer, a moment later, answering nothing at all —
-      // not even the debugger (sixty clicks first: a hang every time; none first: ten rounds
-      // clean; no part of the page's drag — pointer capture, the selection, the dimming, the
-      // rows' layer, the GPU — changes it). So a key that types goes this way; a box that was
-      // typed in is left by a click on the lines, not by Escape, once such a key has been sent;
-      // Escape goes as its key-down alone (`key`); and the walk keeps a drag let go with Escape
-      // for the last act of a part walked in a Chrome of its own.
+      // A key pressed with the character it produces, as a real press in a text box does.
+      //
+      // Neither this nor `key` sends a native key code (`nativeVirtualKeyCode`). Chrome takes that
+      // field as the computer's own code, and on macOS that is a Mac key code (S is 1, Escape 53,
+      // Return 36), not the Windows one: 83 is keypad 1, 27 the minus key, 13 the W key. And a
+      // native code makes Chrome build a key event of the operating system, to hand the key on to
+      // the browser when the page does not take it; with none, Chrome hands nothing on (Chromium's
+      // DevTools input handler: no native key event, "due to Mac needing the actual os_event"). In
+      // Chrome 154, headless, on macOS, that event came back to the page again and again, thousands
+      // a second, as the key the native code names: a ⌘S the page did not take came back as 1,
+      // Enter as W, Escape as the minus key, a raw `e` as keypad plus; at times the page then
+      // answered nothing, not even the debugger, or could not finish its next navigation. A key
+      // the page took (its default stopped, or a character typed in a box) was never sent on,
+      // which is why only some keys seemed to hang. The right Mac code does not end it (the same
+      // key came back, without end); no native code does. The page still gets all it reads:
+      // keyCode from `vk`, key and code from `key` and `code`. tools/check-keys.js sends the keys
+      // and reads back what a page receives.
+      //
+      // What goes with that: a key the page does not take goes no further, so no shortcut of
+      // Chrome's own is reached by it; and an editing command (⌘A, select all) is not done by the
+      // key, since Chrome takes it as a `commands` entry of the event, which is not sent here.
       async press(key, code, vk, text) {
-        const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk };
+        const base = { key, code, windowsVirtualKeyCode: vk };
         await input('Input.dispatchKeyEvent', { type: 'keyDown', text, unmodifiedText: text, ...base });
         await input('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
       },
       // Empty the focused box: its value set to nothing, and the page told as a keystroke would tell
-      // it (an input event). A synthetic ⌘A and Backspace did this before; see `press`.
+      // it (an input event). A synthetic ⌘A selects nothing here (see `press`), so there is no ⌘A and
+      // Backspace.
       async clearBox() {
         await page.ev("(() => { const b = document.activeElement; if (!b || !('value' in b)) return false; b.value = ''; b.dispatchEvent(new Event('input', { bubbles: true })); return true; })()");
       },
