@@ -1611,14 +1611,20 @@ text, centred:
 Nothing else: no empty panes and no greyed buttons (P9 hides them). The counts bar appears with a
 file.
 
-**The sample** (I5: nothing is fetched). A made-up family, written for the page and baked into a
-page script, `sample.js`, loaded like the others and named in `publish.yml` and
-`tests/page.test.js`: about 40 people over four generations, with families, a few sources and
-notes, one record that already has a `CHAN`, and planted findings so that Checks has something to
-show: one pointer to a record that is not there, one line out of level, one `CONC` where none may
-sit. Fictional names only, and no `_META`. It opens with no handle, so Save offers it as a download
-in every browser, and the screen says so. His to pick: the family's surname (I9 bars real ones; the
-tests use Fixture).
+**The sample** (I5: nothing is fetched). Picked 2026-10-10, over a made-up family: a real file,
+**George Washington's family**, `washington.ged` from the open collection D-Jeffrey/gedcom-samples
+(https://github.com/D-Jeffrey/gedcom-samples, `washington/washington.ged`): 529 people and 114
+families, 1391 to 1799, GEDCOM 5.5, ASCII, 9190 lines, 139,870 bytes, sha256 `f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff`; written by
+FamilyOrigins, no author named, so the collection's rule puts it in the public domain (CC0 1.0). The
+page's reader finds nothing wrong with it, so Checks reads empty on it, and it ships exactly as found:
+nothing planted, nothing cut. It is baked into a page script, `sample.js`, holding the file's text
+and its name, loaded like the others and named in `publish.yml` and `tests/page.test.js` (it makes
+no request and holds no code that could). **Try a sample family** opens it as if it had been
+dropped, so it has no handle and Save offers it as a download in every browser, which the screen
+says. The README's Files table and `privacy.html` credit the collection and the file's origin in one
+line each. Shakespeare (31 people, webtreeprint.com, MIT with attribution) was the other candidate,
+kept in mind for a smaller second sample; files with living people (the Kennedys, the presidents,
+royal92) were ruled out. Nobody in the Washington file has been alive for two centuries.
 
 **The drawers** (item 8). Below about 1,100 px of width the right frame becomes a drawer over the
 lines, opened and closed from its icon, which stays where A1 put it; below about 800 px the left
@@ -1628,7 +1634,7 @@ and the stored state is left alone. The strip's right group wraps as 0.6 has it.
 44 px are not in this release (section 18).
 
 Assumed unless he says otherwise: the breakpoints, 1,100 and 800; the side columns hidden entirely
-with no file; the sample's size and its three planted findings. P11 as picked (D1, below) is built in the same release. Opus, after his walk of 0.6, since
+with no file. P11 as picked (D1, below) is built in the same release. Opus, after his walk of 0.6, since
 all of it touches `index.html`, `style.css` and `ui.js`.
 
 ### P11: after a save, which file is open? (2026-10-09, from his walk of 0.5.6)
