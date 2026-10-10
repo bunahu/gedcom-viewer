@@ -132,6 +132,12 @@ describe('contrast, measured from style.css', () => {
     holds('--pointer-color', [CARD, EDITING], 4.5);
   });
 
+  // 0.6.2: the wavy line under a tag the table of tags finds wanting is a graphical mark beside the
+  // dot (1.4.11), so it holds 3:1 on the lines' background, with Edit on and off, and on the selected line
+  it('the wavy lines under a tag, red and gold: 3:1 on the lines, with Edit on and off, and on the selected line, in every theme', () => {
+    for (const fg of ['--wave-error', '--wave-note']) holds(fg, [CARD, EDITING, [...CARD, '--row-selected'], SELECTED_EDITING], 3);
+  });
+
   it('the pointer colour and the editing wash are set for each look, and the block after the palettes does not set them again (it would override every theme)', () => {
     const blocks = K.blocksOf(css);
     for (const selector of [':root', '.dusk', '.dark']) {

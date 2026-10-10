@@ -62,6 +62,12 @@ describe('the written files: each gives exactly the findings it was made for, by
     'n1-line-breaks.ged': { N1: [9, 10] },
     'n5-leading.ged': { N5: [7, 8] },
     'mixed-endings.ged': { N7: ['file'] },
+    // 0.6.2: the table of tags in the page. FAM9, and a BIRT under a FAM, in a 5.5.1 file; in a 7.0
+    // file, _SKYPEID declared in the header's SCHMA and _APID not; in a 5.5.5 file, an AFN, which
+    // 5.5.5 dropped, so no tag of its own (E10), and a SUBM under an INDI, which 5.5.5 no longer allows (N8)
+    'e10-n8-tags.ged': { N8: [27], E10: [29] },
+    'n9-undeclared.ged': { N9: [12] },
+    'e10-555-afn.ged': { E10: [12], N8: [13] },
     'no-final-newline.ged': {},
     'family.ged': {},
     'chan.ged': {},

@@ -9,11 +9,15 @@
  * window.GedCore, and under Node, where tests and tools require it; so what the tests prove is
  * what the page runs. BUILD-BRIEF sections 6–8 are the specification. tools/baseline_probe.py
  * reads by the same rules in Python, and tools/compare.js holds the two to each other.
+ *
+ * It needs tags.js, the table of the standards' tags, which the page loads first (window.GedTags)
+ * and Node requires. The checks E10, N8 and N9 and the plain line under a tag (0.6.2, P12) are
+ * its use of the table.
  */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.GedCore = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./tags.js'));
+  else root.GedCore = factory(root.GedTags);
+})(typeof self !== 'undefined' ? self : this, function (tags) {
   'use strict';
 
   const LF = 0x0a;
@@ -53,6 +57,7 @@
     { code: 'E7', kind: 'error', name: 'Points at nothing' },
     { code: 'E8', kind: 'error', name: 'Unreadable bytes' },
     { code: 'E9', kind: 'error', name: 'Header and bytes disagree' },
+    { code: 'E10', kind: 'error', name: 'Malformed: not a GEDCOM tag' },
     { code: 'N1', kind: 'note', name: 'Line break inside the value' },
     { code: 'N2', kind: 'note', name: 'Control character' },
     { code: 'N3', kind: 'note', name: 'Nothing points at it' },
@@ -60,11 +65,14 @@
     { code: 'N5', kind: 'note', name: 'Leading whitespace' },
     { code: 'N6', kind: 'note', name: 'Encoding shown as it can be' },
     { code: 'N7', kind: 'note', name: 'Mixed line endings' },
+    { code: 'N8', kind: 'note', name: 'Out of place' },
+    { code: 'N9', kind: 'note', name: 'Extension not declared in the header' },
   ];
   const CHECK_ORDER = Object.fromEntries(CHECKS.map((c, i) => [c.code, i]));
 
   // The probe's names for the same counts. N7 is not one of them: the probe reports the
-  // terminators themselves, and N7 is read off those.
+  // terminators themselves, and N7 is read off those. Nor are E10, N8 and N9: the probe has no
+  // table of tags.
   const PROBE_CHECK_NAMES = [
     ['E1', 'E1 no level number'],
     ['E2', 'E2 wrong line shape'],
@@ -357,6 +365,89 @@
     return model;
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // The tags, judged by the table (0.6.2, P12): E10, N8, N9
+  // ---------------------------------------------------------------------------------------------
+
+  // The words of an E10 finding: what is wrong with a tag the file's version turns away. A tag the
+  // table has, for another version, is said to be no tag of this one (SNOTE in a 5.5.1 file, CONC
+  // in a 7.0 one); a tag of the form a custom tag takes, which this version's rule does not let
+  // pass, says so (_DATE in a 5.5.5 file); the rest are no tag at all (FAM9).
+  function malformedWords(tag, version) {
+    if (tags.meaning(tag) !== null) return `${tag} is not a tag of GEDCOM ${version}`;
+    if (tag[0] === '_') return `${tag} is not a custom tag that GEDCOM ${version} allows`;
+    return `${tag} is not a GEDCOM tag`;
+  }
+
+  // N8's words: the tag, and the tag it stands under; a line at level 0 is not under any.
+  function placeWords(tag, place) {
+    return place === 'record' ? `${tag} does not belong at level 0` : `${tag} does not belong under ${place}`;
+  }
+
+  // The extension tags a 7.0 header declares: the first word of the value of each TAG line under
+  // SCHMA under HEAD (the tag, then the address that says what it means). Read once for a file.
+  function declaredTags(n, texts, level, tag, valAt, records) {
+    const out = new Set();
+    if (!records.length || tag[records[0]] !== 'HEAD') return out;
+    const end = records.length > 1 ? records[1] : n;
+    let inSchma = false;
+    for (let i = records[0] + 1; i < end; i += 1) {
+      if (level[i] === 1) inSchma = tag[i] === 'SCHMA';
+      else if (inSchma && level[i] === 2 && tag[i] === 'TAG' && valAt[i] >= 0) {
+        const word = /^ *([^ ]+)/.exec(texts[i].slice(valAt[i]));
+        if (word) out.add(word[1]);
+      }
+    }
+    return out;
+  }
+
+  // Every line's tag against the table of the standard the file declares (tags.versionFor: 5.5 is
+  // read as 5.5.1, 5.5.5 as itself, any 7.x as 7.0, and a file that says nothing as 5.5.1).
+  //   E10  the tag is malformed there (tags.tagKind): not in that standard, and not a custom tag
+  //        by its rule.
+  //   N8   a standard tag whose parent line's tag is a standard one too, and the table does not put
+  //        the first under the second (allowedUnder).
+  //   N9   7.0 only: a custom tag the header's SCHMA does not declare.
+  // A line is judged by E10 and N8 only when what it stands under is a standard tag (or it is a
+  // record's own line): a line under a malformed, custom or undeclared tag is not, so that one
+  // mistake, FAM9, makes one finding and not one for each line under it. N9 is a fact about the tag
+  // alone, and is said on every undeclared one. The parent of a line is the nearest line above it at
+  // a lower level, as parentOf has it; a line that did not parse ends nothing (6.4).
+  // The table is asked once for each tag, and once for each tag under each parent.
+  function judgeTags(n, texts, level, tag, valAt, records, declared, add) {
+    const version = tags.versionFor(declared);
+    const schema = version === '7.0' ? declaredTags(n, texts, level, tag, valAt, records) : new Set();
+    const kindOf = new Map();
+    const placeOf = new Map();
+    const openLevel = [];
+    const openTag = [];
+    const openStandard = [];
+    let depth = 0;
+    for (let i = 0; i < n; i += 1) {
+      const lv = level[i];
+      if (lv < 0) continue;
+      const t = tag[i];
+      while (depth > 0 && openLevel[depth - 1] >= lv) depth -= 1;
+      let kind = kindOf.get(t);
+      if (kind === undefined) { kind = tags.tagKind(t, version, schema); kindOf.set(t, kind); }
+      const place = lv === 0 ? 'record' : depth > 0 && openStandard[depth - 1] ? openTag[depth - 1] : null;
+      if (kind === 'undeclared') add('N9', i, `${t} is not declared in the header`);
+      else if (place !== null && kind === 'malformed') add('E10', i, malformedWords(t, version));
+      else if (place !== null && kind === 'standard') {
+        let row = placeOf.get(place);
+        if (row === undefined) { row = new Map(); placeOf.set(place, row); }
+        let allowed = row.get(t);
+        if (allowed === undefined) { allowed = tags.allowedUnder(t, place, version); row.set(t, allowed); }
+        if (allowed === false) add('N8', i, placeWords(t, place));
+      }
+      openLevel[depth] = lv;
+      openTag[depth] = t;
+      openStandard[depth] = kind === 'standard';
+      depth += 1;
+    }
+    return { version, schema };
+  }
+
   // A file's lines, checked: 6.3 shape, 6.4 records and pointers, section 7's checks, section 8's
   // counts and labels. It works from the texts, not the bytes, so that after every edit the
   // document is checked again by the very code that read it (9.2). `bad` marks the lines whose
@@ -440,6 +531,7 @@
         listIn(pointedBy, m[4]).push(i);
       }
     }
+    const judged = judgeTags(n, texts, level, tag, valAt, records, head.version, add);
     const t2 = now();
 
     // E4 — the frame: HEAD first, TRLR last, one of each.
@@ -485,6 +577,7 @@
     const model = {
       bytes: null, size: 0, prefix: enc.prefix, unit: enc.unit,
       codec, how: enc.how, declared: head.declared, version: head.version, v7,
+      tagVersion: judged.version, schema: judged.schema,
       encodingLabel: CODEC_LABEL[codec] || head.declared || 'one byte per character',
       encodingFlags: decided.flags, encodingNotes: decided.notes,
       n, start: null, end: null, term, termCounts,
@@ -2067,6 +2160,38 @@
     return [{ text: `Delete line ${num(i + 1)}, ` }, { text: clipped(own, QUESTION_CHARS), as: 'line' }, { text: under ? `, and ${count}?` : '?' }];
   }
 
+  // The programs a custom tag is known from, as words: "Ancestry", "Family Tree Maker and Legacy",
+  // "PAF, Ancestral Quest and Family Origins". The table's own words are kept when they already
+  // read as a phrase ("several programs", "MyHeritage and many more"); its semicolon is a comma.
+  function programList(vendor) {
+    if (/; | and /.test(vendor)) return vendor.replace('; ', ', ');
+    const parts = vendor.split(', ');
+    return parts.length === 1 ? vendor : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  }
+
+  // The one line of plain words under the selected line's tag in the right frame (0.6.2, P12, M3),
+  // from the tag alone, in a file judged by `version` whose header declares `schema` (a model's
+  // tagVersion and schema):
+  //   a standard tag     what the table says it means ("Birth: when and where a person was born.")
+  //   a custom tag       "A custom tag of Ancestry and Family Tree Maker: ..." and the table's line,
+  //                      when the table knows it; else "A custom tag." (a 7.0 file's undeclared
+  //                      custom tag reads the same; N9 says the rest)
+  //   a malformed tag    E10's words, with a full stop
+  // null when there is no tag: a line that did not parse.
+  function tagMeaning(tag, version, schema) {
+    if (typeof tag !== 'string') return null;
+    const kind = tags.tagKind(tag, version, schema);
+    if (kind === 'standard') return tags.meaning(tag);
+    if (kind === 'malformed') return `${malformedWords(tag, version)}.`;
+    const known = tags.customMeaning(tag);
+    if (!known) return 'A custom tag.';
+    // the table's sentence follows a colon, so its first letter is small, unless that word is the name of a program
+    const first = /^[A-Za-z]+/.exec(known.meaning);
+    const keep = !first || known.vendor.split(/[^A-Za-z]+/).includes(first[0]);
+    const gloss = keep ? known.meaning : known.meaning[0].toLowerCase() + known.meaning.slice(1);
+    return `A custom tag of ${programList(known.vendor)}: ${gloss}`;
+  }
+
   // A record's name for the right frame's path (0.6.0): its label (8) without the years an INDI's
   // label adds, there or in a family's, since dates are for the Records list. Its first line as
   // written when it has nothing else to show.
@@ -2225,7 +2350,7 @@
   // applies, and the page, to say whether a report still reads as built. The lines after the
   // checksum are the reporter's own words, and are not checked.
 
-  const REPORT_CHECKS = ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7'];
+  const REPORT_CHECKS = ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9'];
   const CHECKSUM = 'checksum: ';
 
   // "line 5" · "lines 5 and 9" · "lines 5, 9 and 12, of 40"
@@ -2301,7 +2426,7 @@
     moveRefusal, moveLines, landings,
     moveOntoCopy, takeBack, isChanged, asOpened, unsaved, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
-    nameParts, nameShown, linkAt, clip, deleteQuestion, linePath, stripStyles, metaRebuild, metaParts, lineShape,
+    nameParts, nameShown, linkAt, clip, deleteQuestion, linePath, tagMeaning, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,
   };
 });

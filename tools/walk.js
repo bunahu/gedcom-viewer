@@ -36,9 +36,14 @@
 // opened by their icons, one at a time, shut by a line chosen in them, by Esc and by a file opened,
 // nothing of it stored); and in the save and copy parts, rewritten for P11's D1: after a save, or a
 // download, the page is on the copy, and every file of the visit is refused in the Save dialog.
+// Release 0.6.2 is walked in a part of its own, tags (the table of tags in the page: a record's FAM typed
+// over with FAM9, a BIRT put under a FAM, and the 7.0, 5.5.5 and 5.5.1 files written for the checks E10, N8
+// and N9: the wavy line under the tag, its hover text, Checks and what each check means, the plain line
+// under a selected line's tag, the problem report), and in the first part's step for the sample family,
+// which now reads 75 notes.
 // --shots DIR saves pictures of the fictional files and of the sample family, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
-// third, scroll, drags, save, copy, look, bars, first, drawers. Exit 0 when every step passes.
+// third, scroll, drags, save, copy, look, bars, first, drawers, tags. Exit 0 when every step passes.
 //
 // The computer's Save dialog itself is not walked here: a person picks the name and the place in
 // it. The walk stands in for it as Chromium's behaves, the file picked created, or emptied when it
@@ -2264,7 +2269,7 @@ async function theFirstScreen(page, shots) {
   check(opened.save === 'Download a copy (off)' && !opened.leave, `it has no handle, so in this Chrome, which has the Save dialog, its button reads "${opened.save}"`);
   check(['GEDCOM 5.5', 'ANSI', 'exported 12 MAR 1997 by FamilyOrigins 5.0', '139.9 KB', '9,190 lines'].every((x) => facts.text.includes(x)) && facts.sha === SAMPLE_SHA256,
     `its facts: GEDCOM 5.5, ANSI, exported 12 MAR 1997 by FamilyOrigins 5.0, 139.9 KB, 9,190 lines, sha256 ${facts.sha.slice(0, 12)}…, the file as found`);
-  check(/^0 errors \S 0 notes$/.test(opened.checks) && heads.length === 0, `Checks: ${opened.checks}; its header says CHAR ANSI, and with every byte ASCII there is nothing to note`);
+  check(/^0 errors \S 75 notes$/.test(opened.checks) && JSON.stringify(heads) === JSON.stringify(['N8']), `Checks: ${opened.checks}, all N8 (0.6.2): the file's exporter put an SLGC under each CHIL, which no standard allows; its header says CHAR ANSI, and with every byte ASCII there is no N6`);
   check(fetched.length === 0, `nothing was asked of the network or the disk to open it (${fetched.length} requests since the click): it is part of the page`);
 }
 
@@ -2432,6 +2437,203 @@ async function theDrawers(page, shots) {
   check(search.cls === 'work right-drawer left-drawer left-open' && search.panel && search.focus === 'search-box', '⌘F opens the left drawer at Search, its box ready');
 }
 
+// ---------------------------------------------------------------------------------------------
+// 0.6.2: the table of tags in the page (P12): E10, N8 and N9, the wavy line and its hover text, and
+// the plain line under a selected line's tag
+// ---------------------------------------------------------------------------------------------
+
+function tagsFiction() {
+  const L = ['0 HEAD', '1 SOUR gedview-walk', '2 VERS 1.0', '1 DATE 10 OCT 2026', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8', '1 SUBM @U1@', '0 @U1@ SUBM', '1 NAME Walk /Fixture/'];
+  for (let k = 1; k <= 8; k += 1) {
+    L.push(`0 @I${k}@ INDI`, `1 NAME Person${k} /Fixture/`, `2 GIVN Person${k}`, '2 SURN Fixture', `1 SEX ${k % 2 ? 'F' : 'M'}`, '1 BIRT', `2 DATE ${1 + k} JAN ${1850 + k}`, '2 PLAC Fixtureville');
+    if (k === 1) L.push('1 _APID 1,7602::2771226', '1 _ZZZ nobody wrote this one');
+    L.push(`1 FAMS @F${Math.ceil(k / 2)}@`);
+  }
+  for (let f = 1; f <= 4; f += 1) L.push(`0 @F${f}@ FAM`, `1 HUSB @I${2 * f}@`, `1 WIFE @I${2 * f - 1}@`, `1 CHIL @I${(f % 4) * 2 + 1}@`, '2 _MREL Natural', '1 MARR', `2 DATE ${1870 + f}`);
+  L.push('0 TRLR');
+  return `${L.join('\n')}\n`;
+}
+
+// The row of line n, and what its tag shows: the wavy line (its class, its style and colour as the
+// browser computes them), the hover text, the dot in the mark column, and the row's own measure.
+const ROW_OF = (n) => `[...document.querySelectorAll('#grid .row')].find((x) => x.querySelector('.ln') && x.querySelector('.ln').textContent === ${JSON.stringify(fmt(n))})`;
+const TAG_LOOK = (n) => `(() => { const r = ${ROW_OF(n)}; const tg = r.querySelector('.tg'); const cs = getComputedStyle(tg); const mk = r.querySelector('.mk');
+  const plain = [...document.querySelectorAll('#grid .row')].find((x) => x !== r && x.querySelector('.ln') && !x.querySelector('.tg[title]') && !x.classList.contains('is-section'));
+  return { cls: tg.className, title: tg.title, line: cs.textDecorationLine, style: cs.textDecorationStyle, colour: cs.textDecorationColor, thick: cs.textDecorationThickness,
+    mk: mk.className, dot: getComputedStyle(mk, '::before').backgroundColor, rowH: r.getBoundingClientRect().height, plainH: plain.getBoundingClientRect().height,
+    fxW: r.querySelector('.fx').getBoundingClientRect().width, plainFxW: plain.querySelector('.fx').getBoundingClientRect().width,
+    lnW: r.querySelector('.ln').getBoundingClientRect().width, plainLnW: plain.querySelector('.ln').getBoundingClientRect().width }; })()`;
+// What a property of the palette is, as a colour the browser computes (a probe element, set through the CSSOM).
+const VAR_COLOUR = (prop) => `(() => { const p = document.createElement('span'); p.style.color = 'var(${prop})'; document.body.appendChild(p); const c = getComputedStyle(p).color; p.remove(); return c; })()`;
+// The right frame, as far as the tag goes: its head (the line without its value), the plain line
+// under it and where that sits against the head and the value, and the findings listed.
+const TAG_FRAME = `(() => { const d = document.getElementById('detail'); const head = d.querySelector('.detail-head'); const say = d.querySelector('.detail-meaning'); const val = d.querySelector('.detail-value');
+  const box = (e) => e.getBoundingClientRect();
+  return { head: head ? head.textContent : null, said: say ? say.textContent : null, below: !!say && !!head && box(say).top >= box(head).bottom - 1,
+    above: !say || !val || box(say).bottom <= box(val).top + 1, findings: [...d.querySelectorAll('.finding')].map((f) => f.textContent), many: d.querySelectorAll('.detail-meaning').length }; })()`;
+const CHECK_HEADS = `${VISIBLE('checks-list')}.filter((r) => r.classList.contains('is-head')).map((r) => r.querySelector('.muted').textContent + ' | ' + r.querySelector('.main').textContent + ' | ' + r.querySelector('.end').textContent)`;
+const CHECK_SUBS = `${VISIBLE('checks-list')}.filter((r) => r.classList.contains('is-sub')).map((r) => r.querySelector('.muted').textContent + ' | ' + r.querySelector('.main').textContent)`;
+const CHECKS_NOW = "({ sum: document.getElementById('checks-sum').textContent, tab: document.getElementById('checks-count').textContent })";
+
+async function theTags(page, dir, shots) {
+  const file = path.join(dir, 'tags.ged');
+  fs.writeFileSync(file, tagsFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  const lineOf = (text) => m.texts.indexOf(text) + 1;
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `tags-${name}.png`)) : null);
+  const synthetic = (name) => path.join(ROOT, 'fixtures', 'synthetic', name);
+  const openChecks = async () => {
+    await page.click("document.querySelector('.tab[data-panel=checks]')");
+    await page.waitFor(LAID_OUT('checks-list'));
+  };
+  console.log(`\n== the table of tags (0.6.2), on a fictional file of ${fmt(m.n)} lines, then on three written ones`);
+  check(m.tagVersion === '5.5.1' && m.findings.errors === 0 && m.findings.notes === 0, `the fictional file says 5.5.1 and holds no finding by core.js: ${m.findings.errors} errors, ${m.findings.notes} notes`);
+
+  // a clean file: Checks reads empty, no tag has a wavy line or a hover text; the plain line under a selected line's tag
+  await page.openFile(file);
+  await openChecks();
+  const clean = await page.ev(`({ ...${CHECKS_NOW}, heads: ${CHECK_HEADS}, waved: document.querySelectorAll('#grid .tg[title], #grid .tg.is-wave-error, #grid .tg.is-wave-note').length })`);
+  check(/^0 errors \S 0 notes$/.test(clean.sum) && clean.tab === '' && clean.heads.length === 0 && clean.waved === 0,
+    `Checks reads "${clean.sum}" and the lines on show have no wavy line and no hover text: a custom tag of your own (_APID, _ZZZ, _MREL) is nothing to mark in a 5.5.1 file`);
+
+  const ordinary = [['0 @I1@ INDI', 'An individual: one person.'], ['1 BIRT', 'Birth: when and where a person was born.'], ['1 NAME Person1 /Fixture/', 'A name: of a person, a submitter, a repository or a program.'],
+    ['1 _APID 1,7602::2771226', 'A custom tag of Ancestry: where on Ancestry the cited record is: a collection number, two colons, an entry number.'],
+    ['2 _MREL Natural', 'A custom tag of Family Tree Maker and Legacy: how a child is related to the mother, such as Natural.'], ['1 _ZZZ nobody wrote this one', 'A custom tag.'],
+    ['0 HEAD', 'The header: facts about the whole file. It comes first.']];
+  const frames = [];
+  for (const [text] of ordinary) {
+    await gotoLine(page, lineOf(text));
+    frames.push(await page.ev(TAG_FRAME));
+  }
+  check(ordinary.every(([text, said], k) => frames[k].said === said && frames[k].many === 1 && frames[k].below && frames[k].above && core.tagMeaning(m.tag[lineOf(text) - 1], m.tagVersion, m.schema) === said),
+    `a selected line has its tag's meaning in one plain line under the tag and above the value, the words core.js gives: ${ordinary.map(([text], k) => `${text.split(' ').slice(0, 2).join(' ')} → "${frames[k].said}"`).join('; ').slice(0, 330)}…`);
+  await page.click("document.querySelector('.tab[data-panel=tags]')");
+  await page.waitFor(LAID_OUT('tags-list'));
+  const tagsList = await page.ev(`${VISIBLE('tags-list')}.map((r) => [...r.children].map((c) => c.textContent).join(' ')).slice(0, 4)`);
+  const hovers = await page.ev("document.querySelectorAll('#grid .row .tx [title], #grid .row [title], #tags-list [title]').length");
+  check(tagsList.length === 4 && tagsList.every((t) => /^\S+ [\d,]+$/.test(t)) && hovers === 0, `the Tags list is as it was, a tag and its count (${tagsList.join(', ')}) and nothing on the lines has a hover text: the meaning is the right frame's alone`);
+  await page.click("document.querySelector('.tab[data-panel=records]')");
+
+  // a record's FAM typed over with FAM9: one error, with its wavy line, its words, its dot, and Checks
+  const fam = lineOf('0 @F1@ FAM');
+  await retype(page, fam, '0 @F1@ FAM9');
+  const wave = await page.ev(TAG_LOOK(fam));
+  const red = await page.ev(VAR_COLOUR('--wave-error'));
+  check(wave.cls.includes('is-wave-error') && wave.line.includes('underline') && wave.style === 'wavy' && wave.colour === red && wave.thick === '1.5px',
+    `FAM9: the tag has a wavy line (${wave.line} ${wave.style}, ${wave.thick}), in --wave-error (${wave.colour})`);
+  check(wave.title === 'FAM9 is not a GEDCOM tag' && wave.mk.includes('is-error') && wave.dot === red,
+    `its hover text is the finding's words, "${wave.title}", and its dot in the mark column is the error's, the same red`);
+  check(wave.rowH === wave.plainH && wave.fxW === wave.plainFxW && wave.lnW === wave.plainLnW,
+    `the row is as tall as the others (${wave.rowH} px) and its number column as wide (${wave.fxW} px): the wavy line takes no room`);
+  await shot('fam9-line');
+  await openChecks();
+  const one = await page.ev(`({ ...${CHECKS_NOW}, heads: ${CHECK_HEADS}, subs: ${CHECK_SUBS} })`);
+  check(/^1 error \S 0 notes$/.test(one.sum) && one.tab === '1' && JSON.stringify(one.heads) === JSON.stringify(['E10 | Malformed: not a GEDCOM tag | 1']) && one.subs.length === 1 && one.subs[0] === `${fmt(fam)} | 0 @F1@ FAM9`,
+    `Checks reads "${one.sum}": E10, "Malformed: not a GEDCOM tag", 1, its line ${fmt(fam)}; the lines under FAM9 raise nothing of their own`);
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
+  const help = await page.ev(`({ code: document.querySelector('#detail .help-code').textContent, name: document.querySelector('#detail .help-name').textContent,
+    text: document.querySelector('#detail .help-text').textContent, count: document.querySelector('#detail .help .detail-title').textContent, kind: document.querySelector('#detail .help').className })`);
+  check(help.code === 'E10' && help.name === 'Malformed: not a GEDCOM tag' && help.kind === 'help is-error' && /^This tag is not one that GEDCOM has in the version this file declares/.test(help.text) && /Correct the tag/.test(help.text) && help.count === '1 line in this file',
+    `the title clicked says what it means in the right frame, in the error's colour: E10, "${help.name}", "${help.text.slice(0, 60)}…", ${help.count}`);
+  await shot('fam9-checks');
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-sub'))`);
+  const sel = await page.ev(`({ ln: (${SELECTED}).ln, frame: ${TAG_FRAME} })`);
+  check(sel.ln === fam && sel.frame.said === 'FAM9 is not a GEDCOM tag.' && JSON.stringify(sel.frame.findings) === JSON.stringify(['E10Malformed: not a GEDCOM tag']),
+    `the finding's line selected: under its tag the right frame says "${sel.frame.said}", and lists the finding (${sel.frame.findings.join(', ')})`);
+  await shot('fam9-meaning');
+  await gotoLine(page, fam + 1);
+  const child = await page.ev(`({ look: ${TAG_LOOK(fam + 1)}, frame: ${TAG_FRAME} })`);
+  check(child.look.title === '' && !child.look.cls.includes('is-wave') && child.look.mk === 'mk' && child.frame.findings.length === 0 && /^The husband in a family/.test(child.frame.said),
+    'the HUSB line under FAM9 has no wavy line and no finding, and says what HUSB means: one mistake is one finding');
+
+  // undone, the finding goes; then a BIRT put under the FAM: N8, a note, gold, its words say which tag and which parent
+  await page.click("document.getElementById('undo')");
+  await page.waitFor("!document.querySelector('#grid .tg.is-wave-error')");
+  const undone = await page.ev(`({ ...${CHECKS_NOW}, heads: ${CHECK_HEADS} })`);
+  check(/^0 errors \S 0 notes$/.test(undone.sum) && undone.heads.length === 0, `undone: Checks reads "${undone.sum}" again`);
+  await gotoLine(page, fam);
+  await page.click(ACTION('Add line under'));
+  await page.waitFor("document.querySelector('#grid input.edit') === document.activeElement");
+  await page.type('BIRT');
+  await page.key('Enter', 'Enter', 13);
+  await page.waitFor("!document.querySelector('#grid input.edit')");
+  await page.waitFor("document.querySelector('#grid .tg.is-wave-note')");
+  const misplaced = await page.ev(TAG_LOOK(fam + 1));
+  const gold = await page.ev(VAR_COLOUR('--wave-note'));
+  check(misplaced.cls.includes('is-wave-note') && misplaced.style === 'wavy' && misplaced.colour === gold && misplaced.title === 'BIRT does not belong under FAM' && misplaced.mk.includes('is-note') && misplaced.dot === gold && gold !== red,
+    `a BIRT put under the FAM: a wavy line in --wave-note (${misplaced.colour}, not the error's ${red}), hover "${misplaced.title}", a note's dot`);
+  check(misplaced.rowH === misplaced.plainH && misplaced.fxW === misplaced.plainFxW, 'the row is as tall as the others, and its number column as wide');
+  await openChecks();
+  const note = await page.ev(`({ ...${CHECKS_NOW}, heads: ${CHECK_HEADS}, subs: ${CHECK_SUBS} })`);
+  check(/^0 errors \S 1 note$/.test(note.sum) && note.tab === '1' && JSON.stringify(note.heads) === JSON.stringify(['N8 | Out of place | 1']) && JSON.stringify(note.subs) === JSON.stringify([`${fmt(fam + 1)} | BIRT does not belong under FAM`]),
+    `Checks reads "${note.sum}": N8, "Out of place", 1, and its line says which tag and which parent: ${note.subs[0]}`);
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
+  const noteHelp = await page.ev(`({ code: document.querySelector('#detail .help-code').textContent, name: document.querySelector('#detail .help-name').textContent, text: document.querySelector('#detail .help-text').textContent, kind: document.querySelector('#detail .help').className })`);
+  check(noteHelp.code === 'N8' && noteHelp.name === 'Out of place' && noteHelp.kind === 'help is-note' && /^This tag is one GEDCOM has, but not under the line it sits under/.test(noteHelp.text), `its title clicked: "${noteHelp.name}", "${noteHelp.text.slice(0, 64)}…"`);
+  await gotoLine(page, fam + 1);
+  const noteFrame = await page.ev(TAG_FRAME);
+  check(noteFrame.said === 'Birth: when and where a person was born.' && JSON.stringify(noteFrame.findings) === JSON.stringify(['N8Out of place: BIRT does not belong under FAM']),
+    `the BIRT line selected: its meaning stands, "${noteFrame.said}", and the finding says "${noteFrame.findings[0]}"`);
+  await shot('birt-under-fam');
+  await page.click("document.getElementById('undo')");
+  await page.waitFor("!document.querySelector('#grid .tg.is-wave-note')");
+
+  // the wavy line in the three looks and under forced colors: the dots' own colours; the system's own where it forces them
+  await retype(page, fam, '0 @F1@ FAM9');
+  const looks = [];
+  for (const theme of ['theme-dark', 'theme-dusk', 'theme-light']) {
+    await setting(page, theme);
+    looks.push(await page.ev(`({ theme: document.documentElement.className, wave: ${TAG_LOOK(fam)}, red: ${VAR_COLOUR('--wave-error')}, gold: ${VAR_COLOUR('--wave-note')} })`));
+  }
+  check(looks.every((l) => l.wave.colour === l.red && l.wave.dot === l.red && l.red !== l.gold) && new Set(looks.map((l) => l.red)).size === 3,
+    `the wavy line is the error's dot in each look, and the three looks differ (${looks.map((l) => l.red).join(' / ')})`);
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
+  await sleep(100);
+  const forced = await page.ev(`(() => { const tg = ${ROW_OF(fam)}.querySelector('.tg'); const cs = getComputedStyle(tg); return { style: cs.textDecorationStyle, line: cs.textDecorationLine, colour: cs.textDecorationColor, text: cs.color }; })()`);
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'none' }] });
+  check(forced.style === 'wavy' && forced.line.includes('underline') && forced.colour !== looks[2].red && forced.colour === forced.text,
+    `under forced colors the line is still wavy, and drawn in the system's own colour (${forced.colour}), not the palette's`);
+  await page.click("document.getElementById('undo')");
+  await page.waitFor("!document.querySelector('#grid .tg.is-wave-error')");
+
+  // the three written files, each in the version it declares
+  await page.openFile(synthetic('n9-undeclared.ged'));
+  await openChecks();
+  const nine = await page.ev(`({ ...${CHECKS_NOW}, heads: ${CHECK_HEADS}, subs: ${CHECK_SUBS} })`);
+  const apid = core.read(new Uint8Array(fs.readFileSync(synthetic('n9-undeclared.ged')))).texts.indexOf('1 _APID 1,7602::2771226') + 1;
+  const skype = apid - 1;
+  const ext = await page.ev(`({ apid: ${TAG_LOOK(apid)}, skype: ${TAG_LOOK(skype)} })`);
+  check(/^0 errors \S 1 note$/.test(nine.sum) && JSON.stringify(nine.heads) === JSON.stringify(['N9 | Extension not declared in the header | 1']) && ext.apid.cls.includes('is-wave-note') && ext.apid.title === '_APID is not declared in the header'
+    && !ext.skype.cls.includes('is-wave') && ext.skype.title === '',
+    `the 7.0 file: Checks reads "${nine.sum}", N9 "Extension not declared in the header"; _APID has a gold wavy line, "${ext.apid.title}", and _SKYPEID, which the header's SCHMA declares, has none`);
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
+  const nineHelp = await page.ev("({ code: document.querySelector('#detail .help-code').textContent, text: document.querySelector('#detail .help-text').textContent })");
+  await gotoLine(page, apid);
+  const apidFrame = await page.ev(TAG_FRAME);
+  await shot('meaning');
+  await gotoLine(page, skype);
+  const skypeFrame = await page.ev(TAG_FRAME);
+  check(nineHelp.code === 'N9' && /^This is a custom tag, one of your own or a program's, and the header does not say what it means/.test(nineHelp.text)
+    && apidFrame.said.startsWith('A custom tag of Ancestry:') && skypeFrame.said === 'A custom tag.' && JSON.stringify(apidFrame.findings) === JSON.stringify(['N9Extension not declared in the header']),
+    `N9's title clicked says what it means; under _APID: "${apidFrame.said.slice(0, 40)}…"; under _SKYPEID: "${skypeFrame.said}"`);
+  await shot('seven');
+
+  await page.openFile(synthetic('e10-555-afn.ged'));
+  await openChecks();
+  const five = await page.ev(`({ ...${CHECKS_NOW}, heads: ${CHECK_HEADS}, subs: ${CHECK_SUBS}, afn: ${TAG_LOOK(12)}, subm: ${TAG_LOOK(13)} })`);
+  check(/^1 error \S 1 note$/.test(five.sum) && JSON.stringify(five.heads) === JSON.stringify(['E10 | Malformed: not a GEDCOM tag | 1', 'N8 | Out of place | 1'])
+    && five.afn.title === 'AFN is not a tag of GEDCOM 5.5.5' && five.afn.cls.includes('is-wave-error') && five.subm.title === 'SUBM does not belong under INDI' && five.subm.cls.includes('is-wave-note'),
+    `the 5.5.5 file: Checks reads "${five.sum}"; AFN, which 5.5.5 dropped, is E10 ("${five.afn.title}"), and a SUBM under an INDI, where 5.5.5 no longer lets one sit, is N8`);
+
+  await page.openFile(synthetic('e10-n8-tags.ged'));
+  await setting(page, 'report');
+  await page.waitFor("document.getElementById('report-text') !== null");
+  const report = await page.ev("document.getElementById('report-text').value");
+  await page.ev("document.getElementById('dialog').close(); true");
+  check(report.startsWith(`GEDCOM Viewer ${VERSION} `) && report.includes('\nChecks: E10 1 (line 29) · N8 1\n') && !/is not a GEDCOM tag|does not belong/.test(report),
+    'the problem report counts them by code ("Checks: E10 1 (line 29) · N8 1") and holds none of their words');
+}
+
 async function waitForFile(dir, pattern, timeout = 10000, not = null) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
@@ -2499,6 +2701,7 @@ async function waitForFile(dir, pattern, timeout = 10000, not = null) {
     if (part('bars')) await inChrome((page) => theBars(page, dir, shots));
     if (part('first')) await inChrome((page) => theFirstScreen(page, shots));
     if (part('drawers')) await inChrome((page) => theDrawers(page, shots));
+    if (part('tags')) await inChrome((page) => theTags(page, dir, shots));
     console.log('\n== the whole walk');
     check(log.errors.length === 0, `no error in the console${log.errors.length ? `: ${log.errors.join(' | ')}` : ''}`);
     // file:// is the page and its files; blob: is a download the page made of its own bytes

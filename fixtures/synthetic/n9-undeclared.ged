@@ -1,0 +1,20 @@
+0 HEAD
+1 GEDC
+2 VERS 7.0
+1 SCHMA
+2 TAG _SKYPEID https://example.com/ns/skypeid
+1 SUBM @U1@
+0 @U1@ SUBM
+1 NAME Jane /Fixture/
+0 @I1@ INDI
+1 NAME Ada /Fixture/
+1 _SKYPEID ada.fixture
+1 _APID 1,7602::2771226
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME Abe /Fixture/
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+0 TRLR

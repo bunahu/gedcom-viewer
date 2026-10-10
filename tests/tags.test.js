@@ -853,9 +853,16 @@ const readFixture = (name) => linesOf(fs.readFileSync(path.join(SYNTHETIC, name)
 
 // A file that is written to be flagged by a later check may use a tag the standards do not have
 // (FAM9), or put a standard tag where it does not belong. Name such tags and files here, so that
-// the two tests below go on saying something about all the others.
-const MADE_UP_ON_PURPOSE = new Set([]);          // tags
-const PLACED_WRONG_ON_PURPOSE = new Set([]);     // file names
+// the two tests below go on saying something about all the others. Since 0.6.2 three files are
+// written for the checks E10, N8 and N9, and tests/read.test.js says what each one is made to give:
+//   e10-n8-tags.ged   5.5.1: FAM9 as a record's tag (E10), and a BIRT under a FAM (N8)
+//   n9-undeclared.ged 7.0: _SKYPEID, which its SCHMA declares, and _APID, which it does not (N9)
+//   e10-555-afn.ged   5.5.5: an AFN, which 5.5.5 dropped (E10), and a SUBM under an INDI, where
+//                     5.5.5 no longer lets one sit (N8)
+const MADE_UP_ON_PURPOSE = new Set(['FAM9', 'AFN', '_APID']);          // tags
+const PLACED_WRONG_ON_PURPOSE = new Set(['e10-n8-tags.ged', 'e10-555-afn.ged']);     // file names
+// The files written for a version other than 5.5.1, and the version each says.
+const OTHER_VERSION = new Map([['n9-undeclared.ged', V7], ['e10-555-afn.ged', V555]]);
 
 describe('the written files of fixtures/synthetic/', () => {
   const files = fixtureFiles().map((name) => ({ name, lines: readFixture(name) }));
@@ -894,13 +901,15 @@ describe('the written files of fixtures/synthetic/', () => {
       const version = versionOf(f.lines);
       for (const l of f.lines) {
         if (MADE_UP_ON_PURPOSE.has(l.tag)) continue;
-        assert.ok(['standard', 'custom'].includes(tagKind(l.tag, version)), `${f.name}:${l.number} ${l.tag} is ${tagKind(l.tag, version)} in ${version}`);
+        const kind = tagKind(l.tag, version, declaredIn(f.lines));
+        assert.ok(['standard', 'custom'].includes(kind), `${f.name}:${l.number} ${l.tag} is ${kind} in ${version}`);
       }
     }
   });
 
-  it('say VERS 5.5.1, every one of them, so the table they are judged by is the 5.5.1 one', () => {
-    for (const f of files) assert.equal(versionOf(f.lines), V551, f.name);
+  it('say VERS 5.5.1, every one of them but the two written for another version, which say theirs', () => {
+    assert.equal(OTHER_VERSION.size, 2);
+    for (const f of files) assert.equal(versionOf(f.lines), OTHER_VERSION.get(f.name) || V551, f.name);
   });
 });
 

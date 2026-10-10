@@ -133,11 +133,11 @@ describe("the rest of 6.1's table", () => {
   });
 
   it('version 7 has no CHAR and is UTF-8, with no flag; and no line is too long in version 7', () => {
-    const long = `1 NOTE ${'x'.repeat(300)}`;
-    const m7 = readBytes(new Uint8Array(Buffer.from(`0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @N1@ SNOTE a\n${long}\n0 TRLR\n`)));
+    // the long line is a continuation of the note, a CONT in 7.0 and a CONC in 5.5.1, where the tag table puts one (0.6.2)
+    const m7 = readBytes(new Uint8Array(Buffer.from(`0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @N1@ SNOTE a\n1 CONT ${'x'.repeat(300)}\n0 TRLR\n`)));
     assert.equal(m7.codec, 'utf-8');
     assert.deepEqual(h.findingsOf(m7), { N3: [4] });
-    const m5 = h.readText(`0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n0 @N1@ NOTE a\n${long}\n0 TRLR\n`);
+    const m5 = h.readText(`0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR UTF-8\n0 @N1@ NOTE a\n1 CONC ${'x'.repeat(300)}\n0 TRLR\n`);
     assert.deepEqual(h.findingsOf(m5), { N3: [5], N4: [6] });
   });
 

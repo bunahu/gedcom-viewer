@@ -144,6 +144,10 @@
   --special-bg: color-mix(in srgb, var(--color-warning) 30%, transparent);
   --mark-error: var(--color-danger);
   --mark-size: 7px;
+  --wave-error: var(--mark-error);    /* the wavy line under a tag the standard does not have (E10) */
+  --wave-note: var(--mark-note);      /* ...under a tag out of place (N8), or a 7.0 custom tag the header does not declare (N9) */
+  --wave-width: 1.5px;                /* how thick it is */
+  --wave-offset: 1px;                 /* how far under the letters: the row is 24px tall, and clips what falls outside it */
   --fold-color: var(--color-text-muted);   /* the ▸ ▾ that shut and open a block */
   --section-bg: color-mix(in srgb, var(--color-text) 7%, transparent);   /* a section's row, between record types */
   --fold-size: 1.25em;
@@ -744,6 +748,15 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .lv { color: var(--level-color); }
 .id { color: var(--id-color); }
 .tg { color: var(--tag-color); font-weight: var(--tag-weight); }
+/* a tag the table of tags finds wanting (0.6.2): the wavy line takes no room, so the row is as tall as it was */
+.tg.is-wave-error, .tg.is-wave-note {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: var(--wave-width);
+  text-underline-offset: var(--wave-offset);
+}
+.tg.is-wave-error { text-decoration-color: var(--wave-error); }
+.tg.is-wave-note { text-decoration-color: var(--wave-note); }
 .val { color: var(--value-color); }
 .ptr { color: var(--pointer-color); cursor: pointer; }
 .ptr:hover { text-decoration: underline; }
@@ -834,6 +847,8 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   font-size: var(--font-size-small);
 }
 .detail-head { font-family: var(--font-grid); font-size: var(--font-size-grid); }
+/* what the selected line's tag means, in one line, under it (0.6.2) */
+.detail-meaning { margin-top: 4px; color: var(--color-text-muted); line-height: 1.5; overflow-wrap: anywhere; }
 .detail-value {
   margin-top: 6px;
   font-family: var(--font-grid);
@@ -1051,7 +1066,8 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 /* The computer forces its own colors (Windows contrast themes and the like). The browser then drops
    the page's backgrounds and shadows, so what only a tint or a shadow showed is drawn again here in
    the system's own colors, which it keeps: the selected line, a pressed button or tab, the ring
-   round a control, the gold line of a drag, and the dots of a change and of a finding. These are
+   round a control, the gold line of a drag, the dots of a change and of a finding, and the wavy line
+   under a tag the table of tags finds wanting. These are
    the system's colors, not the palette's, so they are written here and not as properties.
    forced-color-adjust: none, which the parts inside inherit, keeps the browser from drawing a plate
    of its own behind their text; the box a line is typed in is given back to the browser. */
@@ -1081,4 +1097,8 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   .mk.is-note::before { box-sizing: border-box; border: 2px solid CanvasText; background: transparent; }   /* an error is a full dot, a note a ring */
   .row.is-sel .cg::before, .row.is-sel .mk.is-error::before { background: HighlightText; }
   .row.is-sel .mk.is-note::before { border-color: HighlightText; }
+
+  /* Chrome leaves a decoration's colour alone, so the wavy line is given the system's: both are one colour here, and the dot in the mark column says error or note */
+  .tg.is-wave-error, .tg.is-wave-note { text-decoration-color: CanvasText; }
+  .row.is-sel .tg.is-wave-error, .row.is-sel .tg.is-wave-note { text-decoration-color: HighlightText; }
 }

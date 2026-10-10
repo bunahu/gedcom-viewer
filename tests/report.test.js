@@ -44,7 +44,7 @@ describe('P8 the problem report', () => {
     assert.ok(text.includes('sha256 abcdef012345…'), text);
     assert.ok(!/Fixture/.test(text), 'a name in the report');
     assert.match(text, /\nLines: LF \d+ · longest \d+ characters · CONC \d+ · CONT \d+ · CHAN \d+\n/);
-    assert.match(text, /\nChecks: (none|[EN]\d \d+.*)\n/);
+    assert.match(text, /\nChecks: (none|[EN]\d+ \d+.*)\n/);
   });
 
   it('an error check names its lines, numbers only: E7 in e6-e7-ids.ged', () => {

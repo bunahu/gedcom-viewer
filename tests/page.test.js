@@ -9,7 +9,7 @@ const h = require('./helpers.js');
 const K = require('./contrast.js');
 const core = require('../core.js');
 
-const PAGE = ['index.html', 'style.css', 'core.js', 'save.js', 'sample.js', 'ui.js'];
+const PAGE = ['index.html', 'style.css', 'tags.js', 'core.js', 'save.js', 'sample.js', 'ui.js'];
 const SAMPLE_SHA256 = 'f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff';   // washington.ged, as found (BUILD-BRIEF section 19, 0.6.1)
 const FORBIDDEN = ['fetch(', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'sendBeacon', 'import(', '@import',
   'url(http', 'http://', 'https://'];
@@ -18,13 +18,26 @@ const FEEDBACK = 'feedback@gedcom-viewer.net';
 const loads = (page) => [...page.matchAll(/\b(?:src|href)="([^"]*)"/g)].map((m) => m[1]);
 
 describe('the page', () => {
-  it('index.html loads style.css and the icons, then core.js, save.js, sample.js and ui.js as classic scripts, in that order; links privacy.html and its How to check; and nothing else', () => {
+  it('index.html loads style.css and the icons, then tags.js, core.js, save.js, sample.js and ui.js as classic scripts, in that order (the table before the code that reads it); links privacy.html and its How to check; and nothing else', () => {
     const page = read('index.html');
     assert.deepEqual([...page.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]),
-      ['<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="sample.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
+      ['<script src="tags.js" charset="utf-8">', '<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="sample.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
     assert.deepEqual(loads(page),
-      ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'privacy.html', 'privacy.html#how-to-check', 'core.js', 'save.js', 'sample.js', 'ui.js']);
+      ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'privacy.html', 'privacy.html#how-to-check', 'tags.js', 'core.js', 'save.js', 'sample.js', 'ui.js']);
     assert.ok(!/type="module"/.test(page), 'no modules: a page opened from disk may not import one');
+  });
+
+  it('publish.yml serves every file index.html and privacy.html load, tags.js among them, and hashes the same files it serves', () => {
+    const yml = fs.readFileSync(path.join(h.ROOT, '.github', 'workflows', 'publish.yml'), 'utf8');
+    const copied = yml.match(/^\s*cp (.+) site\/$/m);
+    const hashed = yml.match(/^\s*sha256sum (.+) > sums\.txt$/m);
+    assert.ok(copied && hashed, 'the publish job copies, and the release job hashes');
+    const served = copied[1].split(' ');
+    assert.deepEqual(hashed[1].split(' '), served, 'the two lists must match, in order (the workflow says so itself)');
+    assert.ok(served.includes('tags.js'), 'tags.js is served');
+    const wanted = [...loads(read('index.html')), ...loads(read('privacy.html'))].filter((u) => !u.includes('://') && !u.startsWith('mailto:'))
+      .map((u) => u.split('#')[0]);
+    for (const file of new Set(wanted)) assert.ok(served.includes(file), `${file} is loaded by a page and not served`);
   });
 
   it('no file of the page can reach the network — no exceptions', () => {
@@ -357,7 +370,8 @@ describe('the page', () => {
     assert.deepEqual(calls, ['factory'], 'nothing is called but the wrapper that sets the global');
     const m = core.read(new Uint8Array(Buffer.from(sample.text, 'utf8')));
     assert.deepEqual(core.recordCounts(m), [['INDI', 529], ['FAM', 114]]);
-    assert.deepEqual([m.findings.errors, m.findings.notes], [0, 0], 'nothing found: its header says CHAR ANSI, and its bytes are all ASCII, so even N6 has nothing to note');
+    assert.deepEqual([m.findings.errors, m.findings.notes], [0, 75], 'no error; its header says CHAR ANSI, and its bytes are all ASCII, so N6 has nothing to note; the 75 notes are N8, from 0.6.2: an SLGC under a CHIL, as its exporter wrote it (tests/tags-page.test.js)');
+    assert.equal(m.findings.byCode.N8.length, 75);
     assert.equal(m.encodingLabel, 'ANSI');
   });
 
@@ -546,12 +560,12 @@ describe('the page', () => {
     assert.equal((ui.match(/leaveTagsSearch\(\);/g) || []).length, 5, 'the way back goes for a search of one\'s own (typed, Tag turned), a file opened or refused, and once it is taken');
   });
 
-  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.1", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
+  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.2", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
     const page = read('index.html');
     const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
     const foot = menu.match(/<div class="menu-foot">Version <span id="version">(\d+\.\d+\.\d+)<\/span><\/div>\s*$/);
     assert.ok(foot, 'no version line, three parts, at the foot of the Settings menu');
-    assert.equal(foot[1], '0.6.1');
+    assert.equal(foot[1], '0.6.2');
     assert.ok(/\.menu-foot \{[^}]*text-align: center;/.test(read('style.css')), 'the line is centred');
     assert.ok(menu.lastIndexOf('class="menu-row"') < menu.indexOf('class="menu-foot"'), 'at its foot');
     assert.equal((page.match(/\bid="version"/g) || []).length, 1, 'the version is written once');
@@ -602,5 +616,57 @@ describe('the page', () => {
     const saveJs = read('save.js');
     assert.equal((saveJs.match(/core\.moveOntoCopy\(doc\);/g) || []).length, 2, 'a copy written and a download each move the page onto the copy');
     assert.ok(saveJs.includes('for (let k = 0; k < kept.length; k += 1) {') && saveJs.includes('const before = await Promise.all(kept.map('), 'every file of the visit read before the dialog, and refused after it');
+  });
+
+  // 0.6.2 (P12): the table of tags in the page
+
+  it('0.6.2: the table loads before the code that reads it, and core.js asks for it the way save.js asks for core.js, under Node and in the page', () => {
+    const page = read('index.html');
+    assert.ok(page.indexOf('<script src="tags.js"') > 0 && page.indexOf('<script src="tags.js"') < page.indexOf('<script src="core.js"'));
+    const core = read('core.js');
+    assert.ok(core.includes("module.exports = factory(require('./tags.js'));") && core.includes('else root.GedCore = factory(root.GedTags);'));
+    assert.ok(core.includes('})(typeof self !== \'undefined\' ? self : this, function (tags) {'));
+    assert.ok(read('tags.js').includes('else root.GedTags = factory();'), 'the table sets the global core.js reads');
+    assert.ok(/\| `tags\.js` \|[^\n]*5\.5\.1[^\n]*5\.5\.5[^\n]*7\.0[^\n]*Apache[^\n]*notice[^\n]*header/.test(read('README.md')), 'the README\'s Files table: the standards it came from, and the 7.0 text\'s licence and notice');
+    assert.ok(read('privacy.html').includes("The page's seven files hold no code that fetches"), 'privacy.html counts seven files');
+  });
+
+  it('0.6.2: a tag the table finds wanting has a wavy line under it, red for E10 and gold for N8 and N9, as properties at the top of style.css, and the finding\'s words as its hover text', () => {
+    const css = read('style.css');
+    const top = css.slice(0, css.indexOf('/* -------'));
+    assert.ok(/--wave-error: var\(--mark-error\);/.test(top) && /--wave-note: var\(--mark-note\);/.test(top) && /--wave-width: [\d.]+px;/.test(top) && /--wave-offset: [\d.]+px;/.test(top), 'the colours are the dots\', and the thickness and the offset are properties');
+    const rule = css.match(/\.tg\.is-wave-error, \.tg\.is-wave-note \{([^}]*)\}/);
+    assert.ok(rule && /text-decoration-style: wavy;/.test(rule[1]) && /text-decoration-thickness: var\(--wave-width\);/.test(rule[1]) && /text-underline-offset: var\(--wave-offset\);/.test(rule[1]), 'a wavy line');
+    assert.ok(!/(padding|margin|height|border|display)/.test(rule[1]), 'it takes no room: the rows keep their height, and the number column its width');
+    assert.ok(/\.tg\.is-wave-error \{ text-decoration-color: var\(--wave-error\); \}/.test(css) && /\.tg\.is-wave-note \{ text-decoration-color: var\(--wave-note\); \}/.test(css));
+    const ui = read('ui.js');
+    assert.ok(ui.includes("const TAG_WAVES = { E10: 'is-wave-error', N8: 'is-wave-note', N9: 'is-wave-note' };"), 'red for E10, gold for N8 and N9');
+    assert.ok(between(ui, 'function paintRow(row, k) {', 'function markTag').includes('markTag(row, i);'), 'a row marks its tag');
+    const mark = between(ui, 'function markTag(row, i) {', 'function paintExtra');
+    assert.ok(mark.includes("row.querySelector('.tg')") && mark.includes('tg.title = said.detail;') && mark.includes('tg.classList.add(TAG_WAVES[said.code]);'), 'the tag\'s own hover text is the finding\'s words');
+  });
+
+  it('0.6.2 (M3): the meaning is in the right frame alone: one line under the selected line\'s tag, above its value; no hover text on the lines but the findings\', and nothing in the Tags list', () => {
+    const ui = read('ui.js');
+    assert.equal((ui.match(/C\.tagMeaning\(/g) || []).length, 1, 'asked for in one place');
+    const detail = between(ui, 'function renderDetail() {', 'const was = state.changeAt.get(i);');
+    const head = detail.indexOf('d.appendChild(head);');
+    const said = detail.indexOf("C.tagMeaning(live ? shape.tag : m.tag[i], m.tagVersion, m.schema)");
+    assert.ok(head > 0 && said > head && detail.indexOf("el('div', 'detail-meaning', said)") > said, 'under the tag');
+    assert.ok(detail.indexOf("const box = el('div', 'detail-value');", said) > said, 'and above the value');
+    assert.ok(!between(ui, 'function paintRow(row, k) {', 'function markTag').includes('.title'), 'a row gets its hover text in one place, markTag, and only for a finding');
+    assert.ok(!between(ui, "const tagsList = Virtual($('tags-list')", '});').includes('meaning'), 'the Tags list stays a list of tags and counts');
+    assert.ok(/\.detail-meaning \{[^}]*color: var\(--color-text-muted\);/.test(read('style.css')));
+  });
+
+  it('0.6.2: Checks lists E10, N8 and N9 as it lists the others, each with its explanation, and N8 says which tag and which parent', () => {
+    const ui = read('ui.js');
+    const help = between(ui, 'const CHECK_HELP = {', '  };\n  let drag');
+    for (const code of ['E10', 'N8', 'N9']) assert.ok(new RegExp(`\\n    ${code}: "`).test(help), `${code} has its explanation`);
+    for (const code of core.CHECKS.map((c) => c.code)) assert.ok(new RegExp(`\\n    ${code}: [\"']`).test(help), `${code} has an explanation`);
+    assert.ok(ui.includes("const SAYS_WHAT = new Set(['E4', 'E9', 'N6', 'N7', 'N8']);"), 'N8\'s own words show in Checks and in the right frame');
+    const text = help.replace(/\s+/g, ' ');
+    assert.ok(!/\u2014|\u00b7/.test(help.slice(help.indexOf('E10: "'))), 'no dash and no middle dot in the new explanations');
+    assert.ok(text.includes('FAM9') && text.includes('BIRT under a FAM') && text.includes('SCHMA'), 'each in its own words');
   });
 });

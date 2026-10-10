@@ -23,6 +23,7 @@ page, no server, no account. Nothing is installed, and nothing leaves the machin
 | 0.5.6 | saving rewritten, so the original is never written: Save, the one button (⌘S), writes a dated copy through the computer's own Save dialog, which opens beside the original; no folder is asked for, and there is no backup and no log. The copy is read back once written. Picking the original itself in the Save dialog is refused, and the original put back as it was if the browser emptied it. In a browser without that dialog, Save is Download a copy. Changes count from the original, and the Changes tab has a copy button that puts them on the clipboard as text. The dot and Save show only while the lines hold what no file holds yet, the original's and every copy's lines aside, and so does the warning on leaving. A change stamp's note says what changed in its record, unless one is typed; the Save dialog shows each stamp's lines as they will be written; the header can carry the date of the save. Save a copy and ⇧⌘S are gone |
 | 0.6.0 | the bars: each side frame's icon in the frame it hides, at the right end of the left bar's tabs and of a new header over the right frame, which names the line or lines it shows (Line 66; Lines 23-31 for a shut block or a Go to Line range); a hidden frame shrinks to a strip holding its icon alone; Go to Line…, Edit, Undo and Redo at the right of the strip above the lines, going under its left group when the window is narrow; those four, and Save, shown only once a file is open; Edit on whenever a file opens, and the lines darker while it is on; the delete question names what goes; the Tags list's order button reads Sort; the version at the foot of the Settings menu |
 | 0.6.1 | the first screen: with no file open, one column of text, Open GEDCOM, and Try a sample family, George Washington's relations, a public-domain file that is part of the page; the side frames, the counts bar and the strip come with a file. In a narrow window the right frame is a drawer over the lines, and in a narrower one the left bar too. After a save the page is on the copy: its name, its facts, Changes counting from it, and the next save beside it |
+| 0.6.2 | the table of tags in the page (`tags.js`): every line's tag is judged by the table of the standard the file declares, 5.5.1, 5.5.5 or 7.0 (5.5 reads as 5.5.1, any 7.x as 7.0, a file that says nothing as 5.5.1). Three checks join Checks: **Malformed: not a GEDCOM tag** (E10, an error: a tag the version does not have and that is not a custom tag, which must begin with an underscore), **Out of place** (N8, a note: a standard tag under a tag the standard does not allow it under, such as a BIRT under a FAM) and **Extension not declared in the header** (N9, a note, in a 7.0 file: a custom tag its SCHMA does not list). Each has its dot, its count, a wavy line under the tag, red or gold, with the finding in its hover text, and a plain explanation in the right frame when its title is clicked. A line under a tag that is not a standard one is not judged, so one slip is one finding. The right frame also says, in one plain line under the selected line's tag, what the tag means, and for a well known custom tag, who writes it; a tag the table does not know reads "A custom tag." The sample family now reads 75 notes: its exporter put an SLGC under each CHIL |
 | 1.0 | when my own walk of the whole page passes |
 
 The version shows at the foot of the Settings menu, and each is a git tag (`git tag -n1` lists them).
@@ -44,7 +45,7 @@ keep traces of that.
   leaves the computer. Or, from disk:
 - **In Chrome:** from wherever the folder was put, run `open -a "Google Chrome" index.html` in
   Terminal, inside the folder, or, in Chrome, File → Open File… and pick `index.html`.
-  Double-clicking the file opens the default browser instead. Keep `index.html` in this folder: it loads `style.css`, `core.js`, `save.js`, `sample.js` and `ui.js`
+  Double-clicking the file opens the default browser instead. Keep `index.html` in this folder: it loads `style.css`, `tags.js`, `core.js`, `save.js`, `sample.js` and `ui.js`
   from beside it, and anywhere else it opens as a bare page.
 - Then **Open GEDCOM**, or drop a `.ged` file anywhere on the page, or **Try a sample family**:
   George Washington's relations, a public-domain file that is part of the page, so it is opened like a
@@ -249,7 +250,7 @@ git tag -a v0.6 -m "0.6: …" && git push origin main v0.6
 One tag per push: GitHub makes no event for a push of more than three tags at once, so
 `git push --tags` after a rewrite publishes nothing, and **Run workflow** on the tag does it by hand.
 `.github/workflows/publish.yml` then runs the tests and, when they pass, uploads the page's files
-alone (`index.html`, `style.css`, `core.js`, `save.js`, `sample.js`, `ui.js`, `privacy.html`, the three
+alone (`index.html`, `style.css`, `tags.js`, `core.js`, `save.js`, `sample.js`, `ui.js`, `privacy.html`, the three
 icons and `LICENSE`), never the tests, the tools, the brief, or anything in `local/`. Once the page is live, the same run makes a GitHub release for the tag,
 whose notes carry the tag's message and the SHA-256 of each file served, so anyone can download a
 file from the site, hash it, and see that it is the one the tag holds, while that release is the
@@ -264,8 +265,9 @@ the computer either way; `privacy.html` says how.
 
 | File | Holds |
 |---|---|
-| `index.html` | the markup; loads `core.js`, `save.js`, `sample.js`, then `ui.js`, as classic scripts |
+| `index.html` | the markup; loads `tags.js`, `core.js`, `save.js`, `sample.js`, then `ui.js`, as classic scripts |
 | `style.css` | the whole look, its properties first |
+| `tags.js` | the table of tags: every tag GEDCOM 5.5.1, 5.5.5 and 7.0 define, each with a plain meaning and the tags it may sit under, the rule for what a tag is in each version, and 29 well known custom tags with who writes them; derived from the 5.5.1 specification (15 November 2019), The GEDCOM 5.5.5 Specification with Annotations (Tamura Jones) and FamilySearch GEDCOM 7.0 (7.0.18), whose text is Apache 2.0, with its notice carried in this file's header; it holds data and a few lookups and makes no request |
 | `core.js` | reading: bytes → encoding → lines → shape → records and pointers → checks → counts → labels; editing: the document, the acts, undo, the net change, the change stamps, the bytes of a save; never touches the page, and runs the same under Node |
 | `save.js` | saving: the dated name; Save in the order of the brief's section 10, over the file handle the Save dialog gives; the read-back; the original refused, and put back if the browser emptied it; the Changes text; the bytes a browser with no Save dialog downloads; never touches the page |
 | `sample.js` | the sample family that Try a sample family opens: George Washington's relations, `washington.ged` from the open collection [D-Jeffrey/gedcom-samples](https://github.com/D-Jeffrey/gedcom-samples), which names no author and so is public domain (CC0 1.0); kept exactly as found, and part of the page, so opening it sends nothing |
@@ -303,7 +305,7 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--color-accent-hover` | the sepia: the title, links |
 | `--color-info` | pointers (links) |
 | `--color-warning` | the washes behind a search's match and a special character (a note's own text is `--mark-note`) |
-| `--color-danger` | errors (E1–E9) and removed lines, as text and as the dot; a line that did not parse (4.5 to 1 against the bars and the boxes, in each look) |
+| `--color-danger` | errors (E1–E10) and removed lines, as text and as the dot; a line that did not parse (4.5 to 1 against the bars and the boxes, in each look) |
 | the rest (`--color-nonbio`, `--color-success`, `--color-entity-…`, `--color-affiliation`, `--color-ancestor`, `--color-assertion-mark`) | nothing yet; kept so the three blocks stay whole |
 
 **GEDCOM Viewer's own**, drawn from the palette, so each theme carries them.
@@ -331,6 +333,7 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--special-bg` | the mark for a control or line-break character inside a value (NEL, LS, ␋ …) |
 | `--mark-error`, `--mark-size` | the dot beside a line with a finding; an error's count and code |
 | `--mark-note` | a note's dot, count and code; set for each look, 4.5 to 1 against the bars and the boxes |
+| `--wave-error`, `--wave-note`, `--wave-width`, `--wave-offset` | the wavy line under a tag the table of tags finds wanting: red for E10, gold for N8 and N9 (the dots' own colours), how thick it is, and how far under the letters it runs (a row clips what falls outside it) |
 | `--fold-color`, `--fold-size`, `--fold-hit` | the ▸ ▾ that shut and open a block; the least its click area is, each way (24 px) |
 | `--hidden-bg` | the count of lines a shut block hides |
 | `--section-bg` | the row between two record types |

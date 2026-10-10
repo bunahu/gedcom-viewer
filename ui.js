@@ -40,8 +40,12 @@
     NOTE: 'Notes', SNOTE: 'Notes', SUBM: 'Submitters',
   };
   const CHECK = Object.fromEntries(C.CHECKS.map((c) => [c.code, c]));
-  // Findings whose detail is a sentence; the rest show the line they are on.
-  const SAYS_WHAT = new Set(['E4', 'E9', 'N6', 'N7']);
+  // Findings whose detail is a sentence; the rest show the line they are on. N8's says which tag and
+  // which parent (BIRT does not belong under FAM), which the line alone does not.
+  const SAYS_WHAT = new Set(['E4', 'E9', 'N6', 'N7', 'N8']);
+  // The checks that mark a line's tag (0.6.2): a wavy line under it, red for an error and gold for a
+  // note, and the finding's words in its hover text.
+  const TAG_WAVES = { E10: 'is-wave-error', N8: 'is-wave-note', N9: 'is-wave-note' };
   const ROW_CHARS = 2000;             // a row shows at most this much of its line
   const MAX_PIXELS = 33000000;        // about the tallest a page lets one element be
   const MAX_INDENT = 40;              // a level past this is set in no further
@@ -71,6 +75,9 @@
     N5: 'There are spaces or tabs before the level number. The standard allows none, and a strict program may reject the line. Delete them.',
     N6: "This file is in an encoding GEDCOM Viewer can't show as its own letters — ANSEL, for one. Each byte is shown as the character with the same number, so accented letters may look wrong on screen; but every line you don't edit is written back byte for byte. A line you edit may hold plain ASCII only.",
     N7: "Lines in this file end in more than one way — most with LF and some with CR LF, for instance. Every line keeps its own ending when saved, and a new line takes the file's most common one. Most programs don't mind; a few treat it as damage.",
+    E10: "This tag is not one that GEDCOM has in the version this file declares, and it is not a custom tag either: a tag of your own must begin with an underscore. It is often a slip of the keys (FAM9 for FAM), a tag from another version of GEDCOM (SNOTE in a 5.5.1 file), or one a program made up. A program that reads strictly may skip the line and the lines under it, or refuse the file. Correct the tag, or, if it is your own, begin it with an underscore. The lines under it are not judged, so one slip is one finding.",
+    N8: "This tag is one GEDCOM has, but not under the line it sits under: a BIRT under a FAM, say, when a birth belongs to a person. A program may skip the line, or attach it to the wrong thing, and the fact can be lost on import. Move the line to where it belongs, or delete it. Some older programs wrote lines like this and read them back without trouble, so look before you change many.",
+    N9: "This is a custom tag, one of your own or a program's, and the header does not say what it means. GEDCOM 7 recommends that every custom tag be listed in the header, under SCHMA, each with a web address that says what it is for; without that, another program cannot know the tag, and may drop it. The line itself is not wrong. Add a TAG line for it under SCHMA in the header, or leave it as it is. This note is made only in a file that declares version 7.",
   };
   let drag = null;                    // a block being dragged (3.4a); see "Dragging"
 
@@ -654,11 +661,23 @@
       return;
     }
     putClipped(row, el('span', 'tx'), m.texts[i], partsOf(m, i), matchesIn(i, C.clip(m.texts[i], ROW_CHARS).end));
+    markTag(row, i);
     if (shut) {
       const end = C.subtreeEnd(m, i);
       const inside = state.marks.sum[end] - state.marks.sum[i + 1];
       row.appendChild(el('span', inside ? 'hc is-changed' : 'hc', plural(end - i - 1, 'line', 'lines')));
     }
+  }
+
+  // A tag the table of tags finds wanting (E10, N8, N9; 0.6.2): its row's tag gets a wavy line, and the
+  // finding's words as its hover text. The row's height and its number column are as they were.
+  function markTag(row, i) {
+    const list = state.m.findings.atLine.get(i);
+    const said = list && list.find((f) => TAG_WAVES[f.code]);
+    const tg = said && row.querySelector('.tg');
+    if (!tg) return;
+    tg.classList.add(TAG_WAVES[said.code]);
+    tg.title = said.detail;
   }
 
   function paintExtra(row, x) {
@@ -1505,6 +1524,8 @@
       const head = el('div', 'detail-head');
       putParts(head, t, hasValue ? parts.slice(0, -2) : parts, t.length, []);
       d.appendChild(head);
+      const said = C.tagMeaning(live ? shape.tag : m.tag[i], m.tagVersion, m.schema);   // one line, in plain words, under the tag (0.6.2, M3)
+      if (said) d.appendChild(el('div', 'detail-meaning', said));
       if (hasValue && valAt < t.length) {
         const box = el('div', 'detail-value');
         const value = t.slice(valAt);
@@ -1599,7 +1620,7 @@
         const row = el('div', `finding is-${c.kind}`);
         row.appendChild(el('span', 'code', f.code));
         const main = el('span', 'main');
-        putText(main, f.detail !== undefined && SAYS_WHAT.has(f.code) ? `${c.name} · ${f.detail}` : c.name);
+        putText(main, f.detail !== undefined && SAYS_WHAT.has(f.code) ? `${c.name}${f.code === 'N8' ? ': ' : ' · '}${f.detail}` : c.name);   // N8, new in 0.6.2, takes a colon: no new text takes the dot
         row.appendChild(main);
         sec.appendChild(row);
       }
