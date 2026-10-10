@@ -48,9 +48,9 @@
   const POINTERS_SHOWN = 1000;
   const LINES_SHOWN = 60;             // of one change, in the Save dialog
   const ID_WHOLE = /^@[^@ ]+@$/;
-  const SHA_TITLE = 'sha256: a fingerprint of the file\'s exact bytes, as it was opened. ' +
+  const SHA_TITLE = 'sha256: a fingerprint of this file\'s exact bytes, as it was opened, or as the page saved it. ' +
     'Change one character anywhere and it changes completely; two files with the same sha256 are the same, ' +
-    'byte for byte. GEDCOM Viewer never writes this file; a copy\'s own is shasum -a 256 and the copy\'s name, in Terminal.';
+    'byte for byte. In Terminal, shasum -a 256 and the file\'s name gives the same.';
   const CANCEL = { label: 'Cancel', value: '' };
   // 3.6 — what each check means, why it matters, and what is usually done about it. The owner's
   // to change.
@@ -77,10 +77,12 @@
   const state = {
     doc: null,                        // the document: the file as read, and the lines typed over it
     m: null,                          // its lines as they now are, checked (the document's view)
-    fileName: '',
-    handle: null,                     // the file's handle, from the picker or a drop: where the Save dialog opens, and what it may not pick (10.2); never stored
-    disk: null,                       // the file as it was opened, the original: sha256, bytes, lines
+    fileName: '',                     // the file the page is on: the one opened, then each copy saved (P11, D1)
+    handle: null,                     // its handle, from the picker, a drop or the Save dialog: where the Save dialog opens (10.2); never stored
+    disk: null,                       // that file as it was opened or saved: sha256, bytes, lines
     hashing: null,                    // the hash at open, while it is being taken
+    visit: [],                        // every file of this visit, the one opened and each copy: what the Save dialog may not pick (10.2 step 6)
+    drawer: null,                     // the side frame open as a drawer, 'left' or 'right', in a narrow window (0.6.1); never stored
     sel: -1,                          // the selected line
     back: [],
     indent: store.get('indent', false) === true,
@@ -939,6 +941,7 @@
   function startAdd(kind) {
     if (!state.doc || !state.editing || state.sel < 0 || !state.m.n) return;
     if (state.edit && !commitEdit(false)) return;
+    if (state.drawer) setDrawer(null);                               // the new line is typed in the lines, which an open drawer covers
     const m = state.m;
     const i = state.sel;
     const lv = m.level[i];
@@ -1177,14 +1180,16 @@
     }
   }
 
-  // Whether Save asks where, in the computer's Save dialog: the browser has it, and the file opened
-  // has a handle, for step 6 to tell the original apart. Otherwise Save downloads the copy (10.2).
+  // Whether Save asks where, in the computer's Save dialog: the browser has it, and the file the page
+  // is on has a handle, for step 6 to tell the files of the visit apart. Otherwise Save downloads the
+  // copy (10.2); so the sample, and a download, are downloads again.
   function canPick() { return PICKERS && (!state.doc || !!state.handle); }
 
   function updateBar() {
     const doc = state.doc;
     const changed = !!doc && C.unsaved(doc);                        // what no file holds yet: not the original, nor any copy (10.2)
     for (const id of ['goto-box', 'edit', 'undo', 'redo', 'save']) $(id).hidden = !doc;   // P9: hidden, not disabled, until a file is open
+    for (const id of ['counts', 'strip']) $(id).hidden = !doc;      // 0.6.1: the first screen has neither
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
     $('middle').classList.toggle('is-edit-on', !!doc && state.editing);   // P10: the lines' editor's look, while Edit is on
     $('fold-all').hidden = !doc;
@@ -1192,7 +1197,7 @@
     $('file-name').setAttribute('aria-expanded', String(state.showFacts));
     $('facts').hidden = !doc || !state.showFacts;
     $('dirty').hidden = !changed;
-    $('dirty').title = doc && doc.copies.length ? 'Changes in no copy yet' : 'Changed since it was opened';
+    $('dirty').title = doc && doc.copies.length ? 'Changed since it was saved' : 'Changed since it was opened';
     $('save').disabled = !changed;
     $('save').textContent = canPick() ? 'Save' : 'Download a copy';
     $('save').title = canPick() ? 'Save a dated copy, where you choose; the original is never written (⌘S)'
@@ -1399,7 +1404,7 @@
   function pathLink(parent, line) {
     const b = el('button', 'path-link');
     b.type = 'button';
-    b.addEventListener('click', () => select(line, 'jump'));
+    b.addEventListener('click', () => { select(line, 'jump'); chosenIn('right'); });
     parent.appendChild(b);
     return b;
   }
@@ -1506,7 +1511,7 @@
         if (pointer) {
           const link = el('span', 'ptr');
           putText(link, value);
-          link.addEventListener('click', () => jumpToId(value));
+          link.addEventListener('click', () => { jumpToId(value); chosenIn('right'); });
           box.appendChild(link);
         } else putText(box, value);
         copyButton(box, () => value);
@@ -1578,7 +1583,7 @@
           if (m.recOf[j] >= 0) recordRef(main, m.recOf[j]);
           row.appendChild(main);
           row.appendChild(el('span', 'tg', m.tag[j]));
-          row.addEventListener('click', () => select(j, 'jump'));
+          row.addEventListener('click', () => { select(j, 'jump'); chosenIn('right'); });
           list.appendChild(row);
         }
         if (by.length > POINTERS_SHOWN) list.appendChild(el('div', 'detail-title', `+ ${fmt(by.length - POINTERS_SHOWN)}`));
@@ -1672,7 +1677,7 @@
       b.appendChild(el('span', 'count-figure', fmt(n)));
       b.addEventListener('click', () => {
         state.recordType = tg;
-        openPanel('records');
+        showLeft('records');
         filterRecords();
       });
       bar.appendChild(b);
@@ -1771,8 +1776,8 @@
     checksList.setCount(rows.length, keepScroll);
   }
 
-  // Changes: the net change from the original, as it was opened, run by run (9.4), however many
-  // copies have been written since (10.2). A run shows the line it is at now: a removed run, the
+  // Changes: the net change from the file the page is on, run by run (9.4): the original as it was
+  // opened, or the last copy written (P11, D1). A run shows the line it is at now: a removed run, the
   // line now below where it was.
   const changesList = Virtual($('changes-list'), (row, k) => {
     const run = state.runs[k];
@@ -1810,8 +1815,9 @@
   }
 
   // 10.3: the Changes tab's copy button: the list below it as text (save.js, changesText), on the
-  // clipboard and nowhere else. The original's sha256 is taken as the file opens, so it is all but
-  // always there by the first click. Refused, the text is shown in a box, selected, for ⌘C.
+  // clipboard and nowhere else, headed by the file the page is on. Its sha256 is taken as the file
+  // opens, or known as a copy is saved, so it is all but always there by the first click. Refused,
+  // the text is shown in a box, selected, for ⌘C.
   function changesAsText() {
     const build = (sha256) => S.changesText({ when: new Date(), file: state.fileName,
       original: { sha256, bytes: state.disk.bytes, lines: state.disk.lines }, runs: state.runs });
@@ -1969,7 +1975,7 @@
       bytes: state.disk ? state.disk.bytes : null,
       sha256: state.disk ? (state.disk.sha256 || await state.hashing) : null,
       editing: !!state.editing, settings,
-      unsaved: state.doc && C.unsaved(state.doc) ? C.changeRuns(state.doc, null, state.doc.copiedOrder).length : 0,   // in no copy yet
+      unsaved: state.doc && C.unsaved(state.doc) ? C.changeRuns(state.doc).length : 0,   // in no file of the visit yet, counted from the one the page is on
     };
     const encoder = new TextEncoder();
     const text = C.report(state.m, info);
@@ -2137,7 +2143,7 @@
     return row;
   }
 
-  // 10.2 step 2: every change since the original; under Add change stamps (F1: ticked unless
+  // 10.2 step 2: every change since the file the page is on; under Add change stamps (F1: ticked unless
   // unticked, and remembered) each record that gains a stamp, as the lines it gains or has set,
   // indented as the file indents them, with the values they will be written with, and the Note box
   // among them; under Note the date in the header (ticked unless unticked, and remembered) the line
@@ -2217,8 +2223,9 @@
   // ---------------------------------------------------------------------------------------------
 
   // Step 1 and the page's dialog (step 2) here; the rest in save.js, given the computer's Save
-  // dialog to ask where, opening at the original, or, in a browser without it, the bytes back to
-  // download. Nothing asks for a folder. One save at a time: ⌘S while one is under way does nothing.
+  // dialog to ask where, opening beside the file the page is on, or, in a browser without it, the
+  // bytes back to download. Nothing asks for a folder. One save at a time: ⌘S while one is under way
+  // does nothing.
   let saving = false;
   async function doSave() {
     if (!state.doc || $('dialog').open || saving) return;
@@ -2237,10 +2244,12 @@
     const picks = canPick();
     const choice = await saveDialog(picks);
     if (!choice) return;
-    // 3 to 8: the stamps, the bytes, where, not the original, written and read back, the last copy
+    // 3 to 8: the stamps, the bytes, where (beside the file the page is on), none of the visit's files,
+    // written and read back, and the page on the copy
     const pick = picks ? (name) => window.showSaveFilePicker({ suggestedName: name, startIn: state.handle, types: GEDCOM_TYPES }) : null;
-    const r = await S.save({ doc: state.doc, original: { name: state.fileName, handle: state.handle },
+    const r = await S.save({ doc: state.doc, file: { name: state.fileName, handle: state.handle }, visit: state.visit,
       when: choice.when, note: choice.note, stamps: choice.stamps, header: choice.header, hash: sha256, pick });
+    if (r.done) onTheCopy(r);
     afterAct(state.sel);
     if (r.done && r.download) {
       download(r.bytes, r.name);
@@ -2251,17 +2260,32 @@
     else notice(r.say, r.cancelled ? '' : 'error');
   }
 
-  // 10.2 step 6: the original was picked, and nothing was saved into it. If the browser had emptied
-  // it, save.js put it back, and says nothing of it; if it could not, the original's bytes as they
-  // were are offered as a download, to put in place of the empty file.
+  // P11, D1: after a save the page is on the copy: its name in the chip, its facts (its size and
+  // sha256, as written; its lines), its handle, where the next save opens; and it joins the files of
+  // this visit, which the Save dialog may not pick. save.js has made its lines what the changes
+  // count from (step 8). A download is the same, with no handle.
+  function onTheCopy(r) {
+    const doc = state.doc;
+    const lines = doc.savedOrder;
+    state.fileName = r.name;
+    state.handle = r.handle;
+    state.disk = { sha256: r.sha256, bytes: r.size, lines: lines.length };
+    state.hashing = Promise.resolve(r.sha256);
+    state.visit.push({ name: r.name, handle: r.handle, bytes: () => C.saveBytes(doc, undefined, lines) });
+    $('file-name').textContent = r.name;
+  }
+
+  // 10.2 step 6: a file of this visit was picked, the original or a copy, and nothing was saved into
+  // it. If the browser had emptied it, save.js put it back, and says nothing of it; if it could not,
+  // its bytes as they were are offered as a download, to put in place of the empty file.
   async function refusedOriginal(r) {
     if (!r.restore) {
       await saidLoudly('Save failed', r.say);
       return;
     }
     const get = await dialog('No copy was written', (body) => body.appendChild(el('div', null, r.say)),
-      [{ label: 'Close', value: '' }, { label: `Download ${state.fileName}`, value: 'get', primary: true }]);
-    if (get) download(r.restore, state.fileName);
+      [{ label: 'Close', value: '' }, { label: `Download ${r.restoreName}`, value: 'get', primary: true }]);
+    if (get) download(r.restore, r.restoreName);
   }
 
   function download(bytes, name, type) {
@@ -2284,6 +2308,8 @@
     state.m = null;
     state.handle = null;
     state.disk = null;
+    state.visit = [];
+    state.drawer = null;
     state.sel = -1;
     state.back = [];
     state.edit = null;
@@ -2322,6 +2348,7 @@
     updateGridWidth();
     updateBack();
     updateBar();
+    applyFrames();                                                   // the first screen: no side columns at all
     $('empty').hidden = false;
     $('message').hidden = !message;
     $('message').textContent = message || '';
@@ -2358,10 +2385,13 @@
     state.fileName = file.name;
     state.handle = handle || null;
     state.disk = { sha256: null, bytes: bytes.length, lines: doc.m.n };
+    const disk = state.disk;
     state.hashing = sha256(bytes).then((hex) => {
-      if (state.doc === doc && state.disk.sha256 === null) state.disk.sha256 = hex;
+      if (disk.sha256 === null) disk.sha256 = hex;
       return hex;
     });
+    state.visit = [{ name: file.name, handle: state.handle, bytes: () => doc.m.bytes }];
+    state.drawer = null;                                             // 0.6.1: a drawer is shut as a file opens, whatever is stored
     state.sel = -1;
     state.back = [];
     state.folds = new Set();
@@ -2403,6 +2433,7 @@
     updateSearch();
     updateBack();
     updateBar();
+    applyFrames();                                                   // the side columns, the counts bar and the strip, as 0.6.0 had them
     rebuildRows();
     grid.setCount(rowCount());
     select(0);
@@ -2426,6 +2457,14 @@
   }
 
   $('open-empty').addEventListener('click', pickFile);
+  // Try a sample family (0.6.1): the file sample.js holds, opened as a dropped file is, with no
+  // handle, so Save is a download of a copy in every browser. Nothing is fetched: the file is part of
+  // the page.
+  $('try-sample').addEventListener('click', async () => {
+    const sample = window.GedSample;
+    if (!sample || !(await mayDropChanges())) return;
+    await openFile(new File([sample.text], sample.name), null);
+  });
   $('report').addEventListener('click', () => {
     try { $('settings-menu').hidePopover(); } catch (err) { /* not open */ }
     reportProblem();
@@ -2608,10 +2647,33 @@
   // 3.1, P9: the icon at the top right of each side frame, beside the left bar's tabs and in the
   // right frame's header, shrinks the frame to a strip holding the icon alone, and brings it back at
   // its width. Remembered, under the same keys as before 0.6.
+  //
+  // 0.6.1: in a window narrower than --drawer-right-below (style.css) the right frame is a drawer
+  // over the lines, and narrower than --drawer-left-below the left bar too. The same icon opens and
+  // shuts it, one drawer at a time, and nothing of it is stored, so the stored hidden or shown is
+  // left alone for a wider window. A drawer is shut as a file opens, when a line is chosen in it, and
+  // on Esc. With no file open the side frames are not there at all.
+  const pxOf = (prop) => parseFloat(getComputedStyle(root).getPropertyValue(prop));
+  const narrow = {
+    right: window.matchMedia(`(width < ${pxOf('--drawer-right-below')}px)`),
+    left: window.matchMedia(`(width < ${pxOf('--drawer-left-below')}px)`),
+  };
+  const isDrawer = (side) => !!state.doc && narrow[side].matches;
+
   function applyFrames() {
-    $('work').classList.toggle('left-hidden', state.hiddenLeft);
-    $('work').classList.toggle('right-hidden', state.hiddenRight);
-    for (const [id, hidden, name] of [['hide-left', state.hiddenLeft, 'left bar'], ['hide-right', state.hiddenRight, 'right frame']]) {
+    const w = $('work');
+    const open = !!state.doc;
+    const drawer = { left: isDrawer('left'), right: isDrawer('right') };
+    if (state.drawer && !drawer[state.drawer]) state.drawer = null;
+    w.classList.toggle('no-file', !open);
+    w.classList.toggle('left-hidden', open && !drawer.left && state.hiddenLeft);
+    w.classList.toggle('right-hidden', open && !drawer.right && state.hiddenRight);
+    w.classList.toggle('left-drawer', drawer.left);
+    w.classList.toggle('right-drawer', drawer.right);
+    w.classList.toggle('left-open', state.drawer === 'left');
+    w.classList.toggle('right-open', state.drawer === 'right');
+    for (const [side, id, name] of [['left', 'hide-left', 'left bar'], ['right', 'hide-right', 'right frame']]) {
+      const hidden = drawer[side] ? state.drawer !== side : side === 'left' ? state.hiddenLeft : state.hiddenRight;
       const b = $(id);
       b.setAttribute('aria-pressed', String(hidden));
       b.title = `${hidden ? 'Show' : 'Hide'} ${name}`;
@@ -2619,11 +2681,35 @@
     }
   }
   function toggleFrame(side) {
+    if (isDrawer(side)) {
+      setDrawer(state.drawer === side ? null : side);
+      return;
+    }
     if (side === 'left') state.hiddenLeft = !state.hiddenLeft; else state.hiddenRight = !state.hiddenRight;
     store.set('hideLeft', state.hiddenLeft);
     store.set('hideRight', state.hiddenRight);
     applyFrames();
   }
+  // A drawer opened, the other one shut; or both shut (null). A drawer that shuts with the focus in
+  // it gives the focus to the lines.
+  function setDrawer(side) {
+    const was = state.drawer;
+    state.drawer = side;
+    applyFrames();
+    if (was && was !== side && $(was === 'left' ? 'side' : 'right').contains(document.activeElement)) $('grid').focus();
+  }
+  // A line chosen in a drawer: the drawer shuts, and the lines have the keys.
+  function chosenIn(side) {
+    if (state.drawer !== side) return;
+    setDrawer(null);
+    $('grid').focus();
+  }
+  // A panel of the left bar asked for from outside it (a count clicked, ⌘F): its drawer opens to show it.
+  function showLeft(panel) {
+    openPanel(panel);
+    if (isDrawer('left') && state.drawer !== 'left') setDrawer('left');
+  }
+  for (const q of [narrow.right, narrow.left]) q.addEventListener('change', () => { state.drawer = null; applyFrames(); });
   $('hide-left').addEventListener('click', () => toggleFrame('left'));
   $('hide-right').addEventListener('click', () => toggleFrame('right'));
   // Top: line 1, as a jump, so Back returns; the lines at their left edge
@@ -2726,7 +2812,9 @@
   });
   $('records-list').addEventListener('click', (e) => {
     const k = recordsList.rowOf(e.target);
-    if (k >= 0) select(state.m.records[state.recordRows[k]], 'jump');
+    if (k < 0) return;
+    select(state.m.records[state.recordRows[k]], 'jump');
+    chosenIn('left');
   });
 
   $('checks-list').addEventListener('click', (e) => {
@@ -2741,8 +2829,12 @@
       } else {
         state.help = code;
         renderDetail();
+        if (isDrawer('right')) setDrawer('right');                   // what it means is in the right frame: in a narrow window, its drawer opens
       }
-    } else if (item.f.line >= 0) select(item.f.line, 'jump');
+    } else if (item.f.line >= 0) {
+      select(item.f.line, 'jump');
+      chosenIn('left');
+    }
   });
 
   // A change clicked: its line; for removed lines with Edit on, the first of them, struck through.
@@ -2751,6 +2843,7 @@
     if (k < 0) return;
     const run = state.runs[k];
     select(run.kind === 'removed' ? run.at : run.after, 'jump');
+    chosenIn('left');
     if (run.kind !== 'removed' || !state.editing) return;
     const x = state.extras.findIndex((y) => y.kind === 'removed' && y.run.before === run.before && y.k === 0);
     if (x < 0) return;
@@ -2786,6 +2879,7 @@
     $('search-tag').setAttribute('aria-pressed', 'true');
     runSearch();
     stepSearch(1);
+    chosenIn('left');
   });
 
   let searchTimer = 0;
@@ -2799,14 +2893,15 @@
     e.preventDefault();
     clearTimeout(searchTimer);
     stepSearch(e.shiftKey ? -1 : 1);
+    chosenIn('left');
   });
   $('search-tag').addEventListener('click', () => {
     leaveTagsSearch();
     $('search-tag').setAttribute('aria-pressed', String(!tagMode()));
     runSearch();
   });
-  $('search-prev').addEventListener('click', () => stepSearch(-1));
-  $('search-next').addEventListener('click', () => stepSearch(1));
+  $('search-prev').addEventListener('click', () => { stepSearch(-1); chosenIn('left'); });
+  $('search-next').addEventListener('click', () => { stepSearch(1); chosenIn('left'); });
 
   // The side panel and the right pane are dragged wider or narrower by the bars beside the grid.
   function dragSplit(handle, prop, sign) {
@@ -2855,7 +2950,8 @@
       e.preventDefault();
       if (state.edit && !commitEdit(false)) return;
       const box = key === 'f' ? $('search-box') : $('goto');
-      if (key === 'f') openPanel('search');
+      if (key === 'f') showLeft('search');
+      else if (state.drawer) setDrawer(null);                       // Go to Line… is in the strip, which an open drawer covers
       box.focus();
       box.select();
       return;
@@ -2865,7 +2961,10 @@
       if (key === 'Escape') {
         e.target.blur();
         if (e.target === $('search-box') && fromTags) backToTags();  // the search came from Tags: back to the list
-        else $('grid').focus();
+        else {
+          $('grid').focus();
+          if (state.drawer) setDrawer(null);                         // and a drawer the box was in shuts
+        }
       }
       return;
     }
@@ -2876,6 +2975,10 @@
     }
     if (state.edit) {
       if (key === 'Escape') cancelEdit(false);
+      return;
+    }
+    if (key === 'Escape' && state.drawer) {                          // 0.6.1: Esc shuts an open drawer
+      setDrawer(null);
       return;
     }
     if (mod && !e.altKey && key === 'z') {

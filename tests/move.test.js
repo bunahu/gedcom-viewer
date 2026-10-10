@@ -25,8 +25,8 @@ function sameAsFreshRead(doc) {
   assert.deepEqual(doc.view.labels, fresh.labels);
 }
 
-// The lines of the original (or of `base`) with the net change laid over them must be the lines now
-// (see edit.test.js).
+// The lines of the file the page is on (or of `base`) with the net change laid over them must be the
+// lines now (see edit.test.js).
 function replayed(doc, items, base = doc.savedOrder) {
   const was = base.map((e) => core.textOf(doc, e));
   const gone = new Set(items.filter((it) => it.kind !== 'added').map((it) => it.before));
@@ -182,10 +182,10 @@ describe('a record, and a section, moved whole', () => {
     core.redo(doc);
     core.redo(doc);
     assert.deepEqual(texts(doc), after);
-    core.markCopied(doc);
-    assert.deepEqual(core.netChange(doc, doc.copiedOrder), []);
+    core.moveOntoCopy(doc);
+    assert.deepEqual(core.netChange(doc), [], 'the page is on the copy (D1): nothing moved since it');
     ok(core.moveLines(doc, 7, 12, 31));                              // @F1@ back to before @F2@
-    assert.deepEqual(core.changeRuns(doc, null, doc.copiedOrder).map((r) => [r.kind, r.moved.what]), [['moved', 'record']], 'against the copy, one record moved');
+    assert.deepEqual(core.changeRuns(doc).map((r) => [r.kind, r.moved.what]), [['moved', 'record']], 'against the copy, one record moved');
   });
 });
 
@@ -306,19 +306,17 @@ function moveAtRandom(file, count, seed) {
     else if (roll < 0.86) r = core.addChild(doc, pos, `${doc.view.level[pos] + 1} NOTE child ${k}`);
     else if (roll < 0.94) r = { ok: true, step: core.undo(doc) };
     else if (roll < 0.97) r = core.applyStamps(doc, AT, `stamp ${k}`);
-    else { core.markCopied(doc); r = { ok: true, step: null }; }
+    else { core.moveOntoCopy(doc); r = { ok: true, step: null }; }
     if (!r.ok) {
       assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
       continue;
     }
     sameAsFreshRead(doc);
     const items = core.netChange(doc);
-    assert.deepEqual(replayed(doc, items), doc.view.texts, `net change after act ${k}`);
-    if (doc.copiedOrder) {
-      const since = core.netChange(doc, doc.copiedOrder);
-      assert.deepEqual(replayed(doc, since, doc.copiedOrder), doc.view.texts, `net change from the last copy after act ${k}`);
-      core.changeRuns(doc, since, doc.copiedOrder);
-    }
+    assert.deepEqual(replayed(doc, items), doc.view.texts, `net change from the file the page is on after act ${k}`);
+    const opened = core.netChange(doc, doc.openedOrder);
+    assert.deepEqual(replayed(doc, opened, doc.openedOrder), doc.view.texts, `net change from the file first opened after act ${k}`);
+    core.changeRuns(doc, opened, doc.openedOrder);
     core.changeRuns(doc, items);
     core.lineMarks(doc, items);
     core.stampTargets(doc, items);

@@ -16,7 +16,7 @@
 
 <main class="prose">
 <h1>How GEDCOM Viewer treats your file</h1>
-<p class="prose-date">8 October 2026</p>
+<p class="prose-date">10 October 2026</p>
 
 <p><strong>The short version.</strong> GEDCOM Viewer is one web page that runs entirely in your
 browser. Your GEDCOM file is read by your browser, on your computer, and is never sent anywhere.
@@ -34,6 +34,10 @@ written over. In a browser without that dialog, Save is Download a copy, and the
 your browser keeps downloads.</li>
 <li><strong>Closing.</strong> When the tab closes, the file is gone from the page. Nothing of it is
 kept.</li>
+<li><strong>The sample.</strong> Try a sample family opens George Washington's relations, a
+public-domain file from the
+<a href="https://github.com/D-Jeffrey/gedcom-samples">gedcom-samples</a> collection that is part of
+the page, so opening it sends nothing.</li>
 </ul>
 
 <h2>What stays in your browser</h2>
@@ -47,7 +51,7 @@ is. Clearing this site's data in your browser removes all of it.</p>
 <h2>No network</h2>
 <p>The page carries its own content-security policy, which tells your browser to refuse requests,
 images, fonts and scripts from anywhere else; the browser enforces it, and you can read it in the
-page's source. The page's five files hold no code that fetches, posts or opens
+page's source. The page's six files hold no code that fetches, posts or opens
 a connection, and the project's tests check that on every change.</p>
 
 <h2>What the host sees</h2>
@@ -73,7 +77,7 @@ your file as not to be translated, which is a request to the browser.</li>
 synced by that service, not by the page.</li>
 </ul>
 
-<h2>How to check it yourself</h2>
+<h2 id="how-to-check">How to check it yourself</h2>
 <p>Open the page, then turn Wi-Fi off. The page keeps working, because everything it needs has
 loaded. Open your file and work. Turn Wi-Fi back on when you are done.</p>
 <p>For a closer look in Chrome: View, Developer, Developer Tools, the Network tab, then open a file.

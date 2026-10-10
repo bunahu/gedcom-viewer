@@ -81,9 +81,10 @@
   }
 
   // What the Changes tab's copy button puts on the clipboard (10.3), and nothing writes anywhere:
-  // the original by its name, as of now; its sha256, size and lines, as it was opened; then the
-  // net change from it, run by run, in the lines the log's blocks had: each run's place in the
-  // original, then its place now, its record, and its lines, - as they were and + as they are. A
+  // the file the page is on by its name, as of now (the original, or the last copy: P11's D1); its
+  // sha256, size and lines, as it was opened or saved; then the net change from it, run by run, in
+  // the lines the log's blocks had: each run's place in that file, then its place now, its record,
+  // and its lines, - as they were and + as they are. A
   // move says what moved and how many lines, never their text. It holds what the file holds,
   // living people included, and belongs beside the file, never in a repo (I9).
   function changesText({ when, file, original, runs }) {
@@ -135,16 +136,19 @@
   // 10.2 Save
   // ---------------------------------------------------------------------------------------------
 
-  // Step 6's words: the original picked, whether or not the browser had emptied it (the put-back is
-  // silent); and the put-back that failed.
+  // Step 6's words: a file of this visit picked, the original or a copy written in it, whether or not
+  // the browser had emptied it (the put-back is silent); and the put-back that failed.
   const REFUSED = 'That is the original. It is unchanged. Choose another name.';
   const NOT_RESTORED = 'That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.';
 
-  // Step 1's words, when there is nothing to save (core.unsaved): the lines are the original's, or
-  // the last copy's, or an earlier copy's.
+  // Step 1's words, when there is nothing to save (core.unsaved): the lines are those of the file
+  // the page is on (the original, or the last copy), or of the file first opened, or of an earlier copy.
   function nothingSince(doc) {
-    if (!core.isChanged(doc)) return 'Nothing has changed since the file was opened. Nothing was written.';
-    if (!core.changedSinceCopy(doc)) return 'Nothing has changed since the last copy. Nothing was written.';
+    if (!core.isChanged(doc)) {
+      return doc.copies.length ? 'Nothing has changed since the last copy. Nothing was written.'
+        : 'Nothing has changed since the file was opened. Nothing was written.';
+    }
+    if (core.asOpened(doc)) return 'These lines are already in the original. Nothing was written.';
     return 'These lines are already in an earlier copy. Nothing was written.';
   }
 
@@ -162,14 +166,14 @@
     return { bytes: core.saveBytes(doc), back: () => core.takeBack(doc, step, undone) };
   }
 
-  // Step 6: whether the file picked is the original's own. A file opened in a browser with the
-  // pickers has a handle, and the browser says whether two handles are one file; a handle that
-  // cannot say, and a file opened with none, are held to the original's name.
-  async function isOriginal(handle, original) {
-    if (original.handle && typeof original.handle.isSameEntry === 'function') {
-      try { return await original.handle.isSameEntry(handle); } catch (e) { /* by its name, below */ }
+  // Step 6: whether the file picked is `f`, a file of this visit. A file opened or saved in a
+  // browser with the pickers has a handle, and the browser says whether two handles are one file; a
+  // handle that cannot say, and a file with none, are held to that file's name.
+  async function isSame(handle, f) {
+    if (f.handle && typeof f.handle.isSameEntry === 'function') {
+      try { return await f.handle.isSameEntry(handle); } catch (e) { /* by its name, below */ }
     }
-    return handle.name === original.name;
+    return handle.name === f.name;
   }
 
   // The original, picked in the Save dialog, may have been emptied by the browser before the page
@@ -189,32 +193,37 @@
   }
 
   // 10.2: Save, in this order, stopping at the first failure. Step 2, the page's own dialog (the
-  // changes, the note, the change-stamp box), is the page's, before this is called. `original` is
-  // the file as it was opened: its name, and its handle (null when the browser gave none). `pick`
-  // is the computer's Save dialog, given the dated name to offer (the page's showSaveFilePicker,
-  // opening at the original); with none, in a browser without the pickers, the copy comes back to
-  // be downloaded. `stamps` says whether the change stamps are ticked and `note` is what was typed
-  // for them; `header`, whether the date goes in the header; `when` is the moment of the save, the
-  // one the page's dialog showed. What happened comes back for the page to say:
-  // `done`, or the step that stopped it and why. Whatever stops it after step 3 takes the stamps
-  // back, so the document is as it was before the attempt.
-  async function save({ doc, original, when, note, stamps, header, hash, pick }) {
-    // 1. nothing to save, the lines being the original's or a copy's: say so, write nothing
+  // changes, the note, the change-stamp box), is the page's, before this is called. `file` is the
+  // file the page is on, the original or the last copy (P11's D1): its name, which the dated name is
+  // made from, and its handle (null when the browser gave none). `visit` is every file of this visit,
+  // the one first opened and each copy written since, the page's own among them, each with its
+  // name, its handle and `bytes()`, its bytes as the page knows them; the Save dialog may pick none
+  // of them (step 6). `pick` is the computer's Save dialog, given the dated name to offer (the
+  // page's showSaveFilePicker, opening beside the file the page is on); with none, in a browser
+  // without the pickers, the copy comes back to be downloaded. `stamps` says whether the change
+  // stamps are ticked and `note` is what was typed for them; `header`, whether the date goes in the
+  // header; `when` is the moment of the save, the one the page's dialog showed. What happened comes
+  // back for the page to say: `done`, with the copy's name, handle, size and sha256, the page then
+  // being on it; or the step that stopped it and why. Whatever stops it after step 3 takes the
+  // stamps back, so the document is as it was before the attempt.
+  async function save({ doc, file, visit, when, note, stamps, header, hash, pick }) {
+    // 1. nothing to save, the lines being those of a file of this visit: say so, write nothing
     if (!core.unsaved(doc)) return failed(1, nothingSince(doc));
     // 3. the change stamps and the header's date; 4. the bytes, and their hash
     const ready = prepare(doc, { when, note, stamps, header });
     if (ready.reason) return failed(3, ready.reason);
-    const name = datedName(original.name, when);
+    const name = datedName(file.name, when);
     const sha256 = await hash(ready.bytes);
     if (!pick) {
       // a browser with no pickers: downloaded under the dated name, wherever the browser keeps
-      // downloads; nothing can be read back, and the download is the last copy
-      core.markCopied(doc);
-      return { done: true, download: true, name, bytes: ready.bytes, sha256 };
+      // downloads; nothing can be read back, and the page is on the download, with no handle
+      core.moveOntoCopy(doc);
+      return { done: true, download: true, name, handle: null, bytes: ready.bytes, size: ready.bytes.length, sha256 };
     }
-    // 5. where: the Save dialog. The file picked there is emptied before the page sees it, so the
-    // original is read now, while it is whole, in case it is the one picked (step 6)
-    const before = original.handle ? await bytesOfHandle(original.handle).catch(() => null) : null;
+    // 5. where: the Save dialog. The file picked there is emptied before the page sees it, so each
+    // file of the visit is read now, while it is whole, in case it is the one picked (step 6)
+    const kept = visit || [{ name: file.name, handle: file.handle, bytes: () => core.saveBytes(doc, undefined, doc.savedOrder) }];
+    const before = await Promise.all(kept.map((f) => (f.handle ? bytesOfHandle(f.handle).catch(() => null) : null)));
     let handle;
     try {
       handle = await pick(name);
@@ -222,13 +231,15 @@
       ready.back();
       return failed(5, e.name === 'AbortError' ? 'No copy was written.' : `No copy was written (${reason(e)}).`, { cancelled: e.name === 'AbortError' });
     }
-    // 6. the file picked must not be the original
-    if (await isOriginal(handle, original)) {
+    // 6. the file picked must be none of the visit's: not the original, and not a copy written in
+    // it, the one the page is on included, so that moving onto a copy never lays the original open
+    for (let k = 0; k < kept.length; k += 1) {
+      if (!(await isSame(handle, kept[k]))) continue;
       ready.back();
-      const bytes = before || doc.m.bytes;
+      const bytes = before[k] || kept[k].bytes();
       const back = await putBack(handle, bytes, hash);
       if (back.ok) return failed(6, REFUSED, { original: true });
-      return failed(6, NOT_RESTORED, { original: true, loud: true, restore: bytes });
+      return failed(6, NOT_RESTORED, { original: true, loud: true, restore: bytes, restoreName: kept[k].name });
     }
     // 7. the bytes; read back; the hash equals step 4's
     let read;
@@ -237,15 +248,16 @@
       read = await hash(await bytesOfHandle(handle));
     } catch (e) {
       ready.back();
-      return failed(7, `The copy, ${handle.name}, could not be written (${reason(e)}). The original, ${original.name}, is as it was.`, { loud: true });
+      return failed(7, `The copy, ${handle.name}, could not be written (${reason(e)}). The original, ${file.name}, is as it was.`, { loud: true });
     }
     if (read !== sha256) {
       ready.back();
-      return failed(7, `The copy, ${handle.name}, did not read back as it was written: do not rely on it. The original, ${original.name}, is as it was.`, { loud: true });
+      return failed(7, `The copy, ${handle.name}, did not read back as it was written: do not rely on it. The original, ${file.name}, is as it was.`, { loud: true });
     }
-    // 8. the copy is the last copy; the page stays on the original
-    core.markCopied(doc);
-    return { done: true, name: handle.name, sha256 };
+    // 8. the page is on the copy (D1): its lines are what the changes count from, and its handle is
+    // where the next save opens and what it refuses
+    core.moveOntoCopy(doc);
+    return { done: true, name: handle.name, handle, size: ready.bytes.length, sha256 };
   }
 
   return {

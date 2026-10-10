@@ -803,19 +803,22 @@
   //
   // BUILD-BRIEF 9.1. `order` holds one number for each line on screen: n ≥ 0 is original line n,
   // written from its own bytes (I1); n < 0 is added line -n-1, typed in this session and written
-  // in the file's encoding. Every act is a list of splices on `order` — some numbers taken out at
-  // a place, others put in — and its undo is the same splices run backwards. `savedOrder` is
-  // `order` at open: the original, which nothing writes over (I6). What changed is the one against
-  // the other (9.4). `copiedOrder` is `order` when the last copy was written (10.2, step 8), or null
-  // before the first, and `copies` every copy's; the dot in the top bar and the Save button mean
-  // lines that differ from the original and from every copy (unsaved).
+  // in the file's encoding. Every act is a list of splices on `order` (some numbers taken out at
+  // a place, others put in), and its undo is the same splices run backwards. `savedOrder` is the
+  // lines of the file the page is on: `order` at open, the original, which nothing writes over
+  // (I6); then, once a copy is written, `order` at that copy, since the page moves onto each copy
+  // it writes (10.2 step 8, P11's D1). What changed is `order` against it (9.4). `openedOrder` is
+  // `order` at open, and stays so: the file first opened, which a stamp's own note counts from
+  // (10.4). `copies` holds every copy's lines; the dot in the top bar and the Save button mean
+  // lines that no file of the visit holds, neither the original nor any copy (unsaved).
   //
   // An added line keeps its text, its terminator, its lineage, and — when the viewer wrote it for a
   // change stamp — its part in the stamp. Its lineage is the line it stands for: the original line
   // an edit was typed over (for an edit of an edit, the first one's lineage), or its own number
   // when it is new. The net change pairs a line before with a line after by lineage. An edit typed
-  // back to its original — the same text and the same terminator — puts the original's number
-  // back, and the save writes the original's own bytes (9.1).
+  // back to the line as saved, the same text and the same terminator, is that line again, and
+  // typed back to its original, the original's number comes back and the save writes the
+  // original's own bytes (9.1).
 
   const TERM_BYTES = [[], [LF], [CR], [CR, LF], [LF, CR]];            // a terminator's units, by code
   const utf8 = new TextEncoder();
@@ -825,18 +828,40 @@
     const m = read(input);
     const order = new Array(m.n);
     for (let i = 0; i < m.n; i += 1) order[i] = i;
-    return {
+    const doc = {
       m,                                                             // the file as read; never changed
       added: [],                                                     // the lines typed in this session
       order,
-      savedOrder: order.slice(),
-      copiedOrder: null,                                             // `order` at the last copy written
+      savedOrder: order.slice(),                                     // the file the page is on: the original, then each copy
+      openedOrder: order.slice(),                                    // the file first opened; never moved
       copies: [],                                                    // `order` at each copy written in this visit
+      saved: null,                                                   // which line of savedOrder stands for each lineage
       done: [],                                                      // Undo takes the last of these
       undone: [],                                                    // Redo takes the last of these
       common: commonTerm(m),
       view: m,                                                       // the lines as they are now, checked
     };
+    indexSaved(doc);
+    return doc;
+  }
+
+  // Which line of `savedOrder` stands for each lineage: an original line for itself, and an added
+  // line, once a copy holds it, for its lineage. A list holds each lineage once.
+  function indexSaved(doc) {
+    const has = new Uint8Array(doc.m.n);
+    const added = new Map();
+    for (const e of doc.savedOrder) {
+      if (e >= 0) has[e] = 1;
+      else added.set(lineageOf(doc, e), e);
+    }
+    doc.saved = { has, added };
+  }
+
+  // The line as saved, in the file the page is on, that stands for `lineage`; null when that file
+  // has none.
+  function savedEntry(doc, lineage) {
+    if (doc.saved.added.has(lineage)) return doc.saved.added.get(lineage);
+    return lineage >= 0 && doc.saved.has[lineage] ? lineage : null;
   }
 
   // The terminator a new line takes: the one most common in the file (9.2); LF in a file with none.
@@ -922,9 +947,10 @@
   }
 
   // The bytes of a save (10.2): `order` walked, original lines from their own bytes, added lines
-  // encoded. `upTo` stops after that many lines.
-  function saveBytes(doc, upTo) {
-    const order = doc.order;
+  // encoded. `upTo` stops after that many lines. Given `lines`, the lines of an earlier copy, the
+  // bytes that copy was written with.
+  function saveBytes(doc, upTo, lines) {
+    const order = lines || doc.order;
     const count = upTo === undefined ? order.length : Math.min(upTo, order.length);
     return joinBytes(doc.m, count, (k) => order[k], (e) => {
       const line = doc.added[-e - 1];
@@ -1078,10 +1104,20 @@
     if (why) return refuse(why);
     const term = termOf(doc, e);
     const lineage = lineageOf(doc, e);
-    const back = lineage >= 0 && text === doc.m.texts[lineage] && term === doc.m.term[lineage];
+    const back = typedBack(doc, lineage, text, term);
     const done = [];
-    cut(doc, done, pos, 1, [back ? lineage : newLine(doc, text, term, lineage)]);
+    cut(doc, done, pos, 1, [back !== null ? back : newLine(doc, text, term, lineage)]);
     return finish(doc, `Edit line ${num(pos + 1)}`, done);
+  }
+
+  // A line typed back to its words as saved, in the file the page is on, is that line again; typed
+  // back to the original's own words, it is the original's line, written from its own bytes (9.1,
+  // I1). Null when it is neither.
+  function typedBack(doc, lineage, text, term) {
+    const saved = savedEntry(doc, lineage);
+    if (saved !== null && text === textOf(doc, saved) && term === termOf(doc, saved)) return saved;
+    if (lineage >= 0 && text === doc.m.texts[lineage] && term === doc.m.term[lineage]) return lineage;
+    return null;
   }
 
   // 9.2 — a new line directly under line `pos` (a child), or after line `pos`'s subtree (a sibling
@@ -1189,11 +1225,14 @@
     return step;
   }
 
-  // A copy is written: the lines as they now are are the last copy (10.2, step 8). The original
-  // stays what the changes are counted from.
-  function markCopied(doc) {
-    doc.copiedOrder = doc.order.slice();
-    doc.copies.push(doc.copiedOrder);
+  // A copy is written, or downloaded (10.2, step 8; P11's D1): the page is on the copy now. Its
+  // lines are what the changes count from, and what a line typed back to is; the history stays, so
+  // an undo shows as a change from the copy, and Redo brings the copy's lines back. The file first
+  // opened and every copy stay known (unsaved), and so do the stamps of this visit (stampOps).
+  function moveOntoCopy(doc) {
+    doc.savedOrder = doc.order.slice();
+    doc.copies.push(doc.savedOrder);
+    indexSaved(doc);
   }
 
   // An act taken back as if it had not been made: a save that wrote nothing takes its stamps back
@@ -1215,17 +1254,18 @@
     return true;
   }
 
-  // Whether the lines differ from the original as it was opened.
+  // Whether the lines differ from the file the page is on: the original as it was opened, or the
+  // last copy, once one is written.
   function isChanged(doc) { return !sameOrder(doc.order, doc.savedOrder); }
 
-  // Whether the lines differ from the last copy written, or from the original before the first.
-  function changedSinceCopy(doc) { return !sameOrder(doc.order, doc.copiedOrder || doc.savedOrder); }
+  // Whether the lines are the file first opened, as it was.
+  function asOpened(doc) { return sameOrder(doc.order, doc.openedOrder); }
 
   // Whether the lines hold what no file holds yet (the owner, 2026-10-09): they differ from the
-  // original, and from every copy written in this visit. Undone back to the original, or to the
-  // lines of any copy, there is nothing to save, and no save writes the original's bytes again.
+  // file first opened, and from every copy written in this visit. Undone back to the original, or
+  // to the lines of any copy, there is nothing to save, and no save writes those bytes again.
   // The stamps and the header's date are not counted: they are made at the save.
-  function unsaved(doc) { return isChanged(doc) && !doc.copies.some((c) => sameOrder(c, doc.order)); }
+  function unsaved(doc) { return !asOpened(doc) && !doc.copies.some((c) => sameOrder(c, doc.order)); }
 
   // Which numbers a list holds, and at what place.
   function placesIn(doc, list) {
@@ -1280,7 +1320,7 @@
   // other lines after added. Each item holds the line's place before (in `savedOrder`) and after
   // (in `order`), -1 where it has none. A removed line also holds `at`, the place after where it
   // was; so does a moved line — where it was taken from — and a moved line whose entry differs as
-  // well is `changed` too. Given `base` (the last copy's `copiedOrder`), the same, against it.
+  // well is `changed` too. Given `base` (`openedOrder`, the file first opened), the same, against it.
   function netChange(doc, base) {
     const S = base || doc.savedOrder;
     const O = doc.order;
@@ -1432,8 +1472,8 @@
         const line = v.records[v.recOf[it.after]];
         record = { id: v.xref[line], tag: v.tag[line], key: `now ${line}` };
       }
-      const role = it.after >= 0 ? stampOf(doc, O[it.after]) : null;
-      const stamp = role !== null;                                   // written by a stamp, or as the header's date
+      const role = stampOf(doc, it.after >= 0 ? O[it.after] : S[it.before]);
+      const stamp = role !== null;                                   // written by a stamp, or as the header's date; a removed line, when it was
       const header = role === 'header';
       const line = { was: it.before >= 0 ? textOf(doc, S[it.before]) : null, now: it.after >= 0 ? textOf(doc, O[it.after]) : null };
       if (kind === 'changed') {                                      // a line can change in its ending alone (9.2)
@@ -1459,8 +1499,8 @@
     return runs.concat(moves).sort((x, y) => (pos(x) - pos(y)) || (rank[x.kind] - rank[y.kind]));
   }
 
-  // For the grid: each line now, 1 changed or 2 added since the file was opened, 3 moved; and, where
-  // lines were removed, or taken from by a move, the place after they were.
+  // For the grid: each line now, 1 changed or 2 added since the file the page is on was opened or
+  // saved, 3 moved; and, where lines were removed, or taken from by a move, the place after they were.
   function lineMarks(doc, items) {
     const list = items || netChange(doc);
     const status = new Uint8Array(doc.order.length);
@@ -1475,13 +1515,13 @@
     return { status, removedAt, movedFrom };
   }
 
-  // Lines removed since the file was opened put back where they were: lines `before` … `before +
-  // count - 1` of the original, every one of them removed, back in their place, as one step. They
-  // are the original's lines themselves, so once back they are no change at all.
+  // Lines removed since the file the page is on was opened or saved, put back where they were:
+  // lines `before` … `before + count - 1` as saved, every one of them removed, back in their place,
+  // as one step. They are the saved lines themselves, so once back they are no change at all.
   function restoreLines(doc, before, count) {
     const items = netChange(doc).filter((it) => it.kind === 'removed' && it.before >= before && it.before < before + count);
     if (!count || items.length !== count || items.some((it) => it.at !== items[0].at)) {
-      return refuse('Those lines are not all removed, side by side, since the file was opened.');
+      return refuse('Those lines are not all removed, side by side, since the file was opened or saved.');
     }
     const done = [];
     cut(doc, done, items[0].at, 0, items.map((it) => doc.savedOrder[it.before]));
@@ -1614,16 +1654,18 @@
     return why ? { reason: why } : { text };
   }
 
-  // What changed inside each record the net change touched, for its stamp's note: the tags of the
-  // lines changed, added, removed and moved in it, as four lists, each line with its place (in the
-  // lines now; a removed line, in the original). A CONC or CONT line counts as the line it
-  // continues; a line that does not parse has no tag and is left out; the lines a stamp or the
-  // header's date wrote are not the person's changes; a record moved whole, or with its section,
-  // moved nothing inside it. A map from record numbers of the view.
-  function recordChanges(doc, items) {
-    const list = items || netChange(doc);
+  // What changed inside each record since the file was first opened, for its stamp's note: the tags
+  // of the lines changed, added, removed and moved in it, as four lists, each line with its place
+  // (in the lines now; a removed line, in the file first opened). Counted from that file, not from
+  // the copy the page is on (D1), so a stamp of this visit set anew still names what the visit
+  // changed in its record before that copy. A CONC or CONT line counts as the line it continues; a
+  // line that does not parse has no tag and is left out; the lines a stamp or the header's date
+  // wrote are not the person's changes; a record moved whole, or with its section, moved nothing
+  // inside it. A map from record numbers of the view.
+  function recordChanges(doc) {
+    const S = doc.openedOrder;
+    const list = netChange(doc, S);
     const v = doc.view;
-    const S = doc.savedOrder;
     const O = doc.order;
     const out = new Map();
     const add = (r, kind, place, tag) => {
@@ -1652,7 +1694,7 @@
     const memo = { a: -2, r: -1 };
     for (const it of list) {
       if (it.kind === 'removed') {
-        const r = savedRecordOf(doc, it.before, memo);
+        const r = savedRecordOf(doc, it.before, memo, S);
         if (r < 0) continue;
         let b = placeNow(S[r]);
         if (b < 0 && changedTo.has(r)) b = changedTo.get(r);
@@ -1663,7 +1705,7 @@
       }
     }
     if (list.some((it) => it.kind === 'moved')) {
-      for (const run of changeRuns(doc, list)) {
+      for (const run of changeRuns(doc, list, S)) {
         if (run.kind !== 'moved' || run.moved.what !== 'block') continue;
         for (let k = 0; k < run.lines.length; k += 1) add(v.recOf[run.after + k], 'Moved', run.after + k, tagNow(run.after + k));
       }
@@ -1702,40 +1744,28 @@
   }
 
   // Each record's note, as stampOps asks for it: the note typed for the save, or the record's own.
-  function noteFor(doc, typed, items) {
+  function noteFor(doc, typed) {
     if (typed.text !== null) return () => typed.text;
-    const changes = recordChanges(doc, items);
+    const changes = recordChanges(doc);
     return (r) => recordNote(changes.get(r));
   }
 
-  // The records a save stamps: every record the net change touched — a line changed or added in
-  // it, a line it lost, or its own lines reordered (3.4a) — other than by a stamp of the viewer's
-  // own, that is still in the file, under a tag that may carry a change date (section 2). A
-  // record moved whole, or with its section, is not stamped: nothing in it changed, only its
-  // place. A record stamped for an earlier copy in this visit is stamped again only when it
-  // changed after that copy (10.4): until then its stamp already says when it last changed, and
-  // why. Record numbers of the view, last first.
+  // The records a save stamps: every record the net change touched since the file the page is on
+  // (a line changed or added in it, a line it lost, or its own lines reordered, 3.4a), other than
+  // by a stamp of the viewer's own, that is still in the file, under a tag that may carry a change
+  // date (section 2). A record moved whole, or with its section, is not stamped: nothing in it
+  // changed, only its place. A record stamped for an earlier copy in this visit, the page being on
+  // that copy now (D1), is stamped again only when it changed after it (10.4): until then its stamp
+  // already says when it last changed, and why. Record numbers of the view, last first.
   function stampTargets(doc, items) {
     const hit = touchedRecords(doc, items || netChange(doc), doc.savedOrder);
-    if (doc.copiedOrder && hit.size) {
-      const since = touchedRecords(doc, netChange(doc, doc.copiedOrder), doc.copiedOrder);
-      for (const r of [...hit]) if (!since.has(r) && stampedInVisit(doc, r)) hit.delete(r);
-    }
     return [...hit].sort((x, y) => y - x);
   }
 
-  // Whether record r of the view carries a stamp the viewer added in this visit: a NOTE of its own
-  // under the record's 1 CHAN. Every stamp adds one, or sets one it added before.
-  function stampedInVisit(doc, r) {
-    const v = doc.view;
-    const chan = firstChild(v, v.records[r] + 1, recordEnd(v, r), 1, 'CHAN');
-    if (chan < 0) return false;
-    for (let p = chan + 1; p < subtreeEnd(v, chan); p += 1) if (stampOf(doc, doc.order[p]) === 'note') return true;
-    return false;
-  }
-
   // The records of the view that the items of a net change against `S` touched, as stampTargets
-  // counts them, under the tags that may carry a change date.
+  // counts them, under the tags that may carry a change date. A line a stamp or the header's date
+  // wrote is not the person's change, written, set anew, or taken out again by an Undo after the
+  // copy that holds it (D1).
   function touchedRecords(doc, list, S) {
     const v = doc.view;
     const O = doc.order;
@@ -1754,7 +1784,7 @@
         if (it.changed) take(it.after);                               // a moved line he also edited; the move itself is judged by its run, below
       } else if (it.kind !== 'removed') {
         if (stampOf(doc, O[it.after]) === null) take(it.after);      // written by him, not by a stamp
-      } else {
+      } else if (stampOf(doc, S[it.before]) === null) {              // removed by him, not a stamp's line undone
         const r = savedRecordOf(doc, it.before, memo, S);
         if (r < 0) continue;
         let b = placeNow(S[r]);
@@ -1774,11 +1804,11 @@
   // and applyStamps makes. A record with no `1 CHAN` gains one at its end: `1 CHAN`, `2 DATE`,
   // `3 TIME`, `2 NOTE`. A record with one has its `2 DATE` and `3 TIME` set (either added when
   // missing) and a `2 NOTE` added at the end of the block; notes already there stay. A note the
-  // viewer added for an earlier copy in this visit is set anew instead, never added to.
+  // viewer added for an earlier copy in this visit is set anew instead, never added to, the page
+  // being on that copy or not (D1): every line the viewer wrote is an added line of this visit.
   function stampOps(doc, when, noteOf) {
     const v = doc.view;
     const { date, time } = stampTime(when, v.v7);
-    const inSaved = placesIn(doc, doc.savedOrder);
     const line = (level, tag, value, role) => ({ level, text: `${level} ${tag} ${value}`.trimEnd(), role });
     return stampTargets(doc).map((r) => {
       const from = v.records[r];
@@ -1791,10 +1821,7 @@
       } else {
         const end = subtreeEnd(v, chan);
         let fresh = -1;
-        for (let p = chan + 1; p < end && fresh < 0; p += 1) {
-          const e = doc.order[p];
-          if (stampOf(doc, e) === 'note' && inSaved(e) < 0) fresh = p;
-        }
+        for (let p = chan + 1; p < end && fresh < 0; p += 1) if (stampOf(doc, doc.order[p]) === 'note') fresh = p;
         ops.push({ at: fresh >= 0 ? fresh : end, set: fresh >= 0, lines: [line(2, 'NOTE', note, 'note')] });
         const dt = firstChild(v, chan + 1, end, 2, 'DATE');
         if (dt < 0) ops.push({ at: chan + 1, set: false, lines: [line(2, 'DATE', date, 'date'), line(3, 'TIME', time, 'time')] });
@@ -2267,7 +2294,7 @@
     openDocument, saveBytes, textOf, termOf,
     editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
     moveRefusal, moveLines, landings,
-    markCopied, takeBack, isChanged, changedSinceCopy, unsaved, netChange, changeRuns, lineMarks, restoreLines,
+    moveOntoCopy, takeBack, isChanged, asOpened, unsaved, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
     nameParts, nameShown, linkAt, clip, deleteQuestion, linePath, stripStyles, metaRebuild, metaParts, lineShape,
     report, withChecksum, reportChecksumParts,

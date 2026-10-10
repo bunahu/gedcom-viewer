@@ -29,10 +29,16 @@
 // frame it hides and the frame shrunk to it, the right frame's title, the strip's two groups and
 // the strip at a narrow width, Edit on as a file opens and its look, the version in Settings),
 // and in the editing part (the delete question); every file now opens with Edit on, so the
-// read-only walk presses E first, and the parts that edit no longer turn it on. --shots DIR saves
-// pictures of the fictional files, and of nothing else.
+// read-only walk presses E first, and the parts that edit no longer turn it on. Release 0.6.1 is
+// walked in two parts of its own, first (the first screen, with no side frame, counts bar or strip,
+// and Try a sample family, which opens the page's own file with nothing fetched) and drawers (the
+// frames at 1,280, 1,000, 800 and 600 px, with the default widths and with wider ones stored: shut,
+// opened by their icons, one at a time, shut by a line chosen in them, by Esc and by a file opened,
+// nothing of it stored); and in the save and copy parts, rewritten for P11's D1: after a save, or a
+// download, the page is on the copy, and every file of the visit is refused in the Save dialog.
+// --shots DIR saves pictures of the fictional files and of the sample family, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
-// third, scroll, drags, save, copy, look, bars. Exit 0 when every step passes.
+// third, scroll, drags, save, copy, look, bars, first, drawers. Exit 0 when every step passes.
 //
 // The computer's Save dialog itself is not walked here: a person picks the name and the place in
 // it. The walk stands in for it as Chromium's behaves, the file picked created, or emptied when it
@@ -534,7 +540,7 @@ async function editingOnThePage(page, dir, shots) {
   check(goes.join(', ') === 'GEDCOM 5.5.1 → line 6 (VERS), UTF-8 → line 7 (CHAR), exported → line 4 (DATE), by → line 2 (SOUR)',
     `each fact goes to the line it came from: ${goes.join(', ')}`);
   const told = await page.ev("document.querySelector('#facts .sha').title");
-  check(/fingerprint of the file's exact bytes/.test(told), 'the sha256 says on hover what it is');
+  check(/fingerprint of this file's exact bytes, as it was opened, or as the page saved it/.test(told), 'the sha256 says on hover what it is, for the file opened or a copy saved');
   await page.click("document.querySelector('#facts .sha')");
   await page.waitFor("document.querySelector('#facts .hash')");
   const hex = await page.ev("document.querySelector('#facts .hash').textContent");
@@ -1070,8 +1076,10 @@ async function thirdRound(page, dir, shots) {
   const hidden = await page.ev(FRAMES);
   await shot('frames-hidden');
   await page.goto(`file://${path.join(ROOT, 'index.html')}`);
+  const unopened = await page.ev("document.getElementById('work').className");   // 0.6.1: with no file open, no side frames at all
+  await page.openFile(file);
   const remembered = await page.ev("document.getElementById('work').className");
-  await sleep(350);                                                  // the frames ease to how they were left as the page loads, the left icon with its bar's edge
+  await sleep(350);                                                  // the frames ease to how they were left as the file opens, the left icon with its bar's edge
   await page.click("document.getElementById('hide-left')");
   await page.click("document.getElementById('hide-right')");
   await sleep(350);
@@ -1079,9 +1087,8 @@ async function thirdRound(page, dir, shots) {
   check(hidden.cls === 'work left-hidden right-hidden' && hidden.tabs === 'hidden' && hidden.detail === 'hidden' && hidden.icons === 'visible,visible' && hidden.width > 0 && hidden.width < 60
     && hidden.tab === 'true/Show left bar/Show right frame',
   `the icon in each side frame shrinks it to a strip holding the icon alone (${hidden.cls}, eased; the left bar ${Math.round(hidden.width)} px wide), and reads "${hidden.tab.split('/')[1]}"`);
-  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tabs === 'visible' && shown.detail === 'visible' && shown.tab === 'false/Hide left bar/Hide right frame',
-    `hidden or shown is remembered across a reload (${remembered}); the same icons bring them back (${shown.cls === 'work' ? 'both shown' : shown.cls})`);
-  await page.openFile(file);
+  check(unopened === 'work no-file' && remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tabs === 'visible' && shown.detail === 'visible' && shown.tab === 'false/Hide left bar/Hide right frame',
+    `hidden or shown is remembered across a reload (${unopened} until a file opens, then ${remembered}); the same icons bring them back (${shown.cls === 'work' ? 'both shown' : shown.cls})`);
   // the reading steps below want Edit off; the file opened with it on (0.6)
   const reopenedOn = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
   await page.click("document.getElementById('edit')");
@@ -1409,7 +1416,7 @@ const STAND_IN_DIALOGS = `(() => {
   Object.assign(window, { __folder: folder, __File: F, __writes: [], __asked: [], __answer: undefined, __failNew: null });
   window.showOpenFilePicker = async () => [folder.entries.get(window.__opened)];
   window.showSaveFilePicker = async (opts) => {
-    window.__asked.push({ name: opts.suggestedName, atOriginal: opts.startIn === folder.entries.get(window.__opened), types: JSON.stringify(opts.types) });
+    window.__asked.push({ name: opts.suggestedName, startIn: opts.startIn && folder.entries.get(opts.startIn.name) === opts.startIn ? opts.startIn.name : null, types: JSON.stringify(opts.types) });
     if (window.__answer === null) throw fail('AbortError', 'The user aborted a request.');
     const name = window.__answer === undefined ? opts.suggestedName : window.__answer;
     let f = folder.entries.get(name);
@@ -1466,8 +1473,9 @@ const DATE_TIME = (t) => t.replace(/\d{1,2} [A-Z]{3} \d{4}/, 'D').replace(/\d\d:
 const DIALOG_SAYS = "({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.querySelector('#dialog .dialog-body').textContent })";
 
 async function saveWithDialog(page) {
-  console.log('\n== Save: a dated copy, never the original, with the computer\'s Open and Save dialogs stood in for');
+  console.log('\n== Save: a dated copy, never the original, and the page then on the copy (P11, D1), with the computer\'s Open and Save dialogs stood in for');
   const sha = crypto.createHash('sha256').update(SMALL).digest('hex');
+  const hashOf = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
   await page.ev(STAND_IN_DIALOGS);
   await page.ev(`window.__opened = 'small.ged'; window.__folder.entries.set('small.ged', new window.__File(window.__folder, 'small.ged',
     Uint8Array.from(atob(${JSON.stringify(Buffer.from(SMALL).toString('base64'))}), (c) => c.charCodeAt(0)))); true`);
@@ -1508,37 +1516,58 @@ async function saveWithDialog(page) {
   const asked = await page.ev('window.__asked');
   const copyName = asked[0].name;
   const said = await page.ev("document.getElementById('notice').textContent");
-  check(asked.length === 1 && /^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/.test(copyName) && asked[0].atOriginal && asked[0].types.includes('.ged') && asked[0].types.includes('.gedcom'),
-    `the computer's Save dialog, asked once: ${copyName} offered, opening at the original, for .ged and .gedcom`);
+  check(asked.length === 1 && /^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/.test(copyName) && asked[0].startIn === 'small.ged' && asked[0].types.includes('.ged') && asked[0].types.includes('.gedcom'),
+    `the computer's Save dialog, asked once: ${copyName} offered, opening beside small.ged, for .ged and .gedcom`);
   check(said === `Saved as ${copyName}.`, `then "${said}"`);
-  const copy = Buffer.from(await page.ev(IN_FOLDER(copyName)), 'base64').toString('utf8').split('\n');
+  const copyBytes = Buffer.from(await page.ev(IN_FOLDER(copyName)), 'base64');
+  const copy = copyBytes.toString('utf8').split('\n');
+  const copySha = hashOf(copyBytes);
   check(copy[7] === typed.header[1].text && copy.slice(11, 14).join(' | ') === '0 @I2@ INDI | 1 NAME Joe /Fixtures/ | 1 CHAN' && copy[14] === typed.stamps[2].text && copy[15] === typed.stamps[3].text
     && copy[16] === '2 NOTE Walked.' && copy[17] === '0 TRLR',
   `the copy holds what the dialog showed, to the second: "${copy[7]}" in HEAD; the edit, and @I2@'s stamp with the note typed (${copy.slice(13, 17).join(', ')})`);
   check(Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8') === SMALL, 'the original is not written: byte for byte as it was opened');
 
-  // 21: the copy is the last copy; the page stays on the original
-  const after = await page.ev(`({ off: document.getElementById('save').disabled, dirty: !document.getElementById('dirty').hidden, title: document.title,
-    changes: document.getElementById('changes-count').textContent, facts: document.getElementById('facts').textContent, name: document.getElementById('file-name').textContent, leave: ${LEAVE_ASKS} })`);
-  check(!after.dirty && after.off && after.title === 'GEDCOM Viewer' && !after.leave, 'the copy is the last copy: ● gone, Save off, no ● in the tab, and leaving asks nothing');
+  // 21: the page is on the copy (D1): its name in the chip, Changes 0, no change dots, ● gone, Save off; its facts are the copy's
+  const ON_IT = `({ name: document.getElementById('file-name').textContent, changes: document.getElementById('changes-count').textContent, dirty: !document.getElementById('dirty').hidden,
+    off: document.getElementById('save').disabled, title: document.title, dots: document.querySelectorAll('#grid .cg.is-changed, #grid .cg.is-added, #grid .cg.is-moved').length,
+    struck: document.querySelectorAll('#grid .row.is-removed').length, undo: document.getElementById('undo').title, leave: ${LEAVE_ASKS} })`;
+  const after = await page.ev(ON_IT);
+  check(after.name === copyName && after.changes === '' && after.dots === 0 && !after.dirty && after.off && after.title === 'GEDCOM Viewer' && !after.leave,
+    `the page is on the copy: the chip reads ${after.name}; Changes 0 and no change dots; ● gone, Save off, no ● in the tab, and leaving asks nothing`);
   if (await page.ev("document.getElementById('facts').hidden")) await page.click("document.getElementById('file-name')");
   await page.click("document.querySelector('#facts .sha')");
-  const shown = await page.ev("(document.querySelector('#facts .hash') || {}).textContent");
-  check(after.changes === '3' && after.name === 'small.ged' && after.facts.includes(`${Buffer.byteLength(SMALL)} B`) && shown === sha,
-    `the page stays on the original: Changes ${after.changes} (the header's date, the name and the stamp, counted from the original); the facts name small.ged, its size as opened and its sha256 (${shown.slice(0, 12)}…)`);
+  const facts = await page.ev("({ text: document.getElementById('facts').textContent, sha: (document.querySelector('#facts .hash') || {}).textContent })");
+  check(facts.text.includes(`${copyBytes.length} B`) && facts.text.includes('18 lines') && facts.sha === copySha && copySha !== sha,
+    `its facts are the copy's: ${copyBytes.length} B, 18 lines, and its sha256 (${copySha.slice(0, 12)}…), not the original's`);
 
-  // 23: the Changes tab's copy button
+  // 23: the Changes tab's copy button: the copy's name and sha256, and no change under them
   await page.ev("navigator.clipboard.writeText = (t) => { window.__copied = t; return Promise.resolve(); }; true");
   await page.click("document.querySelector('.tab[data-panel=changes]')");
   await page.click("document.getElementById('changes-copy')");
   await page.waitFor("typeof window.__copied === 'string' && document.getElementById('changes-copy').classList.contains('is-done')");
   const pasted = (await page.ev('window.__copied')).split('\n');
-  check(/^GEDCOM Viewer {2}changes to small\.ged {2}as of \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/.test(pasted[0])
-    && pasted[1] === `original  sha256 ${sha}  ${Buffer.byteLength(SMALL)} bytes  13 lines`
-    && /^added +8 +HEAD {2}\(the date in the header\)$/.test(pasted[2]) && pasted[3] === `  + ${copy[7]}`
-    && /^changed {2}12 -> 13 +@I2@ INDI$/.test(pasted[4]) && pasted[5] === '  - 1 NAME Joe /Fixture/' && pasted[6] === '  + 1 NAME Joe /Fixtures/'
-    && /^added +14-17 {2}@I2@ INDI {2}\(change stamp\)$/.test(pasted[7]) && pasted[11] === '  + 2 NOTE Walked.',
-  `the Changes tab's copy button: the original's name and sha256, then the header's date, the change and the stamp, as text ("${pasted[1].slice(0, 26)}…", "${pasted[2]}", "${pasted[4]}", "${pasted[7]}")`);
+  check(new RegExp(`^GEDCOM Viewer {2}changes to ${copyName.replace(/\./g, '\\.')} {2}as of \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d[+-]\\d\\d:\\d\\d$`).test(pasted[0])
+    && pasted[1] === `original  sha256 ${copySha}  ${copyBytes.length} bytes  18 lines` && pasted.length === 3 && pasted[2] === '',
+  `the Changes tab's copy button: the copy's name and sha256, and nothing changed since it ("${pasted[0].slice(0, 52)}…")`);
+
+  // 24: Undo once: the header's date and the stamp, taken out, are changes from the copy, struck through where they were, and ● is on;
+  // again: the edit, the lines the original's, so ● goes and Save is off, while Changes counts three from the copy; Redo twice: the copy's lines
+  await page.click("document.getElementById('undo')");
+  const undoneOnce = await page.ev(ON_IT);
+  const runsOnce = await page.ev(`${VISIBLE('changes-list')}.map((r) => r.className.replace('item ', '') + ' ' + r.lastChild.textContent)`);
+  await page.click("document.getElementById('undo')");
+  const undoneTwice = await page.ev(ON_IT);
+  await page.key('s', 'KeyS', 83, 4);
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent.startsWith('These lines')");
+  const nothing = await page.ev("document.getElementById('notice').textContent");
+  await page.click("document.getElementById('redo')");
+  await page.click("document.getElementById('redo')");
+  const redone = await page.ev(ON_IT);
+  check(undoneOnce.changes === '2' && JSON.stringify(runsOnce) === JSON.stringify(['is-removed header', 'is-removed +3 \u{b7} stamp \u{b7} @I2@']) && undoneOnce.struck === 5 && undoneOnce.dirty && !undoneOnce.off && undoneOnce.leave,
+    `an Undo after the save: Changes ${undoneOnce.changes}, from the copy (${runsOnce.join('; ')}), the ${undoneOnce.struck} lines struck through where they were; ● on, Save on, leaving asks`);
+  check(undoneTwice.changes === '3' && !undoneTwice.dirty && undoneTwice.off && !undoneTwice.leave && nothing === 'These lines are already in the original. Nothing was written.',
+    `Undo again: the original's lines, so ● goes and Save is off ("${nothing}"), while Changes counts ${undoneTwice.changes} from the copy`);
+  check(redone.changes === '' && !redone.dirty && redone.off && redone.struck === 0, 'Redo twice: the copy\'s lines again, Changes 0');
   await page.click("document.querySelector('.tab[data-panel=records]')");
 
   // nothing changed since the copy: Save is off, and ⌘S says so; ⇧⌘S is no key of the page's
@@ -1551,28 +1580,39 @@ async function saveWithDialog(page) {
   await sleep(300);
   check(!(await page.ev("document.getElementById('dialog').open")), '⇧⌘S opens nothing: Save a copy and its key are gone');
 
-  // 33: the original's own name picked: refused in the brief's words; emptied by the browser, put back byte for byte
-  await page.ev("window.__answer = 'small.ged'; window.__writes.length = 0; true");
-  await page.key('s', 'KeyS', 83, 4);
-  await page.waitFor("document.getElementById('dialog').open");
-  const second = await page.ev(SAVE_DIALOG);
-  check(second.stamps.filter((r) => r.rec).length === 1 && second.stamps[0].text.startsWith('@I1@ INDI') && JSON.stringify(second.stamps.slice(1).map((r) => r.kept)) === '[false,false,false,false]'
-    && JSON.stringify(second.header.map((r) => DATE_TIME(r.text))) === JSON.stringify(['HEAD', '1 NOTE Last updated: D T']),
-  `⌘S: the Save dialog's stamps name @I1@ alone, changed since the copy, gaining a whole CHAN; @I2@'s stamp from the copy is left as it was; HEAD's date to be set anew (${second.stamps.map((r) => r.text).join(' / ')})`);
+  // 33: Save opens beside the copy the page is on and offers its stem with a new timestamp; the copy itself picked, then the
+  // original: each refused in the brief's words; each emptied by the browser, as Chromium does, and put back byte for byte
+  await sleep(1100);                                                 // a second later, so the name offered is a name of its own
   const before = await page.ev("({ changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })");
-  await page.click(BUTTON('#dialog', 'Save'));
-  await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'Save failed'");
-  const refused = await page.ev(DIALOG_SAYS);
-  await page.click(BUTTON('#dialog', 'Close'));
-  await page.waitFor("!document.getElementById('dialog').open");
-  const back = await page.ev(`({ original: ${IN_FOLDER('small.ged')}, names: ${FOLDER_NAMES}, writes: window.__writes.slice(), dirty: !document.getElementById('dirty').hidden,
-    changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })`);
-  check(refused.title === 'Save failed' && refused.text === 'That is the original. It is unchanged. Choose another name.',
-    `the original picked in the Save dialog: "${refused.title}": "${refused.text}"`);
-  check(Buffer.from(back.original, 'base64').toString('utf8') === SMALL && JSON.stringify(back.writes) === JSON.stringify(['small.ged']) && JSON.stringify(back.names) === JSON.stringify([copyName, 'small.ged'].sort()),
-    'the original, emptied by the browser as Chromium does, is put back byte for byte, and nothing else is written');
-  check(back.dirty && back.changes === before.changes && back.redo === before.redo && back.undo === before.undo,
-    `the stamps taken back: Changes ${back.changes} as before, Undo "${back.undo}", Redo as it was, and ● still on`);
+  const refusals = [];
+  for (const name of [copyName, 'small.ged']) {
+    await page.ev(`window.__answer = ${JSON.stringify(name)}; window.__writes.length = 0; window.__asked.length = 0; true`);
+    await page.click("document.getElementById('save')");           // a click: a second synthetic ⌘S this soon is lost in this Chrome (see press in tools/chrome.js)
+    await page.waitFor("document.getElementById('dialog').open");
+    if (name === copyName) {
+      const second = await page.ev(SAVE_DIALOG);
+      check(second.stamps.filter((r) => r.rec).length === 1 && second.stamps[0].text.startsWith('@I1@ INDI') && JSON.stringify(second.stamps.slice(1).map((r) => r.kept)) === '[false,false,false,false]'
+        && JSON.stringify(second.header.map((r) => DATE_TIME(r.text))) === JSON.stringify(['HEAD', '1 NOTE Last updated: D T']),
+      `Save on the copy: the Save dialog's stamps name @I1@ alone, changed since the copy, gaining a whole CHAN; HEAD's date to be set anew (${second.stamps.map((r) => r.text).join(' / ')})`);
+    }
+    await page.click(BUTTON('#dialog', 'Save'));
+    await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'Save failed'");
+    const refused = await page.ev(DIALOG_SAYS);
+    await page.click(BUTTON('#dialog', 'Close'));
+    await page.waitFor("!document.getElementById('dialog').open");
+    refusals.push({ name, refused, asked: (await page.ev('window.__asked'))[0], ...(await page.ev(`({ bytes: ${IN_FOLDER(name)}, names: ${FOLDER_NAMES}, writes: window.__writes.slice(), dirty: !document.getElementById('dirty').hidden,
+      on: document.getElementById('file-name').textContent, changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })`)) });
+  }
+  const offered = refusals[0].asked.name;
+  check(/^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/.test(offered) && offered !== copyName && refusals.every((r) => r.asked.startIn === copyName),
+    `the Save dialog opens beside the copy the page is on, and offers its stem with a new timestamp: ${offered}`);
+  check(refusals.every((r) => r.refused.title === 'Save failed' && r.refused.text === 'That is the original. It is unchanged. Choose another name.'),
+    `the copy the page is on, picked in the Save dialog, and then the original: each refused, "${refusals[0].refused.title}": "${refusals[0].refused.text}"`);
+  check(Buffer.from(refusals[0].bytes, 'base64').equals(copyBytes) && Buffer.from(refusals[1].bytes, 'base64').toString('utf8') === SMALL
+    && refusals.every((r) => JSON.stringify(r.writes) === JSON.stringify([r.name]) && JSON.stringify(r.names) === JSON.stringify([copyName, 'small.ged'].sort())),
+  'each, emptied by the browser as Chromium does, is put back byte for byte, and nothing else is written');
+  check(refusals.every((r) => r.dirty && r.on === copyName && r.changes === before.changes && r.redo === before.redo && r.undo === before.undo),
+    `the stamps taken back each time: Changes ${before.changes} as before, Undo "${before.undo}", Redo as it was, ● still on; the page still on ${copyName}`);
 
   // Cancel in the Save dialog
   await page.ev("window.__answer = null; window.__writes.length = 0; window.__asked.length = 0; true");
@@ -1592,13 +1632,13 @@ async function saveWithDialog(page) {
   const loud = await page.ev(DIALOG_SAYS);
   await page.click(BUTTON('#dialog', 'Close'));
   await page.waitFor("!document.getElementById('dialog').open");
-  check(loud.text === 'The copy, small.bad.ged, did not read back as it was written: do not rely on it. The original, small.ged, is as it was.'
-    && Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8') === SMALL && (await page.ev("!document.getElementById('dirty').hidden")),
-  `a copy that reads back wrong, said loudly: "${loud.text}"`);
+  check(loud.text === `The copy, small.bad.ged, did not read back as it was written: do not rely on it. The original, ${copyName}, is as it was.`
+    && Buffer.from(await page.ev(IN_FOLDER('small.ged')), 'base64').toString('utf8') === SMALL && (await page.ev("!document.getElementById('dirty').hidden"))
+    && (await page.ev("document.getElementById('file-name').textContent")) === copyName,
+  `a copy that reads back wrong, said loudly: "${loud.text}"; the page still on the copy`);
 
-  // a second copy: @I1@ stamped with the note typed now; @I2@'s stamp as the first copy wrote it
+  // a second copy: @I1@ stamped with the note typed now; @I2@'s stamp as the first copy wrote it; the page then on the second copy
   await page.ev("window.__answer = undefined; window.__failNew = null; window.__asked.length = 0; true");
-  await sleep(1100);                                                 // a second later, so the copy has a name of its own
   await page.click("document.getElementById('save')");
   await page.waitFor("document.getElementById('dialog').open");
   await page.ev("document.querySelector('#dialog .dialog-note input').value = 'Second.'; true");
@@ -1606,9 +1646,11 @@ async function saveWithDialog(page) {
   await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
   const secondName = (await page.ev('window.__asked'))[0].name;
   const two = Buffer.from(await page.ev(IN_FOLDER(secondName)), 'base64').toString('utf8').split('\n');
+  const onSecond = await page.ev(ON_IT);
   check(two[9] === '1 NAME Jane /Fixtures/' && two[11] === '1 CHAN' && two[14] === '2 NOTE Second.' && two.slice(15, 22).join(' | ') === copy.slice(11, 18).join(' | ')
     && two.filter((l) => /Last updated/.test(l)).length === 1 && two[7] !== copy[7],
   `a second copy, ${secondName}: @I1@ stamped with its note; @I2@'s record, stamp and all, as the first copy wrote it; HEAD's date set anew, one line ("${two[7]}")`);
+  check(onSecond.name === secondName && onSecond.changes === '' && !onSecond.dirty, `the page is on the second copy now: ${onSecond.name}, Changes 0`);
   await retype(page, two.indexOf('0 @I2@ INDI') + 2, '1 NAME Joseph /Fixtures/');
   await page.click("document.getElementById('save')");
   await page.waitFor("document.getElementById('dialog').open");
@@ -1617,20 +1659,20 @@ async function saveWithDialog(page) {
   await page.waitFor("!document.getElementById('dialog').open");
   check(third.stamps.filter((r) => r.rec).length === 1 && third.stamps[0].text.startsWith('@I2@ INDI')
     && JSON.stringify(third.stamps.slice(1).map((r) => [DATE_TIME(r.text), r.kept])) === JSON.stringify([['1 CHAN', true], ['2 DATE D', false], ['3 TIME T', false], ['2 NOTE Changed: NAME', false]]),
-  `@I2@ changed again: its CHAN, kept, and the lines it sets anew: ${third.stamps.slice(1).map((r) => r.text).join(' / ')}`);
+  `@I2@ changed again: its CHAN, kept, and the lines it sets anew, never doubled: ${third.stamps.slice(1).map((r) => r.text).join(' / ')}`);
 
-  // undone step by step: Save, and the dot, only for lines no file holds, the original's and a copy's not among them
+  // undone step by step: Save, and the dot, only for lines no file of the visit holds, the original's and each copy's not among them
   const states = [];
   for (let k = 0; k < 5; k += 1) {
     await page.click("document.getElementById('undo')");
     await page.ev('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
     states.push(await page.ev("({ save: !document.getElementById('save').disabled, dot: !document.getElementById('dirty').hidden, changes: document.getElementById('changes-count').textContent })"));
   }
-  check(JSON.stringify(states.map((x) => [x.save, x.dot])) === JSON.stringify([[false, false], [true, true], [false, false], [true, true], [false, false]]) && states[4].changes === '',
-    'undone one step at a time: the second copy\'s lines, Save off; then lines in no copy, on; the first copy\'s, off; in none, on; the original, off and no dot: no save writes the original\'s bytes again');
+  check(JSON.stringify(states.map((x) => [x.save, x.dot])) === JSON.stringify([[false, false], [true, true], [false, false], [true, true], [false, false]]) && states[0].changes === '' && states[4].changes !== '',
+    `undone one step at a time: the second copy's lines, Save off; then lines in no file, on; the first copy's, off; in none, on; the original, off and no dot, while Changes counts ${states[4].changes} from the second copy, the one the page is on`);
   await page.key('s', 'KeyS', 83, 4);
-  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent.startsWith('Nothing')");
-  check((await page.ev("document.getElementById('notice').textContent")) === 'Nothing has changed since the file was opened. Nothing was written.', '⌘S there: "Nothing has changed since the file was opened. Nothing was written."');
+  await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('notice').textContent.startsWith('These lines')");
+  check((await page.ev("document.getElementById('notice').textContent")) === 'These lines are already in the original. Nothing was written.', '⌘S there: "These lines are already in the original. Nothing was written."');
 }
 
 // Download a copy, in a browser with no file pickers (10.2): the button says so and ⌘S does the
@@ -1673,13 +1715,31 @@ async function copyWithoutPickers(page, dir, shots) {
   await page.waitFor("!document.getElementById('notice').hidden && document.getElementById('dirty').hidden");
   const said = await page.ev("document.getElementById('notice').textContent");
   check(said === `Downloaded as ${copy}, where your browser keeps downloads.`, `then "${said}"`);
-  check(await page.ev(`document.getElementById('save').disabled && !${LEAVE_ASKS}`), 'a download is the last copy: ● gone, the button off, and leaving asks nothing');
+  // P11, D1: the page is on the download, as on a saved copy, with no handle: its name, its facts, Changes 0
+  const bytes = fs.readFileSync(path.join(downloads, copy));
+  const on = await page.ev(`({ name: document.getElementById('file-name').textContent, changes: document.getElementById('changes-count').textContent, label: document.getElementById('save').textContent,
+    off: document.getElementById('save').disabled, leave: ${LEAVE_ASKS} })`);
+  if (await page.ev("document.getElementById('facts').hidden")) await page.click("document.getElementById('file-name')");
+  await page.click("document.querySelector('#facts .sha')");
+  const facts = await page.ev("({ text: document.getElementById('facts').textContent, sha: (document.querySelector('#facts .hash') || {}).textContent })");
+  check(on.name === copy && on.changes === '' && on.off && on.label === 'Download a copy' && !on.leave,
+    `a download moves the page onto it: the chip reads ${on.name}, Changes 0, ● gone, the button off, and leaving asks nothing`);
+  check(facts.text.includes(`${bytes.length} B`) && facts.sha === crypto.createHash('sha256').update(bytes).digest('hex'), `its facts are the download's: ${bytes.length} B, and its sha256`);
   check(fs.readdirSync(downloads).length === 1, 'one file downloaded, the copy: no log');
   await retype(page, 12, '1 NAME Joe /Fixtures/');
   check(await page.ev(`!document.getElementById('dirty').hidden && ${LEAVE_ASKS}`), 'a change made since: ● again, and leaving asks first');
   await page.click("document.getElementById('undo')");
   await page.waitFor("document.getElementById('dirty').hidden");
-  check(await page.ev(`!${LEAVE_ASKS} && document.getElementById('changes-count').textContent === '1'`), 'undone: back to the last copy, ● gone; Changes 1, counted from the original');
+  check(await page.ev(`!${LEAVE_ASKS} && document.getElementById('changes-count').textContent === ''`), 'undone: the download\'s lines, ● gone, Changes 0, counted from the download');
+  await sleep(1100);                                                 // a second later, so the next name is a name of its own
+  await page.click("document.getElementById('redo')");
+  await page.key('s', 'KeyS', 83, 4);
+  await page.waitFor("document.getElementById('dialog').open");
+  const again = await page.ev(SAVE_DIALOG);
+  await page.click(BUTTON('#dialog', 'Download'));
+  const second = await waitForFile(downloads, /^small\.\d{4}-\d\d-\d\dT\d{6}\.ged$/, 10000, copy);
+  check(again.title === `Download a copy of ${copy}` && second && second !== copy && (await page.ev("document.getElementById('file-name').textContent")) === second,
+    `the next download is of the copy, offered its stem with a new timestamp: "${again.title}", downloaded as ${second}; the page on it`);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1919,15 +1979,15 @@ async function theBars(page, dir, shots) {
   console.log(`\n== the bars (0.6), on a fictional file of ${fmt(m.n)} lines`);
 
   // before a file is open: the top bar holds the name and Settings alone; Go to Line…, Edit, Undo, Redo
-  // and Save are not there at all; the right frame's header holds its icon alone
+  // and Save are not there at all; nor, from 0.6.1, the side frames, their icons, or the strip
   const before = await page.ev(`({ bar: ${TOP_BAR}, icons: document.querySelectorAll('.bar .icon-button').length,
     gone: ['goto-box', 'edit', 'undo', 'redo', 'save'].filter((id) => !document.getElementById(id).hidden || document.getElementById(id).getClientRects().length),
     strip: [...document.querySelectorAll('#strip button, #strip input')].filter((e) => e.getClientRects().length).map((e) => e.id + (e.disabled ? ' off' : '')).join(),
-    title: ${FRAME_TITLE}, icon: getComputedStyle(document.getElementById('hide-right')).visibility, foot: document.querySelector('#settings-menu .menu-foot').textContent,
-    centred: getComputedStyle(document.querySelector('#settings-menu .menu-foot')).textAlign })`);
+    title: ${FRAME_TITLE}, frames: ['side', 'right', 'hide-left', 'hide-right', 'strip'].filter((id) => document.getElementById(id).getClientRects().length).join(),
+    foot: document.querySelector('#settings-menu .menu-foot').textContent, centred: getComputedStyle(document.querySelector('#settings-menu .menu-foot')).textAlign })`);
   await shot('empty');
-  check(before.bar === 'app-name,settings' && before.icons === 0 && before.gone.length === 0 && before.strip === 'top off' && before.title === '' && before.icon === 'visible',
-    `with no file open the top bar holds ${before.bar.replace(',', ' and ')} alone, no icon; the strip holds Top, off; Go to Line…, Edit, Undo, Redo and Save are hidden, not just off; the right frame's header holds its icon alone`);
+  check(before.bar === 'app-name,settings' && before.icons === 0 && before.gone.length === 0 && before.strip === '' && before.title === '' && before.frames === '',
+    `with no file open the top bar holds ${before.bar.replace(',', ' and ')} alone, no icon; Go to Line…, Edit, Undo, Redo and Save are hidden, not just off; no side frame, icon or strip is there at all`);
   check(before.foot === `Version ${VERSION}` && /^\d+\.\d+\.\d+$/.test(VERSION) && before.centred === 'center',
     `the version is out of the top bar and at the foot of Settings, in three parts, centred: "${before.foot}"`);
 
@@ -2065,20 +2125,22 @@ async function theBars(page, dir, shots) {
   check(Math.abs(back.left - shown.left) < 0.6 && Math.abs(back.right - shown.right) < 0.6, `a click on each icon brings its frame back at its width: ${Math.round(back.left)} and ${Math.round(back.right)} px`);
 
   // at a narrow width the strip's right group goes under its left group, still at the right; nothing is
-  // clipped and nothing overlaps; the lines start under the strip, however tall it grows
+  // clipped and nothing overlaps; the lines start under the strip, however tall it grows. From 0.6.1 the
+  // right frame is a drawer below 1,100 px, its icon at the strip's right end, which the strip leaves room for
+  const shrunk = await page.ev("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--icon-button')) + 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--frame-pad'))");
   const narrow = [];
-  for (const width of [1024, 900]) {
+  for (const width of [900, 820]) {
     await page.send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: false });
     await sleep(300);
     narrow.push({ width, ...(await page.ev(STRIP_NOW)) });
-    if (width === 1024) await shot('narrow');
+    if (width === 900) await shot('narrow');
   }
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
   await sleep(300);
   const wide = await page.ev(STRIP_NOW);
-  check(narrow.every((s) => s.under && s.rightEnd === pad && !s.overlap && s.outside === 0 && s.lines && s.height > 38 && s.trio === 1) && narrow[0].left === 'top,back,fold-all' && narrow[0].right === 'goto-box,edit,undo,redo'
+  check(narrow.every((s) => s.under && s.rightEnd === shrunk && !s.overlap && s.outside === 0 && s.lines && s.height > 38 && s.trio === 1) && narrow[0].left === 'top,back,fold-all' && narrow[0].right === 'goto-box,edit,undo,redo'
     && narrow[0].rightLines === 1,
-  `a narrow window (${narrow.map((s) => `${s.width} px: the strip ${s.middle} px wide, ${s.height} px high, its right group on ${s.rightLines} line${s.rightLines === 1 ? '' : 's'}`).join('; ')}): the right group under the left one, at the right, Edit, Undo and Redo together; nothing clipped or overlapping; the lines start under the strip`);
+  `a narrow window (${narrow.map((s) => `${s.width} px: the strip ${s.middle} px wide, ${s.height} px high, its right group on ${s.rightLines} line${s.rightLines === 1 ? '' : 's'}`).join('; ')}): the right group under the left one, at the right, short of the right drawer's icon; Edit, Undo and Redo together; nothing clipped or overlapping; the lines start under the strip`);
   check(!wide.under && wide.height === 38 && wide.lines, `wide again, the strip is one line, ${wide.height} px high`);
 
   // the problem report reads the version from the foot of Settings
@@ -2131,10 +2193,248 @@ async function theBars(page, dir, shots) {
   check(ownSearch.shown && ownSearch.back === null, 'a search of one\'s own, typed in the box, takes Back to Tags away');
 }
 
-async function waitForFile(dir, pattern, timeout = 10000) {
+// ---------------------------------------------------------------------------------------------
+// 0.6.1: the first screen and the sample family; the side frames as drawers in a narrow window
+// ---------------------------------------------------------------------------------------------
+
+const SAMPLE = require('../sample.js');
+const SAMPLE_SHA256 = 'f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff';   // washington.ged as found (BUILD-BRIEF section 19)
+const FIRST_LINES = ['Read a GEDCOM file, check it, count what it holds, and make clean hand edits.', 'Open GEDCOM', 'or drop a .ged file anywhere on the page',
+  'Try a sample family', 'a public-domain file of George Washington\'s relations, 529 people; a copy of it saves as a download',
+  'The file does not leave your computer. Privacy Policy How to check', 'Save writes a dated copy where you choose, in Chrome and Edge; Safari and Firefox download it.'];
+
+// What the first screen shows, by measure: which parts have a box on the screen at all; the main
+// frame's width, and the column's centre against the frame's; its lines, links and buttons, in order.
+const FIRST_SCREEN = `(() => { const shows = (id) => document.getElementById(id).getClientRects().length > 0;
+  const col = document.querySelector('.empty-column').getBoundingClientRect(); const mid = document.getElementById('middle').getBoundingClientRect();
+  return { parts: ['side', 'split-left', 'right', 'split-right', 'counts', 'strip', 'hide-left', 'hide-right'].filter(shows).join(),
+    middle: Math.round(mid.width), window: innerWidth, off: Math.abs((col.left + col.right) / 2 - (mid.left + mid.right) / 2), inside: col.left >= mid.left - 0.5 && col.right <= mid.right + 0.5,
+    lines: [...document.querySelectorAll('.empty-column p, .empty-column button')].map((e) => e.textContent),
+    links: [...document.querySelectorAll('.empty-column a')].map((a) => a.getAttribute('href') + ' ' + a.textContent),
+    buttons: [...document.querySelectorAll('button')].filter((b) => b.getClientRects().length).map((b) => b.textContent + (b.disabled ? ' (off)' : '')) }; })()`;
+
+async function theFirstScreen(page, shots) {
+  console.log('\n== the first screen and the sample family (0.6.1)');
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `first-${name}.png`)) : null);
+  const size = (width, height) => page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+
+  // with no file open: the top bar, and one column of text at the main frame's centre, which holds the whole width
+  await size(1280, 800);
+  await sleep(100);
+  const first = await page.ev(FIRST_SCREEN);
+  await shot('screen');
+  check(first.parts === '' && first.middle === first.window && first.off < 1 && first.inside,
+    `with no file open the main frame holds the whole width (${first.middle} px); no side frame, icon, counts bar or strip is there at all; the column of text sits at its centre (${first.off.toFixed(1)} px off)`);
+  check(JSON.stringify(first.lines) === JSON.stringify(FIRST_LINES) && JSON.stringify(first.links) === JSON.stringify(['privacy.html Privacy Policy', 'privacy.html#how-to-check How to check']),
+    `the column, in order: ${first.lines.join(' | ')}`);
+  check(JSON.stringify(first.buttons) === JSON.stringify(['Settings', 'Open GEDCOM', 'Try a sample family']), `three buttons, none greyed: ${first.buttons.join(', ')}`);
+  await size(600, 700);
+  await sleep(100);
+  const narrow = await page.ev(FIRST_SCREEN);
+  check(narrow.parts === '' && narrow.inside && narrow.off < 1 && narrow.middle === 600, 'at 600 px the column still fits the main frame, at its centre');
+  await size(1600, 1000);
+  await sleep(100);
+
+  // How to check goes to that section of the privacy page
+  await page.click("document.querySelector('.empty-column a[href=\"privacy.html#how-to-check\"]')");
+  await page.waitFor("location.hash === '#how-to-check' && document.readyState === 'complete'");
+  const section = await page.ev("(() => { const h = document.getElementById('how-to-check'); return { text: h.textContent, top: Math.round(h.getBoundingClientRect().top) }; })()");
+  check(section.text === 'How to check it yourself' && section.top < 80, `How to check opens the privacy page at "${section.text}" (${section.top} px from the top)`);
+  await page.goto(`file://${path.join(ROOT, 'index.html')}`);
+
+  // Try a sample family: the page's own file, opened as a dropped file is, with no handle; nothing is fetched
+  const asked = page.log.requests.length;
+  await page.click("document.getElementById('try-sample')");
+  await page.waitFor("document.getElementById('file-name').textContent === 'washington.ged' && document.querySelector('#grid .row.is-sel')");
+  const opened = await page.ev(`({ parts: ['side', 'right', 'counts', 'strip', 'hide-left', 'hide-right'].filter((id) => document.getElementById(id).getClientRects().length).join(),
+    counts: [...document.querySelectorAll('#counts .count-item')].map((b) => b.querySelector('.count-name').textContent + ' ' + b.querySelector('.count-figure').textContent),
+    save: document.getElementById('save').textContent + (document.getElementById('save').disabled ? ' (off)' : ''), edit: document.getElementById('edit').getAttribute('aria-pressed'),
+    checks: document.getElementById('checks-sum').textContent, rows: document.getElementById('grid').querySelectorAll('.row').length > 0, leave: ${LEAVE_ASKS} })`);
+  await shot('sample');
+  if (await page.ev("document.getElementById('facts').hidden")) await page.click("document.getElementById('file-name')");
+  await page.click("document.querySelector('#facts .sha')");
+  const facts = await page.ev("({ text: document.getElementById('facts').textContent, sha: (document.querySelector('#facts .hash') || {}).textContent })");
+  await page.click("document.querySelector('.tab[data-panel=checks]')");
+  await page.waitFor(LAID_OUT('checks-list'));
+  const heads = await page.ev(`${VISIBLE('checks-list')}.filter((r) => r.classList.contains('is-head')).map((r) => r.querySelector('.muted').textContent)`);
+  await page.click("document.querySelector('.tab[data-panel=records]')");
+  const fetched = page.log.requests.slice(asked).filter((u) => !/favicon|apple-touch-icon/.test(u));   // the browser may ask for the page's icon late
+  check(opened.parts === 'side,right,counts,strip,hide-left,hide-right' && JSON.stringify(opened.counts) === JSON.stringify(['People 529', 'Families 114']) && opened.edit === 'true' && opened.rows,
+    `Try a sample family opens washington.ged: the side frames, the counts bar (${opened.counts.join(', ')}) and the strip come with it, and Edit is on`);
+  check(opened.save === 'Download a copy (off)' && !opened.leave, `it has no handle, so in this Chrome, which has the Save dialog, its button reads "${opened.save}"`);
+  check(['GEDCOM 5.5', 'ANSI', 'exported 12 MAR 1997 by FamilyOrigins 5.0', '139.9 KB', '9,190 lines'].every((x) => facts.text.includes(x)) && facts.sha === SAMPLE_SHA256,
+    `its facts: GEDCOM 5.5, ANSI, exported 12 MAR 1997 by FamilyOrigins 5.0, 139.9 KB, 9,190 lines, sha256 ${facts.sha.slice(0, 12)}…, the file as found`);
+  check(/^0 errors \S 1 note$/.test(opened.checks) && JSON.stringify(heads) === '["N6"]', `Checks: ${opened.checks}, N6 alone, for its header's CHAR ANSI over bytes all ASCII`);
+  check(fetched.length === 0, `nothing was asked of the network or the disk to open it (${fetched.length} requests since the click): it is part of the page`);
+}
+
+// The frames now, by measure: the work area's classes; the left bar's, the right frame's and the main
+// frame's boxes; where each icon is; whether a control of the strip is under an icon, two overlap,
+// or one is outside the strip; how many lines the strip holds; whether the lines start under it; and
+// what is stored.
+const FRAMES_NOW = `(() => { const box = (id) => { const e = document.getElementById(id); if (!e.getClientRects().length) return null; const b = e.getBoundingClientRect();
+    return { left: Math.round(b.left), right: Math.round(b.right), width: Math.round(b.width), height: Math.round(b.height) }; };
+  const strip = document.getElementById('strip').getBoundingClientRect();
+  const ctl = [...document.querySelectorAll('#strip button, #strip input')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect());
+  const icons = ['hide-left', 'hide-right'].map((id) => document.getElementById(id).getBoundingClientRect());
+  const over = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  return { cls: document.getElementById('work').className, side: box('side'), right: box('right'), middle: box('middle'), window: innerWidth,
+    icons: icons.map((i) => Math.round(i.left)), underIcon: ctl.some((c) => icons.some((i) => over(c, i))), overlap: ctl.some((a, i) => ctl.some((b, j) => i < j && over(a, b))),
+    outside: ctl.filter((a) => a.left < strip.left - 0.5 || a.right > strip.right + 0.5).length, stripLines: new Set(ctl.map((c) => Math.round(c.top))).size, strip: Math.round(strip.height),
+    linesUnder: document.getElementById('grid').getBoundingClientRect().top >= strip.bottom - 0.5,
+    tabs: getComputedStyle(document.querySelector('.tabs')).visibility, detail: getComputedStyle(document.getElementById('detail')).visibility,
+    pressed: ['hide-left', 'hide-right'].map((id) => document.getElementById(id).getAttribute('aria-pressed')).join(),
+    stored: ['hideLeft', 'hideRight', '--left-width', '--right-width'].map((k) => localStorage.getItem('gedview.' + k)).join() }; })()`;
+
+async function theDrawers(page, shots) {
+  console.log('\n== the drawers (0.6.1), on the sample family');
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `drawers-${name}.png`)) : null);
+  const m = core.read(new Uint8Array(Buffer.from(SAMPLE.text, 'utf8')));
+  const at = async (width) => {
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height: 760, deviceScaleFactor: 1, mobile: false });
+    await sleep(350);                                                // a column that comes or goes eases over 200 ms
+  };
+  const now = () => page.ev(FRAMES_NOW);
+  const shrunk = await page.ev("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--icon-button')) + 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--frame-pad'))");
+  const openSample = async () => {
+    await page.click("document.getElementById('try-sample')");
+    await page.waitFor("document.getElementById('file-name').textContent === 'washington.ged' && document.querySelector('#grid .row.is-sel')");
+  };
+  const reload = async () => {
+    await at(1280);
+    await page.goto(`file://${path.join(ROOT, 'index.html')}`);
+    await openSample();
+    await sleep(350);
+  };
+  const tidy = (f) => !f.underIcon && !f.overlap && f.outside === 0 && f.linesUnder;
+
+  // First, while no key has gone into this tab (a synthetic key can leave it unable to load a page
+  // again; see press in tools/chrome.js): a stored hidden right frame and wider stored widths, 420 and
+  // 520 px. Where a frame is a column they count; where it is a drawer, it is shut as the file opens,
+  // opens at its stored width, within the window less the other icon's room, and the stored state
+  // is left alone
+  await page.ev("localStorage.setItem('gedview.hideRight', 'true'); localStorage.setItem('gedview.--left-width', JSON.stringify('420px')); localStorage.setItem('gedview.--right-width', JSON.stringify('520px')); true");
+  await reload();
+  const wide = await now();
+  const stored = {};
+  for (const width of [1000, 800, 600]) {
+    await at(width);
+    const shutNow = await now();
+    await page.click("document.getElementById('hide-right')");
+    const rightNow = await now();
+    let leftNow = null;
+    if (width === 600) {
+      await page.click("document.getElementById('hide-left')");
+      leftNow = await now();
+      await page.click("document.getElementById('hide-left')");
+    } else await page.click("document.getElementById('hide-right')");
+    stored[width] = { shutNow, rightNow, leftNow, after: await now() };
+  }
+  check(wide.cls === 'work right-hidden' && wide.side.width === 420 && wide.right.width === shrunk && wide.stored === ',true,"420px","520px"',
+    'at 1,280 px with the right frame stored hidden and wider widths stored: the left bar 420 px, the right frame shrunk to its icon, as 0.6.0 has them');
+  check(stored[1000].shutNow.cls === 'work right-drawer' && stored[1000].shutNow.side.width === 420 && stored[1000].shutNow.middle.left === 425 && stored[1000].rightNow.right.width === 520 && stored[1000].rightNow.right.right === 1000,
+    'at 1,000 px the stored hidden does not hold for the drawer: it is shut as the file opens, and its icon opens it at its stored 520 px over the lines');
+  check(stored[800].rightNow.right.width === 520 && stored[800].rightNow.side.width === 420 && stored[800].shutNow.middle.left === 425 && tidy(stored[800].shutNow),
+    'at 800 px the left bar is its stored 420 px, and the drawer opens at 520 px; the strip still holds its controls, none under an icon');
+  check(stored[600].rightNow.right.width === 520 && stored[600].leftNow.side.width === 420 && stored[600].leftNow.cls === 'work right-drawer left-drawer left-open' && stored[600].after.cls === 'work right-drawer left-drawer',
+    'at 600 px the drawers open at their stored widths, 420 and 520 px, one at a time, and their icons shut them');
+  check([1000, 800, 600].every((w) => stored[w].rightNow.stored === ',true,"420px","520px"' && stored[w].after.stored === ',true,"420px","520px"'), 'the stored state is left alone throughout');
+
+  // the default widths, at 1,280, 1,000, 800 and 600 px: a column above 1,100; the right frame a shut drawer below it; the left bar too below 800
+  await page.ev("localStorage.clear(); true");
+  await reload();
+  const seen = {};
+  for (const width of [1280, 1000, 800, 600]) {
+    await at(width);
+    seen[width] = await now();
+    if (width === 800) seen.strip800 = await page.ev(STRIP_NOW);
+  }
+  const shut = (f, side) => f && f.width === shrunk && f.height === seen[1000].strip && (side === 'left' ? f.left === 0 : f.right === f.left + shrunk);
+  check(seen[1280].cls === 'work' && seen[1280].side.width === 290 && seen[1280].right.width === 360 && seen[1280].middle.width === 620 && tidy(seen[1280]),
+    'at 1,280 px both frames are columns, as 0.6.0 has them: the left bar 290 px, the lines 620, the right frame 360');
+  check(seen[1000].cls === 'work right-drawer' && seen[1000].side.width === 290 && seen[1000].middle.left === 295 && seen[1000].middle.right === 1000 && shut(seen[1000].right, 'right')
+    && seen[1000].right.right === 1000 && seen[1000].icons[1] === 1000 - shrunk + 8 && seen[1000].detail === 'hidden' && tidy(seen[1000]) && seen[1000].stripLines === 1,
+  `at 1,000 px the right frame is a shut drawer, its icon alone at the strip's right end (${shrunk} by ${seen[1000].strip} px); the lines keep the whole width beside the left bar (${seen[1000].middle.left} to ${seen[1000].middle.right} px)`);
+  check(seen[800].cls === 'work right-drawer' && seen[800].side.width === 290 && seen[800].middle.right === 800 && shut(seen[800].right, 'right') && tidy(seen[800])
+    && seen.strip800.under && seen.strip800.rightEnd === shrunk && seen.strip800.trio === 1,
+  `at 800 px the left bar is still a column; the strip's right group goes under its left one, at the right, short of the drawer's icon (${seen[800].strip} px high), nothing overlapping`);
+  check(seen[600].cls === 'work right-drawer left-drawer' && seen[600].middle.left === 0 && seen[600].middle.right === 600 && shut(seen[600].side, 'left') && shut(seen[600].right, 'right')
+    && seen[600].icons[0] === 8 && seen[600].tabs === 'hidden' && tidy(seen[600]),
+  `at 600 px both frames are shut drawers, each icon alone at an end of the strip, and the lines take the whole width (0 to ${seen[600].middle.right} px)`);
+  check(['1280', '1000', '800', '600'].every((w) => seen[w].stored === ',,,'), 'none of it is stored');
+
+  // at 1,000 px: the icon opens the drawer over the lines, which keep their width; a line chosen in it shuts it; so does Esc
+  await at(1000);
+  await page.click("document.getElementById('hide-right')");
+  const open = await now();
+  await shot('right-open');
+  check(open.cls === 'work right-drawer right-open' && open.right.width === 360 && open.right.right === 1000 && open.middle.left === 295 && open.middle.right === 1000
+    && open.icons[1] === seen[1000].icons[1] && open.detail === 'visible' && open.pressed.endsWith('false'),
+  `its icon opens the drawer over the lines (${open.right.left} to ${open.right.right} px), the lines keeping theirs (${open.middle.left} to ${open.middle.right}), the icon where it was`);
+  const under = await page.ev("document.querySelector('#detail .detail-under .path-link') !== null");
+  await page.click("document.querySelector('#detail .detail-under .path-link')");
+  const chosen = await page.ev(`({ cls: document.getElementById('work').className, ln: (${SELECTED}).ln, focus: document.activeElement.id })`);
+  await page.click("document.getElementById('hide-right')");
+  const reopened = await page.ev("document.getElementById('work').className");
+  await page.key('Escape', 'Escape', 27);
+  const escaped = await page.ev("document.getElementById('work').className");
+  check(under && chosen.cls === 'work right-drawer' && chosen.focus === 'grid' && reopened === 'work right-drawer right-open' && escaped === 'work right-drawer',
+    `a line chosen in it (Under it, line ${fmt(chosen.ln)}) shuts it and gives the lines the keys; opened again, Esc shuts it`);
+
+  // at 600 px: the left drawer; a record chosen in it; one drawer at a time; a check's meaning opens the right one; a count opens the left one
+  await at(600);
+  await page.click("document.getElementById('hide-left')");
+  const leftOpen = await now();
+  await shot('left-open');
+  await page.waitFor(LAID_OUT('records-list'));
+  await page.click(`${VISIBLE('records-list')}.find((r) => r.firstChild.textContent === '@I4@')`);
+  const record = await page.ev(`({ cls: document.getElementById('work').className, ln: (${SELECTED}).ln, focus: document.activeElement.id })`);
+  check(leftOpen.cls === 'work right-drawer left-drawer left-open' && leftOpen.side.left === 0 && leftOpen.side.width === 290 && leftOpen.middle.left === 0 && leftOpen.middle.right === 600 && leftOpen.tabs === 'visible',
+    `at 600 px the left icon opens the left bar over the lines (0 to ${leftOpen.side.right} px), the lines keeping the whole width`);
+  check(record.cls === 'work right-drawer left-drawer' && record.ln === m.definedAt.get('@I4@')[0] + 1 && record.focus === 'grid',
+    `a record chosen in it, @I4@, shuts it, the record's first line selected (line ${fmt(record.ln)})`);
+  await page.click("document.getElementById('hide-left')");
+  await page.click("document.getElementById('hide-right')");
+  const oneAtATime = await page.ev("document.getElementById('work').className");
+  await page.click("document.getElementById('hide-right')");          // shut by its icon: one synthetic Escape a part is all this Chrome takes well
+  await page.click("document.getElementById('hide-left')");
+  await page.click("document.querySelector('.tab[data-panel=checks]')");
+  await page.waitFor(LAID_OUT('checks-list'));
+  await page.click(`${VISIBLE('checks-list')}.find((r) => r.classList.contains('is-head')).querySelector('.main')`);
+  const meaning = await page.ev("({ cls: document.getElementById('work').className, help: (document.querySelector('#detail .help-code') || {}).textContent || null })");
+  await page.click("document.getElementById('hide-right')");
+  await page.click("[...document.querySelectorAll('#counts .count-item')].find((b) => b.title === 'FAM')");
+  const count = await page.ev("({ cls: document.getElementById('work').className, chip: document.getElementById('records-type').textContent })");
+  await page.click("document.getElementById('hide-left')");
+  check(oneAtATime === 'work right-drawer left-drawer right-open', 'one drawer at a time: the right icon, with the left drawer open, shuts it and opens the right one');
+  check(meaning.cls === 'work right-drawer left-drawer right-open' && meaning.help === 'N6', 'a check\'s title clicked in the left drawer opens the right one with what it means (N6)');
+  check(count.cls === 'work right-drawer left-drawer left-open' && count.chip === 'Families ×', `a figure of the counts bar opens the left drawer at Records, filtered (${count.chip})`);
+
+  // a file opened shuts a drawer, whatever is stored, and stores nothing
+  await page.click("document.getElementById('hide-right')");
+  const beforeDrop = await page.ev("document.getElementById('work').className");
+  await page.ev(`(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['0 HEAD\\n1 CHAR UTF-8\\n0 @I1@ INDI\\n1 NAME Dropped /Fixture/\\n0 TRLR\\n'], 'dropped.ged'));
+    document.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true }));
+    document.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  })()`);
+  await page.waitFor("document.getElementById('file-name').textContent === 'dropped.ged'");
+  const afterDrop = await now();
+  check(beforeDrop === 'work right-drawer left-drawer right-open' && afterDrop.cls === 'work right-drawer left-drawer' && afterDrop.stored === ',,,',
+    'a file opened with a drawer open finds it shut; nothing of the drawers was ever stored');
+
+  // last of the part, since the page takes ⌘F's own key-down and this Chrome may then hang on a
+  // synthetic key (see press in tools/chrome.js): ⌘F opens the left drawer at Search, its box ready
+  await page.key('f', 'KeyF', 70, 4);
+  const search = await page.ev("({ cls: document.getElementById('work').className, panel: !document.getElementById('panel-search').hidden, focus: document.activeElement.id })");
+  check(search.cls === 'work right-drawer left-drawer left-open' && search.panel && search.focus === 'search-box', '⌘F opens the left drawer at Search, its box ready');
+}
+
+async function waitForFile(dir, pattern, timeout = 10000, not = null) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
-    const hit = fs.readdirSync(dir).find((n) => pattern.test(n));
+    const hit = fs.readdirSync(dir).find((n) => pattern.test(n) && n !== not);
     if (hit) return hit;
     await sleep(50);
   }
@@ -2196,6 +2496,8 @@ async function waitForFile(dir, pattern, timeout = 10000) {
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
     if (part('look')) await inChrome((page) => theLook(page, dir, shots));
     if (part('bars')) await inChrome((page) => theBars(page, dir, shots));
+    if (part('first')) await inChrome((page) => theFirstScreen(page, shots));
+    if (part('drawers')) await inChrome((page) => theDrawers(page, shots));
     console.log('\n== the whole walk');
     check(log.errors.length === 0, `no error in the console${log.errors.length ? `: ${log.errors.join(' | ')}` : ''}`);
     // file:// is the page and its files; blob: is a download the page made of its own bytes

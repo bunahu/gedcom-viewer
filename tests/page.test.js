@@ -7,8 +7,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const h = require('./helpers.js');
 const K = require('./contrast.js');
+const core = require('../core.js');
 
-const PAGE = ['index.html', 'style.css', 'core.js', 'save.js', 'ui.js'];
+const PAGE = ['index.html', 'style.css', 'core.js', 'save.js', 'sample.js', 'ui.js'];
+const SAMPLE_SHA256 = 'f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff';   // washington.ged, as found (BUILD-BRIEF section 19, 0.6.1)
 const FORBIDDEN = ['fetch(', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'sendBeacon', 'import(', '@import',
   'url(http', 'http://', 'https://'];
 const read = (name) => fs.readFileSync(path.join(h.ROOT, name), 'utf8');
@@ -16,12 +18,12 @@ const FEEDBACK = 'feedback@gedcom-viewer.net';
 const loads = (page) => [...page.matchAll(/\b(?:src|href)="([^"]*)"/g)].map((m) => m[1]);
 
 describe('the page', () => {
-  it('index.html loads style.css and the icons, then core.js, save.js and ui.js as classic scripts, in that order; links privacy.html; and nothing else', () => {
+  it('index.html loads style.css and the icons, then core.js, save.js, sample.js and ui.js as classic scripts, in that order; links privacy.html and its How to check; and nothing else', () => {
     const page = read('index.html');
     assert.deepEqual([...page.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]),
-      ['<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
+      ['<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="sample.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
     assert.deepEqual(loads(page),
-      ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'privacy.html', 'core.js', 'save.js', 'ui.js']);
+      ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'privacy.html', 'privacy.html#how-to-check', 'core.js', 'save.js', 'sample.js', 'ui.js']);
     assert.ok(!/type="module"/.test(page), 'no modules: a page opened from disk may not import one');
   });
 
@@ -126,7 +128,7 @@ describe('the page', () => {
     assert.ok(!privacy.includes('the whole of what leaves your computer'), 'the old sentence is still there');
     assert.ok(privacy.includes('That is everything this page sends.'));
     assert.ok(privacy.includes('<h2>What the page cannot control</h2>'));
-    assert.ok(privacy.includes('<h2>How to check it yourself</h2>'));
+    assert.ok(privacy.includes('<h2 id="how-to-check">How to check it yourself</h2>'), 'the first screen\'s How to check links to it');
     assert.ok(privacy.includes('refuse requests, images, fonts and scripts from anywhere else'));
   });
 
@@ -154,7 +156,7 @@ describe('the page', () => {
         assert.ok(!text.includes(gone), `${name} still holds "${gone}"`);
       }
     }
-    assert.ok(read('save.js').includes('original.handle.isSameEntry(handle)'), 'step 6 asks the browser whether the file picked is the original');
+    assert.ok(read('save.js').includes('f.handle.isSameEntry(handle)'), 'step 6 asks the browser whether the file picked is a file of the visit');
   });
 
   it('the Save dialog: Add change stamps and Note the date in the header, each with the lines it will write under it, hidden when unticked; the Note box among the stamps\' lines; the dot, Save and leaving mean lines that no file holds yet', () => {
@@ -304,11 +306,58 @@ describe('the page', () => {
     assert.ok(policy.includes("form-action 'none'") && policy.includes("connect-src 'none'") && !/mailto/.test(policy), 'the policy is untouched: a mailto link is a navigation');
   });
 
-  it('the line under Open GEDCOM reads "The file does not leave your computer." with a Privacy Policy link to privacy.html', () => {
+  it('the first screen (0.6.1): one column of text, centred: the purpose, Open GEDCOM and the drop, Try a sample family and its line, the line on the file with Privacy Policy and How to check, the line on saving; nothing else', () => {
     const page = read('index.html');
-    const note = page.match(/<p class="empty-note">([^]*?)<\/p>/);
-    assert.ok(note, 'no empty-note paragraph');
-    assert.equal(note[1], 'The file does not leave your computer. <a href="privacy.html">Privacy Policy</a>');
+    const empty = between(page, '<div class="empty" id="empty">', '<div class="notice"');
+    const texts = [...empty.matchAll(/<(p|button)\b[^>]*>([^]*?)<\/\1>/g)].map((m) => m[2]);
+    assert.deepEqual(texts, [
+      'Read a GEDCOM file, check it, count what it holds, and make clean hand edits.',
+      'Open GEDCOM',
+      'or drop a .ged file anywhere on the page',
+      'Try a sample family',
+      'a public-domain file of George Washington\'s relations, 529 people; a copy of it saves as a download',
+      'The file does not leave your computer. <a href="privacy.html">Privacy Policy</a> <a href="privacy.html#how-to-check">How to check</a>',
+      'Save writes a dated copy where you choose, in Chrome and Edge; Safari and Firefox download it.',
+    ]);
+    assert.ok(!/disabled/.test(empty) && (empty.match(/<button\b/g) || []).length === 2, 'two buttons, and nothing greyed');
+    for (const t of texts) assert.ok(!/[\u{2014}\u{00b7}]/u.test(t), `no em dash or middle dot: ${t}`);
+    assert.ok(/<main class="work no-file" id="work">/.test(page) && /id="counts"[^>]*\shidden><\/nav>/.test(page) && page.includes('<div class="strip" id="strip" hidden>'),
+      'before the script runs: no side columns, no counts bar, no strip');
+    const css = read('style.css');
+    assert.ok(css.includes('.work.no-file { grid-template-columns: minmax(0, 1fr); }') && css.includes('.work.no-file > :not(.middle) { display: none; }'), 'the side columns are not there at all, not shrunk');
+    assert.ok(css.includes('.counts[hidden], .strip[hidden] { display: none; }'));
+    assert.ok(/\.empty-column \{ margin: auto; max-width: var\(--empty-width\);[^}]*text-align: center; \}/.test(css), 'one column, centred, from its top when the frame is too short');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("for (const id of ['counts', 'strip']) $(id).hidden = !doc;") && ui.includes("w.classList.toggle('no-file', !open);"), 'and after: they come with a file');
+  });
+
+  it('Try a sample family opens sample.js\'s file as a dropped file opens, with no handle, so Save is a download of a copy in every browser', () => {
+    const ui = read('ui.js');
+    const handler = between(ui, "$('try-sample').addEventListener('click', async () => {", '});');
+    assert.ok(handler.includes('const sample = window.GedSample;') && handler.includes('await openFile(new File([sample.text], sample.name), null);'));
+    assert.ok(/function canPick\(\) \{ return PICKERS && \(!state\.doc \|\| !!state\.handle\); \}/.test(ui), 'no handle: Download a copy');
+    const privacy = read('privacy.html').replace(/\s+/g, ' ');
+    assert.ok(privacy.includes('<li><strong>The sample.</strong> Try a sample family opens George Washington\'s relations, a public-domain file from the <a href="https://github.com/D-Jeffrey/gedcom-samples">gedcom-samples</a> collection that is part of the page, so opening it sends nothing.</li>'),
+      'privacy.html credits the sample under Your file');
+    assert.ok(/\| `sample\.js` \| [^\n]*gedcom-samples[^\n]*public domain/.test(read('README.md')), 'and the README\'s Files table');
+  });
+
+  it('sample.js holds the sample family as found: washington.ged under one global, its text hashing to the brief\'s sha256 with its line endings as found, and nothing that runs but the setting of the global', () => {
+    const sample = require('../sample.js');
+    assert.deepEqual(Object.keys(sample), ['name', 'text']);
+    assert.equal(sample.name, 'washington.ged');
+    assert.equal(h.sha256(Buffer.from(sample.text, 'utf8')), SAMPLE_SHA256);
+    assert.equal(Buffer.byteLength(sample.text, 'utf8'), 139870);
+    assert.equal(sample.text.split('\n').length - 1, 9190, 'its 9,190 lines, each ending in LF, as found');
+    assert.ok(!sample.text.includes('\r'));
+    const src = read('sample.js');
+    assert.ok(src.includes('else root.GedSample = factory();'), 'one global, set as the other page scripts set theirs');
+    const code = (src.slice(0, src.indexOf('`')) + src.slice(src.lastIndexOf('`') + 1)).replace(/\/\*[^]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const calls = [...new Set([...code.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))].filter((w) => !['if', 'function'].includes(w));
+    assert.deepEqual(calls, ['factory'], 'nothing is called but the wrapper that sets the global');
+    const m = core.read(new Uint8Array(Buffer.from(sample.text, 'utf8')));
+    assert.deepEqual(core.recordCounts(m), [['INDI', 529], ['FAM', 114]]);
+    assert.deepEqual([m.findings.errors, m.findings.notes, m.findings.byCode.N6.length], [0, 1, 1], 'no error; one note, N6, for its header\'s CHAR ANSI over ASCII bytes');
   });
 
   it('the story\'s styles are stripped from its HTML, by core.js, right before the page reads it, so a _META that parses draws no refusal; and the What happened label says who can see what', () => {
@@ -372,7 +421,7 @@ describe('the page', () => {
 
   it('the strip above the lines: Top, Back and Collapse all in a group at its left; Go to Line…, Edit, Undo and Redo, in that order, in a group at its right, which wraps under the left one when the width runs out', () => {
     const page = read('index.html');
-    const strip = between(page, '<div class="strip" id="strip">', '<div class="grid"');
+    const strip = between(page, '<div class="strip" id="strip" hidden>', '<div class="grid"');
     assert.deepEqual(idsIn(between(strip, 'id="strip-left"', 'id="strip-right"')), ['top', 'back', 'fold-all']);
     assert.deepEqual(idsIn(strip.slice(strip.indexOf('id="strip-right"'))), ['goto-box', 'goto', 'goto-go', 'goto-clear', 'edit', 'undo', 'redo']);
     assert.ok(strip.indexOf('id="strip-left"') < strip.indexOf('id="strip-right"'));
@@ -478,7 +527,7 @@ describe('the page', () => {
     assert.ok(render.includes('const path = C.linePath(m, i);') && render.includes("sec.appendChild(el('span', 'path-word', 'Under it: '));")
       && render.includes("sec.appendChild(el('span', 'path-word', ` and ${fmt(path.under.more)} more`));"));
     assert.ok(!render.includes("document.createTextNode('in ')"), 'the "in" line is gone');
-    assert.ok(between(ui, 'function pathLink(parent, line) {', 'function putStep').includes("b.addEventListener('click', () => select(line, 'jump'));"), 'each part selects its line, and Back returns');
+    assert.ok(between(ui, 'function pathLink(parent, line) {', 'function putStep').includes("b.addEventListener('click', () => { select(line, 'jump'); chosenIn('right'); });"), 'each part selects its line, and Back returns');
     assert.ok(/function linePath\(m, i\)/.test(read('core.js')) && /function pathName\(m, r, depth = 0\)/.test(read('core.js')), 'the wording is core.js\'s, held by tests/screen.test.js');
   });
 
@@ -496,16 +545,61 @@ describe('the page', () => {
     assert.equal((ui.match(/leaveTagsSearch\(\);/g) || []).length, 5, 'the way back goes for a search of one\'s own (typed, Tag turned), a file opened or refused, and once it is taken');
   });
 
-  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.0", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
+  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.1", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
     const page = read('index.html');
     const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
     const foot = menu.match(/<div class="menu-foot">Version <span id="version">(\d+\.\d+\.\d+)<\/span><\/div>\s*$/);
     assert.ok(foot, 'no version line, three parts, at the foot of the Settings menu');
+    assert.equal(foot[1], '0.6.1');
     assert.ok(/\.menu-foot \{[^}]*text-align: center;/.test(read('style.css')), 'the line is centred');
     assert.ok(menu.lastIndexOf('class="menu-row"') < menu.indexOf('class="menu-foot"'), 'at its foot');
     assert.equal((page.match(/\bid="version"/g) || []).length, 1, 'the version is written once');
     const ui = read('ui.js');
     assert.ok(ui.includes("const version = $('version').textContent;") && !ui.includes("querySelector('.version')"), 'the report reads it from the same place');
     assert.ok(read('README.md').includes(`\n| ${foot[1]} | `), `the README's version table has no row for ${foot[1]}`);
+  });
+
+  // 0.6.1: the drawers, and P11 as picked (D1): after a save the page is on the copy
+  it('the drawers: below --drawer-right-below the right frame lies over the lines, below --drawer-left-below the left bar too, their columns gone; ui.js reads the two widths from style.css; a drawer is shut as a file opens, when a line is chosen in it, and on Esc; nothing of it is stored', () => {
+    const css = read('style.css');
+    const own = ownProps(css);
+    assert.deepEqual([own.get('--drawer-right-below'), own.get('--drawer-left-below')], ['1100px', '800px']);
+    assert.ok(css.includes('.work.right-drawer { grid-template-columns: var(--left-width) var(--split-width) minmax(0, 1fr) 0 0; }'));
+    assert.ok(css.includes('.work.left-drawer { grid-template-columns: 0 0 minmax(0, 1fr) 0 0; }'));
+    assert.ok(css.includes('.work.right-drawer .right, .work.left-drawer .side { grid-column: auto; position: absolute; top: 0; z-index: 6; }'), 'over the lines, which keep the whole width');
+    assert.ok(css.includes('.work.right-drawer .strip { padding-right: var(--frame-shrunk); }') && css.includes('.work.left-drawer .strip { padding-left: var(--frame-shrunk); }'),
+      'shut, a drawer is its icon at the strip\'s end, in room the strip leaves for it');
+    assert.ok(/\.side \{ grid-column: 1; \}\n#split-left \{ grid-column: 2; \}\n\.middle \{ grid-column: 3; \}\n#split-right \{ grid-column: 4; \}\n\.right \{ grid-column: 5; \}/.test(css), 'each part in its own column');
+    const ui = read('ui.js');
+    assert.ok(ui.includes("right: window.matchMedia(`(width < ${pxOf('--drawer-right-below')}px)`),") && ui.includes("left: window.matchMedia(`(width < ${pxOf('--drawer-left-below')}px)`),"));
+    assert.ok(between(ui, 'async function openFile(file, handle) {', 'async function pickFile()').includes('state.drawer = null;'), 'shut as a file opens, whatever is stored');
+    const toggle = between(ui, 'function toggleFrame(side) {', 'function setDrawer');
+    assert.ok(toggle.indexOf('if (isDrawer(side)) {') < toggle.indexOf("store.set('hideLeft'"), 'a drawer opens and shuts before anything is stored, and nothing of it is');
+    assert.ok(between(ui, 'function applyFrames() {', 'function toggleFrame').includes("w.classList.toggle('right-hidden', open && !drawer.right && state.hiddenRight);"), 'the stored state counts only where the frame is a column');
+    for (const [where, from] of [['Records', "$('records-list').addEventListener('click'"], ['Checks', "$('checks-list').addEventListener('click'"],
+      ['Changes', "$('changes-list').addEventListener('click'"], ['Tags', "$('tags-list').addEventListener('click'"]]) {
+      assert.ok(between(ui, from, '});').includes("chosenIn('left');"), `a line chosen in ${where} shuts the left drawer`);
+    }
+    assert.ok(ui.includes("$('search-next').addEventListener('click', () => { stepSearch(1); chosenIn('left'); });"), 'and Search\'s next line');
+    assert.ok(ui.includes("row.addEventListener('click', () => { select(j, 'jump'); chosenIn('right'); });") && ui.includes("link.addEventListener('click', () => { jumpToId(value); chosenIn('right'); });"), 'a line chosen in the right frame shuts its drawer');
+    assert.ok(ui.includes("if (key === 'Escape' && state.drawer) {"), 'Esc shuts an open drawer');
+    assert.ok(!/store\.set\('drawer/.test(ui), 'never stored');
+  });
+
+  it('P11, D1: after a save the page is on the copy: its name in the chip, its facts, its handle where the next save opens, the visit\'s files refused; a download the same, with no handle; leaving warns for what no file holds', () => {
+    const ui = read('ui.js');
+    const saving = between(ui, 'async function saveNow() {', '// P11, D1');
+    assert.ok(saving.includes('const r = await S.save({ doc: state.doc, file: { name: state.fileName, handle: state.handle }, visit: state.visit,') && saving.includes('if (r.done) onTheCopy(r);'));
+    const on = between(ui, 'function onTheCopy(r) {', '// 10.2 step 6');
+    for (const want of ['state.fileName = r.name;', 'state.handle = r.handle;', 'state.disk = { sha256: r.sha256, bytes: r.size, lines: lines.length };',
+      'state.visit.push({ name: r.name, handle: r.handle, bytes: () => C.saveBytes(doc, undefined, lines) });', "$('file-name').textContent = r.name;"]) {
+      assert.ok(on.includes(want), `onTheCopy: ${want}`);
+    }
+    assert.ok(between(ui, 'async function openFile(file, handle) {', 'async function pickFile()').includes('state.visit = [{ name: file.name, handle: state.handle, bytes: () => doc.m.bytes }];'), 'the visit begins with the file opened');
+    assert.ok(ui.includes("[{ label: 'Close', value: '' }, { label: `Download ${r.restoreName}`, value: 'get', primary: true }]"), 'a file of the visit that could not be put back is offered under its own name');
+    assert.ok(/window\.addEventListener\('beforeunload', \(e\) => \{\s+if \(state\.doc && C\.unsaved\(state\.doc\)\)/.test(ui), 'leaving warns for lines no file of the visit holds');
+    const saveJs = read('save.js');
+    assert.equal((saveJs.match(/core\.moveOntoCopy\(doc\);/g) || []).length, 2, 'a copy written and a download each move the page onto the copy');
+    assert.ok(saveJs.includes('for (let k = 0; k < kept.length; k += 1) {') && saveJs.includes('const before = await Promise.all(kept.map('), 'every file of the visit read before the dialog, and refused after it');
   });
 });

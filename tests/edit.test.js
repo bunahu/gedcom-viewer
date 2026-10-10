@@ -33,9 +33,9 @@ function sameAsFreshRead(doc) {
   assert.deepEqual(doc.view.labels, fresh.labels);
 }
 
-// The lines of the original (or of `base`, the last copy), with the net change from them laid over
-// them, must be the lines now: every line the net change does not name is the same line, in the
-// same order.
+// The lines of the file the page is on, the original or the last copy (or of `base`, the file first
+// opened), with the net change from them laid over them, must be the lines now: every line the net
+// change does not name is the same line, in the same order.
 function replayed(doc, items, base = doc.savedOrder) {
   const was = base.map((e) => core.textOf(doc, e));
   const gone = new Set(items.filter((it) => it.kind !== 'added').map((it) => it.before));
@@ -221,10 +221,10 @@ describe("section 14's rows", () => {
     assert.equal(marks.status[12], 2);
     assert.equal(marks.status[17], 1);
     assert.equal(marks.removedAt[30], 1);
-    core.markCopied(doc);
-    assert.equal(core.changedSinceCopy(doc), false);
-    assert.deepEqual(core.netChange(doc, doc.copiedOrder), [], 'against the copy just written, nothing is changed');
-    assert.equal(core.netChange(doc).length, 4, 'against the original, every change stands');
+    core.moveOntoCopy(doc);
+    assert.equal(core.isChanged(doc), false, 'the page is on the copy just written');
+    assert.deepEqual(core.netChange(doc), [], 'against it, nothing is changed');
+    assert.equal(core.netChange(doc, doc.openedOrder).length, 4, 'against the file first opened, every change stands');
   });
 
   it('net change: an edit of an edit is one change; a new line edited is still one line added', () => {
@@ -234,16 +234,34 @@ describe("section 14's rows", () => {
     ok(core.addChild(doc, 16, '2 GIVN x'));
     ok(core.editLine(doc, 17, '2 GIVN y'));
     assert.deepEqual(core.netChange(doc).map((it) => [it.kind, it.before, it.after]), [['changed', 16, 16], ['added', -1, 17]]);
-    core.markCopied(doc);
+    core.moveOntoCopy(doc);
     ok(core.editLine(doc, 17, '2 GIVN z'));
     ok(core.editLine(doc, 16, '1 NAME Jane /Fixture/'));             // back to the file's own words
     assert.equal(doc.order[16], 16);
-    const items = core.netChange(doc, doc.copiedOrder);
+    const items = core.netChange(doc);
     assert.deepEqual(items.map((it) => [it.kind, it.before, it.after]), [['changed', 16, 16], ['changed', 17, 17]],
-      'against the last copy: the NAME changed back, the GIVN changed again');
-    assert.deepEqual(replayed(doc, items, doc.copiedOrder), doc.view.texts);
-    assert.deepEqual(core.netChange(doc).map((it) => [it.kind, it.before, it.after]), [['added', -1, 17]],
-      'against the original: the NAME is its own again, and the GIVN is one line added');
+      'against the copy the page is on: the NAME changed back, the GIVN changed again');
+    assert.deepEqual(replayed(doc, items), doc.view.texts);
+    assert.deepEqual(core.netChange(doc, doc.openedOrder).map((it) => [it.kind, it.before, it.after]), [['added', -1, 17]],
+      'against the file first opened: the NAME is its own again, and the GIVN is one line added');
+  });
+
+  it('on a copy (D1): a line typed back to its words in the copy is that line again, no change from it; typed back to the original\'s, the original\'s own line', () => {
+    const doc = open('family.ged');
+    ok(core.editLine(doc, 16, '1 NAME Janet /Fixture/'));
+    const inCopy = doc.order[16];
+    core.moveOntoCopy(doc);
+    ok(core.editLine(doc, 16, '1 NAME Jan /Fixture/'));
+    assert.deepEqual(core.netChange(doc).map((it) => [it.kind, it.before, it.after]), [['changed', 16, 16]]);
+    ok(core.editLine(doc, 16, '1 NAME Janet /Fixture/'));             // the copy's words again
+    assert.equal(doc.order[16], inCopy, 'the copy\'s own line, not a new one with its words');
+    assert.equal(core.isChanged(doc), false);
+    assert.equal(core.unsaved(doc), false, 'the copy holds these lines: nothing to save');
+    ok(core.editLine(doc, 16, '1 NAME Jane /Fixture/'));              // the original's words
+    assert.equal(doc.order[16], 16, 'the original\'s line, written from its own bytes');
+    assert.deepEqual(core.netChange(doc).map((it) => [it.kind, it.before, it.after]), [['changed', 16, 16]], 'a change from the copy');
+    assert.equal(core.asOpened(doc), true);
+    assert.equal(h.sha256(core.saveBytes(doc)), h.sha256(doc.m.bytes));
   });
 
   it('no final newline: identity; a line added after the last line — it gains the common terminator, the new one has none', () => {
@@ -413,9 +431,10 @@ describe('change stamps (10.4)', () => {
     const doc = open('chan.ged');
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
     ok(core.applyStamps(doc, AT, ''));
-    core.markCopied(doc);
-    assert.equal(core.changedSinceCopy(doc), false);
-    assert.equal(core.isChanged(doc), true, 'the copy holds the change; the original does not');
+    core.moveOntoCopy(doc);
+    assert.equal(core.isChanged(doc), false, 'the page is on the copy');
+    assert.equal(core.unsaved(doc), false);
+    assert.equal(core.asOpened(doc), false, 'the copy holds the change; the file first opened does not');
     assert.deepEqual(core.stampTargets(doc), []);
     assert.equal(core.applyStamps(doc, LATER, '').step, null);
   });
@@ -435,7 +454,7 @@ describe('change stamps (10.4)', () => {
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@: no CHAN
     ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));            // @I1@: a CHAN of its own
     ok(core.applyStamps(doc, AT, 'first'));
-    core.markCopied(doc);                                            // the first copy
+    core.moveOntoCopy(doc);                                          // the first copy, and the page on it (D1)
     assert.deepEqual(core.stampPlan(doc), [], 'nothing changed since the copy: nothing to stamp');
     ok(core.addChild(doc, doc.view.definedAt.get('@I2@')[0], '1 NOTE about Joe'));   // @I2@ changes again; @I1@ does not
     assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I2@', 'resets']]);
@@ -444,7 +463,7 @@ describe('change stamps (10.4)', () => {
       'its stamp set anew: one NOTE, the second');
     assert.deepEqual(block(doc, '@I1@').slice(3), ['1 CHAN', '2 DATE 28 SEP 2026', '3 TIME 15:42:00',
       '2 NOTE an earlier change', '2 NOTE first'], '@I1@ did not change again: its stamp still says when, and why');
-    core.markCopied(doc);                                            // the second copy
+    core.moveOntoCopy(doc);                                          // the second copy
     ok(core.editLine(doc, doc.view.definedAt.get('@I1@')[0] + 1, '1 NAME Janet /Fixtures/'));
     ok(core.applyStamps(doc, new Date(2026, 9, 3, 10, 0, 0), 'third'));
     assert.deepEqual(block(doc, '@I1@').slice(3), ['1 CHAN', '2 DATE 3 OCT 2026', '3 TIME 10:00:00',
@@ -453,13 +472,42 @@ describe('change stamps (10.4)', () => {
     sameAsFreshRead(doc);
   });
 
-  it('a record changed before a copy written with the stamps unticked is stamped at the next copy that stamps', () => {
+  it('a record changed before a copy written with the stamps unticked is in that copy as it is: the next copy stamps what changed after it, its note counted from the file first opened', () => {
     const doc = open('chan.ged');
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@
-    core.markCopied(doc);                                            // a copy, stamps unticked
+    core.moveOntoCopy(doc);                                          // a copy, stamps unticked; the page on it
     ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));            // @I1@, after it
-    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I1@', 'sets'], ['@I2@', 'adds']],
-      'both changed from the original, and neither carries a stamp yet');
+    assert.deepEqual(core.stampPlan(doc).map((p) => [p.id, p.how]), [['@I1@', 'sets']], 'only @I1@ changed since the copy the page is on');
+    ok(core.addChild(doc, doc.view.definedAt.get('@I2@')[0], '1 SEX M'));   // @I2@ again: its NAME before the copy, a SEX after it
+    const plan = core.stampPlan(doc, LATER, '');
+    assert.deepEqual(plan.map((p) => [p.id, p.how, p.note]), [['@I1@', 'sets', 'Changed: NAME'], ['@I2@', 'adds', 'Changed: NAME. Added: SEX']],
+      'each record\'s note names what the visit changed in it');
+  });
+
+  it('after a move onto a copy (D1) the stamps of this visit are set anew, never doubled; an Undo that takes a stamp out is no change of the person\'s to stamp', () => {
+    const doc = open('chan.ged');
+    ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));            // @I2@: no CHAN of its own
+    ok(core.saveActs(doc, AT, { stamps: true, typed: '', header: true }));
+    core.moveOntoCopy(doc);
+    assert.deepEqual(block(doc, '@I2@').slice(-4), ['1 CHAN', '2 DATE 28 SEP 2026', '3 TIME 15:42:00', '2 NOTE Changed: NAME']);
+    assert.equal(core.undo(doc).label, 'Change stamps and the date in the header');
+    assert.deepEqual(core.changeRuns(doc).map((r) => [r.kind, r.stamp, r.header, r.lines.length]), [['removed', true, true, 1], ['removed', true, false, 4]],
+      'from the copy: its header\'s date and its stamp, removed, each said to be the viewer\'s');
+    assert.deepEqual(core.stampTargets(doc), [], 'a stamp taken out is not a change to stamp');
+    core.redo(doc);
+    assert.equal(core.isChanged(doc), false, 'Redo brings the copy\'s lines back');
+    ok(core.addChild(doc, doc.view.definedAt.get('@I2@')[0], '1 SEX M'));
+    assert.deepEqual(core.stampPlan(doc, LATER, '').map((p) => [p.id, p.how, p.lines.map((l) => [l.how, l.text])]), [['@I2@', 'resets', [
+      ['kept', '1 CHAN'], ['set', '2 DATE 2 OCT 2026'], ['set', '3 TIME 09:05:07'], ['set', '2 NOTE Changed: NAME. Added: SEX']]]]);
+    assert.deepEqual(core.headerPlan(doc, LATER).lines.map((l) => [l.how, l.text]), [['set', '1 NOTE Last updated: 2 OCT 2026 09:05:07']]);
+    ok(core.saveActs(doc, LATER, { stamps: true, typed: '', header: true }));
+    assert.deepEqual(block(doc, '@I2@').slice(-4), ['1 CHAN', '2 DATE 2 OCT 2026', '3 TIME 09:05:07', '2 NOTE Changed: NAME. Added: SEX'],
+      'one stamp, set anew: its note names the NAME of the first copy and the SEX of this one');
+    assert.equal(block(doc, '@I2@').filter((t) => t.startsWith('1 CHAN')).length, 1);
+    assert.deepEqual(doc.view.texts.filter((t) => t.includes('Last updated')), ['1 NOTE Last updated: 2 OCT 2026 09:05:07'], 'the header\'s date set in place, one line');
+    assert.deepEqual(core.changeRuns(doc).map((r) => [r.kind, r.stamp, r.lines.length]), [['changed', true, 1], ['added', false, 1], ['changed', true, 3]],
+      'from the copy: the header\'s date and the stamp set anew, and the line added');
+    sameAsFreshRead(doc);
   });
 
   it('a save that wrote nothing takes its stamps back: the lines, the history and Redo as they were', () => {
@@ -606,15 +654,17 @@ describe('change stamps (10.4)', () => {
     assert.equal(core.unsaved(doc), false, 'as opened');
     ok(core.editLine(doc, 15, '1 NAME Joe /Fixtures/'));
     assert.equal(core.unsaved(doc), true);
-    core.markCopied(doc);                                            // the first copy
+    core.moveOntoCopy(doc);                                          // the first copy
     assert.equal(core.unsaved(doc), false, 'the lines of the copy');
     ok(core.editLine(doc, 8, '1 NAME Jane /Fixtures/'));
-    core.markCopied(doc);                                            // the second
+    core.moveOntoCopy(doc);                                          // the second
     core.undo(doc);                                                  // back to the first copy's lines
     assert.equal(core.unsaved(doc), false, 'an earlier copy\'s lines');
+    assert.equal(core.isChanged(doc), true, 'a change from the copy the page is on, the second');
     core.undo(doc);                                                  // back to the original
     assert.equal(core.unsaved(doc), false, 'the original: nothing to save');
-    assert.equal(core.isChanged(doc), false);
+    assert.equal(core.asOpened(doc), true);
+    assert.equal(core.isChanged(doc), true, 'still a change from the copy the page is on');
   });
 });
 
@@ -713,17 +763,15 @@ function walkAtRandom(file, count, seed) {
     else if (roll < 0.84) r = { ok: true, step: core.undo(doc) };
     else if (roll < 0.9) r = { ok: true, step: core.redo(doc) };
     else if (roll < 0.95) r = core.applyStamps(doc, AT, `stamp ${k}`);
-    else { core.markCopied(doc); r = { ok: true, step: null }; }
+    else { core.moveOntoCopy(doc); r = { ok: true, step: null }; }
     if (!r.ok) {
       assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
       continue;
     }
     made += 1;
     sameAsFreshRead(doc);
-    assert.deepEqual(replayed(doc, core.netChange(doc)), doc.view.texts, `net change after act ${k}`);
-    if (doc.copiedOrder) {
-      assert.deepEqual(replayed(doc, core.netChange(doc, doc.copiedOrder), doc.copiedOrder), doc.view.texts, `net change from the last copy after act ${k}`);
-    }
+    assert.deepEqual(replayed(doc, core.netChange(doc)), doc.view.texts, `net change from the file the page is on after act ${k}`);
+    assert.deepEqual(replayed(doc, core.netChange(doc, doc.openedOrder), doc.openedOrder), doc.view.texts, `net change from the file first opened after act ${k}`);
   }
   while (doc.done.length) core.undo(doc);
   assert.equal(h.sha256(core.saveBytes(doc)), h.sha256(bytes), `${path.basename(file)}: everything undone`);
