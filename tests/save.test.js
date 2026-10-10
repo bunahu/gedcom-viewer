@@ -178,7 +178,7 @@ describe('Save (10.2)', () => {
     const before = history(doc);
     const r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick: saveDialog(dir, NAME) });
     assert.deepEqual([r.done, r.step, r.original], [false, 6, true]);
-    assert.equal(r.say, 'That is the original. It is unchanged. Pick another name.');
+    assert.equal(r.say, 'That is the original. It is unchanged. Choose another name.');
     assert.deepEqual(dir.journal, [`read ${NAME}`, `empty ${NAME}`, `read ${NAME}`, `write ${NAME}`, `read ${NAME}`],
       'read whole before the dialog; emptied by it; put back; read back');
     assert.equal(await hash(dir.at(NAME).bytes), h.sha256(bytes), 'the original, byte for byte');
@@ -191,7 +191,7 @@ describe('Save (10.2)', () => {
     const { dir, doc, bytes, original } = setUp();
     core.editLine(doc, 16, '1 NAME Jane /Fixtures/');
     const r = await save.save({ doc, original, when: AT, note: '', stamps: true, hash, pick: saveDialog(dir, NAME, { empties: false }) });
-    assert.deepEqual([r.step, r.say], [6, 'That is the original. It is unchanged. Pick another name.']);
+    assert.deepEqual([r.step, r.say], [6, 'That is the original. It is unchanged. Choose another name.']);
     assert.ok(!dir.journal.some((j) => j.startsWith('write')), 'not one write');
     assert.deepEqual(dir.at(NAME).bytes, bytes);
   });

@@ -1557,13 +1557,13 @@ async function saveWithDialog(page) {
   `⌘S: the Save dialog's stamps name @I1@ alone, changed since the copy, gaining a whole CHAN; @I2@'s stamp from the copy is left as it was; HEAD's date to be set anew (${second.stamps.map((r) => r.text).join(' / ')})`);
   const before = await page.ev("({ changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })");
   await page.click(BUTTON('#dialog', 'Save'));
-  await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'No copy was written'");
+  await page.waitFor("document.getElementById('dialog').open && document.querySelector('#dialog .dialog-title').textContent === 'Save failed'");
   const refused = await page.ev(DIALOG_SAYS);
   await page.click(BUTTON('#dialog', 'Close'));
   await page.waitFor("!document.getElementById('dialog').open");
   const back = await page.ev(`({ original: ${IN_FOLDER('small.ged')}, names: ${FOLDER_NAMES}, writes: window.__writes.slice(), dirty: !document.getElementById('dirty').hidden,
     changes: document.getElementById('changes-count').textContent, redo: document.getElementById('redo').disabled, undo: document.getElementById('undo').title })`);
-  check(refused.text === 'That is the original. It is unchanged. Pick another name.',
+  check(refused.title === 'Save failed' && refused.text === 'That is the original. It is unchanged. Choose another name.',
     `the original picked in the Save dialog: "${refused.title}": "${refused.text}"`);
   check(Buffer.from(back.original, 'base64').toString('utf8') === SMALL && JSON.stringify(back.writes) === JSON.stringify(['small.ged']) && JSON.stringify(back.names) === JSON.stringify([copyName, 'small.ged'].sort()),
     'the original, emptied by the browser as Chromium does, is put back byte for byte, and nothing else is written');

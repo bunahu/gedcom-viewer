@@ -137,7 +137,7 @@
 
   // Step 6's words: the original picked, whether or not the browser had emptied it (the put-back is
   // silent); and the put-back that failed.
-  const REFUSED = 'That is the original. It is unchanged. Pick another name.';
+  const REFUSED = 'That is the original. It is unchanged. Choose another name.';
   const NOT_RESTORED = 'That is the original. Your browser emptied it and it could not be restored. Download it as it was and put it back.';
 
   // Step 1's words, when there is nothing to save (core.unsaved): the lines are the original's, or

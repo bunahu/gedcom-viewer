@@ -2218,7 +2218,7 @@
   // were are offered as a download, to put in place of the empty file.
   async function refusedOriginal(r) {
     if (!r.restore) {
-      await saidLoudly('No copy was written', r.say);
+      await saidLoudly('Save failed', r.say);
       return;
     }
     const get = await dialog('No copy was written', (body) => body.appendChild(el('div', null, r.say)),

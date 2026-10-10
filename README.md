@@ -153,7 +153,7 @@ lines, turns them off too. **Changes** goes on counting from the original, and t
 | nothing else: no backup and no log | the original is the backup, and stays as it was |
 
 If the original itself is picked in the Save dialog, nothing is saved into it: "That is the
-original. It is unchanged. Pick another name." Chrome empties a file the moment it is picked
+original. It is unchanged. Choose another name." Chrome empties a file the moment it is picked
 there, before the page can refuse it, so the page puts the original back as it was, byte for byte,
 without a word about it.
 
