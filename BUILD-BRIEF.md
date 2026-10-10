@@ -1683,3 +1683,37 @@ palette table does not yet list `--pointer-color` and `--editing-selected`, for 
 0.6.0 was tagged on 2026-10-09 after his walk and the fixes above (270 tests, the tag table's 37
 among them; the walk at 189 steps). Next: 0.6.1, the first screen with the sample, the drawers and
 P11; then the tag table wired in, with the plain meanings and the check for a tag out of place.
+
+### P12: the tag table in the page (2026-10-10; the review's item 14, and his FAM9)
+
+The table is built and in the repository (`tags.js`, 154 tags from 5.5.1 and 7.0.18, each with a
+plain meaning and the parents the standard allows, by version; `meaning(tag)` and
+`allowedUnder(tag, parent, version)`; 37 tests), and the page does not load it yet. Extension tags
+(an underscore first) are not in it and are never judged. Two picks; the recommendation first.
+
+**P12a, where a tag's meaning shows.**
+
+| P12a | Variant | Worked example |
+|---|---|---|
+| **M1**, recommended | **On hover, in the right frame, and in the Tags list**: the browser's own tooltip on any tag in the lines; one plain line under the selected line's tag in the right frame; the meaning after each standard tag in the Tags list, which then reads as a glossary | rest on `BIRT` in the lines: "BIRT: a birth"; select the line: the right frame reads `1 BIRT`, then "a birth" in plain words; the Tags list reads `BIRT  3,606  a birth` |
+| M2 | **A column beside each line** saying what its tag means, the review's option B | every row carries "a birth", "a death", "a place" beside its tag; wider rows, and the lines' own text moves right |
+| M3 | **The right frame only** | nothing on the lines or in the list; the meaning appears once a line is selected |
+
+**P12b, the check.** `FAM9` raised nothing on 2026-10-09 because it is a well-formed tag the
+structural checks do not judge. With the table, two findings become possible.
+
+| P12b | Variant | Worked example |
+|---|---|---|
+| **C1**, recommended | **Two findings, shown like the others and underlined on the line**: T1, "not a GEDCOM tag", for a tag that is neither in the standard the file declares nor an extension, as an error; T2, "out of place", for a standard tag under a parent the standard does not allow, as a note. Each gets its dot in the mark column, its count in Checks, its meaning in the right frame, and a red or gold wavy line under the tag with the finding in the tag's hover text | change `0 @F1@ FAM` to `FAM9`: the tag gains a red wavy line, its hover reads "FAM9 is not a GEDCOM tag", Checks counts 1 error, and the right frame says what T1 means and what is usually done. Put a `BIRT` under a `FAM`: a gold line, "BIRT does not belong under FAM", a note |
+| C2 | **Both as notes**, gold | the same, with no red |
+| C3 | **The wavy line and hover text alone**, nothing in Checks | the line is marked; the left bar stays as it is |
+
+Settled unless he says otherwise: the version judged by is the file's own `GEDC.VERS`, 5.5 and
+5.5.5 read as 5.5.1, any 7.0.x as 7.0, and a file that says nothing as 5.5.1; `CONC` and `CONT` are
+allowed under any tag that can hold a value in 5.5.1, as the table has it; the table counts no
+occurrences, so a second `NOTE` under `HEAD` is not a finding; a line whose parent is unknown or an
+extension is not judged, so a `FAM9` record's own lines raise nothing of their own; the checks run
+with the others and stay within section 16's budgets. Built as 0.6.2 after his walk of 0.6.1:
+`index.html` loads `tags.js`, `publish.yml` and `tests/page.test.js` name it, `core.js` gains the
+two checks (section 7), `ui.js` the tooltip, the right frame's line, the Tags list's meanings and
+the wavy line, with tests and walk steps. The wiring checklist in the tag table's notes applies.
