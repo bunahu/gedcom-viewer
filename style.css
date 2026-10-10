@@ -201,6 +201,7 @@
   --meta-max-height: 60vh;            /* the story of a _META, before it scrolls */
   --table-border: var(--color-border);   /* the tables in a story, and the persons of a _META */
   --list-row-height: 26px;            /* the rows of Records, Checks and Tags */
+  --list-line-height: 20px;           /* one line of a Checks title that goes on past the first: the row grows by this for each (0.6.2) */
   --bar-padding: 8px 14px;
   --gap: 10px;
   --radius: 0.5rem;                   /* inputs, buttons and cards, as the sibling project's */
@@ -224,6 +225,7 @@
   --font-size-grid: 19px;
   --row-height: 30px;
   --list-row-height: 32px;
+  --list-line-height: 24px;
   --strip-height: 44px;
 }
 
@@ -548,6 +550,20 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .item.is-removed .main { text-decoration: line-through; color: var(--color-text-muted); }
 .item.is-moved { box-shadow: inset var(--mark-bar) 0 0 var(--mark-moved); }
 .item.is-head .fold { flex: none; width: max(1.4em, var(--fold-hit)); margin-left: -4px; }
+/* a check's title longer than its row (0.6.2): it shows whole, on as many lines as it needs, the fold, the code and
+   the count level with its first line. ui.js sets the row's height, a row and one --list-line-height for each line
+   after the first; the padding keeps the first line where a row of one line has it */
+.item.is-head.is-wrapped {
+  box-sizing: border-box;
+  align-items: flex-start;
+  line-height: var(--list-line-height);
+  padding-top: calc((var(--list-row-height) - var(--list-line-height)) / 2);
+  padding-bottom: calc((var(--list-row-height) - var(--list-line-height)) / 2);
+}
+.item.is-head.is-wrapped .main { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.item.is-head.is-wrapped .fold { height: var(--list-line-height); }
+/* the head row the page lays out out of sight, to count the lines a title takes at the list's width */
+.item.is-ruler { position: absolute; top: 0; left: 0; right: 0; height: auto; visibility: hidden; pointer-events: none; }
 
 /* -- the grid ---------------------------------------------------------------------------------- */
 

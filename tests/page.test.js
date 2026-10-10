@@ -669,4 +669,28 @@ describe('the page', () => {
     assert.ok(!/\u2014|\u00b7/.test(help.slice(help.indexOf('E10: "'))), 'no dash and no middle dot in the new explanations');
     assert.ok(text.includes('FAM9') && text.includes('BIRT under a FAM') && text.includes('SCHMA'), 'each in its own words');
   });
+  it('0.6.2: a title in Checks that is longer than its row goes on a second line, so every title shows whole: the head row says the check\'s own name, a long title makes a wrapped row whose height the list is told, and only the Checks list takes rows of different heights', () => {
+    const ui = read('ui.js');
+    const css = read('style.css');
+    const paint = between(ui, "const checksList = Virtual($('checks-list'), (row, k) => {", '  }, undefined, {');
+    const head = paint.slice(0, paint.indexOf('const f = item.f;'));
+    assert.ok(head.includes("el('span', 'main', c.name)") && !/\.slice\(|substring|substr\(/.test(head), 'the title is the check\'s name, whole, never a cut one');
+    assert.ok(head.includes("row.className = `item is-head is-${c.kind}${linesOfCheckRow(k) > 1 ? ' is-wrapped' : ''}`;"), 'a title of more than one line makes a wrapped row');
+    const count = between(ui, 'function measureTitles() {', 'const linesOfCheckRow');
+    assert.ok(count.includes("'item is-head is-wrapped is-ruler'") && count.includes('title.getBoundingClientRect().height / line') && count.includes('checksList.mount(ruler)'),
+      'the lines a title takes are counted by a head row laid out out of sight, at the list\'s width');
+    assert.ok(ui.includes('function Virtual(scroller, paint, style, tall) {'), 'a list may be told its rows hold more than one line');
+    assert.equal((ui.match(/\}, undefined, \{ measure:/g) || []).length, 1, 'and only the Checks list is');
+    assert.ok(ui.includes('{ measure: measureTitles, any: () => [...titleLines.values()].some((k) => k > 1), lines: linesOfCheckRow }'));
+    const layout = between(ui, '    function layout() {', '    scroller.addEventListener(\'scroll\', draw');
+    assert.ok(layout.includes("if (scroller.clientWidth > 0) tall.measure();") && layout.indexOf('tall.measure()') < layout.indexOf('new Float64Array(count + 1)'), 'counted at the width the list has, before the rows are laid out');
+    const rule = (css.match(/\.item\.is-head\.is-wrapped \{([^}]*)\}/) || [])[1] || '';
+    assert.ok(/align-items: flex-start;/.test(rule) && /line-height: var\(--list-line-height\);/.test(rule) && /box-sizing: border-box;/.test(rule)
+      && /padding-top: calc\(\(var\(--list-row-height\) - var\(--list-line-height\)\) \/ 2\);/.test(rule), 'the first line stays where a row of one line has it, and the count stays level with it');
+    assert.ok(/\.item\.is-head\.is-wrapped \.main \{[^}]*white-space: normal;[^}]*text-overflow: clip;/.test(css), 'the title wraps instead of ending in an ellipsis');
+    assert.ok(/\.item\.is-ruler \{[^}]*visibility: hidden;/.test(css), 'the head row that counts is never seen');
+    const props = css.slice(0, css.indexOf('/* -------'));
+    assert.ok(/--list-line-height: 20px;/.test(props) && /\.text-larger \{[^}]*--list-line-height: 24px;/.test(props), 'a line is a property, for both sizes of text');
+    assert.ok(/\| `--list-line-height` \|/.test(read('README.md')), 'and the README lists it');
+  });
 });

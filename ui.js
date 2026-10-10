@@ -280,8 +280,14 @@
   // Every list made, so that a change of text size can lay each one out again.
   const lists = [];
 
-  // `paint` draws a row whole; `style`, when given, only its look (Virtual.restyle).
-  function Virtual(scroller, paint, style) {
+  // `paint` draws a row whole; `style`, when given, only its look (Virtual.restyle). `tall`, when given,
+  // lets a row hold more than one line of text (0.6.2: a title in Checks that does not fit its row):
+  // { measure(), any(), lines(i) }. `measure` is called each time the list is laid out at a width, to
+  // count the lines at that width; `any` says whether any row holds more than one; `lines(i)` how many
+  // row i holds. A row of k lines is one row's height and --list-line-height for each line after the
+  // first, and while there is such a row the rows are placed by their tops, found by bisection. With
+  // none, or with no `tall`, every row is one height, as it was.
+  function Virtual(scroller, paint, style, tall) {
     const layer = el('div', 'v-rows');
     const inner = el('div', 'v-inner');
     const spacer = el('div', 'v-spacer');
@@ -292,13 +298,33 @@
     let version = 0;
     const measure = () => parseFloat(getComputedStyle(scroller).getPropertyValue('--row-height')) || 24;
     let h = measure();
+    let offsets = null;                    // the top of each row, and the end last, while a row holds more than one line
+    let step = 0;                          // what one more line adds to a row's height
+    const topOfRow = (i) => (offsets ? offsets[i] : i * h);
+    const heightOfRow = (i) => (offsets ? offsets[i + 1] - offsets[i] : h);
+    // The row that holds the pixel y of the whole list, the last when y is past its end.
+    function rowAt(y) {
+      if (!offsets) return Math.max(0, Math.min(Math.floor(y / h), count - 1));
+      let lo = 0;
+      let hi = Math.max(0, count - 1);
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (offsets[mid] <= y) lo = mid; else hi = mid - 1;
+      }
+      return lo;
+    }
 
     function draw() {
       const vh = scroller.clientHeight;
       const top = scroller.scrollTop;
-      const first = Math.max(0, Math.min(Math.floor(top / h), count - 1));
-      const want = count ? Math.min(Math.ceil(vh / h) + 1, count - first) : 0;
-      inner.style.transform = `translateY(${first * h - top}px)`;
+      const first = count ? rowAt(top) : 0;
+      let want = 0;
+      if (count && offsets) {
+        while (first + want < count && offsets[first + want] < top + vh) want += 1;
+      } else if (count) {
+        want = Math.min(Math.ceil(vh / h) + 1, count - first);
+      }
+      inner.style.transform = `translateY(${topOfRow(first) - top}px)`;
       while (pool.length < want) {
         const r = el('div');
         r._i = -1;
@@ -319,13 +345,34 @@
           r._v = version;
           paint(r, i);
         }
+        if (offsets) {                                               // a row of more than one line is as tall as it needs
+          const hh = heightOfRow(i);
+          const css = hh === h ? '' : `${hh}px`;
+          if (r._h !== css) { r._h = css; r.style.height = css; }
+        } else if (r._h) { r._h = ''; r.style.height = ''; }
       }
     }
     function layout() {
       h = measure();
+      if (tall) {
+        step = parseFloat(getComputedStyle(scroller).getPropertyValue('--list-line-height')) || Math.round(h * 0.75);
+        if (scroller.clientWidth > 0) tall.measure();                // the lines are counted at the width the list has now
+        version += 1;                                                // and the rows on show drawn again for them
+        offsets = null;
+        if (count && tall.any()) {
+          const o = new Float64Array(count + 1);
+          let y = 0;
+          for (let i = 0; i < count; i += 1) {
+            o[i] = y;
+            y += h + (tall.lines(i) - 1) * step;
+          }
+          o[count] = y;
+          offsets = o;
+        }
+      }
       const vh = scroller.clientHeight;
       layer.style.height = `${vh}px`;
-      spacer.style.height = `${Math.max(0, count * h - vh)}px`;
+      spacer.style.height = `${Math.max(0, topOfRow(count) - vh)}px`;
       draw();
     }
     scroller.addEventListener('scroll', draw, { passive: true });
@@ -344,6 +391,15 @@
       remeasure() {
         const next = measure();
         if (next === h) return;
+        if (tall) {                                                  // the same row at the same place in it, though every row's height may change
+          const at = count ? rowAt(scroller.scrollTop) : 0;
+          const part = count ? (scroller.scrollTop - topOfRow(at)) / heightOfRow(at) : 0;
+          version += 1;
+          layout();
+          scroller.scrollTop = count ? topOfRow(at) + part * heightOfRow(at) : 0;
+          draw();
+          return;
+        }
         const row = scroller.scrollTop / h;
         version += 1;
         layout();
@@ -361,15 +417,16 @@
       // Something drawn over the rows, at the top of the view: the gold line of a drag.
       mount(elt) { layer.appendChild(elt); },
       // Where row i's top edge is, in the layer (the view's own pixels).
-      topOf(i) { return i * h - scroller.scrollTop; },
+      topOf(i) { return topOfRow(i) - scroller.scrollTop; },
       // Bring row i into view: to a few rows below the top for a jump, by as little as it takes
       // otherwise.
       show(i, jump) {
         const vh = scroller.clientHeight;
-        const y = i * h;
+        const y = topOfRow(i);
+        const rh = heightOfRow(i);
         if (jump) scroller.scrollTop = Math.max(0, y - Math.min(3 * h, Math.floor(vh / 3)));
         else if (y < scroller.scrollTop) scroller.scrollTop = y;
-        else if (y + h > scroller.scrollTop + vh) scroller.scrollTop = y + h - vh;
+        else if (y + rh > scroller.scrollTop + vh) scroller.scrollTop = y + rh - vh;
         draw();
       },
       rowOf(target) {
@@ -1752,13 +1809,46 @@
     recordsList.setCount(rows.length, keepScroll);
   }
 
+  // Each check's title shows whole (0.6.2). A head row holds the fold, the code, the title and the
+  // count; a title the row cannot hold on one line goes on a second, or a third, with the fold, the
+  // code and the count level with its first line. The row grows by one line each time, so the lines
+  // a title takes at the list's width are counted: by a head row nobody sees, laid out as the real
+  // ones are, each time the list is laid out (ui.js, Virtual, `tall`).
+  const titleLines = new Map();                                      // check code → lines its head takes at the width now
+  let ruler = null;
+  function measureTitles() {
+    titleLines.clear();
+    const m = state.m;
+    if (!m) return;
+    if (!ruler) {
+      ruler = el('div', 'item is-head is-wrapped is-ruler');
+      for (const cls of ['fold', 'muted', 'main', 'end']) ruler.appendChild(el('span', cls));
+      ruler.firstChild.textContent = '▾';
+      checksList.mount(ruler);
+    }
+    const [, code, title, count] = ruler.children;
+    const line = parseFloat(getComputedStyle(title).lineHeight);
+    for (const c of C.CHECKS) {
+      const n = m.findings.byCode[c.code].length;
+      if (!n) continue;
+      code.textContent = c.code;
+      title.textContent = c.name;
+      count.textContent = fmt(n);
+      titleLines.set(c.code, Math.max(1, Math.round(title.getBoundingClientRect().height / line)));
+    }
+  }
+  const linesOfCheckRow = (i) => {
+    const item = state.checkRows[i];
+    return item && item.head ? titleLines.get(item.head.code) || 1 : 1;
+  };
+
   const checksList = Virtual($('checks-list'), (row, k) => {
     const m = state.m;
     const item = state.checkRows[k];
     row.textContent = '';
     if (item.head) {
       const c = item.head;
-      row.className = `item is-head is-${c.kind}`;
+      row.className = `item is-head is-${c.kind}${linesOfCheckRow(k) > 1 ? ' is-wrapped' : ''}`;
       row.appendChild(el('span', 'fold', state.collapsed.has(c.code) ? '▸' : '▾'));   // opens or shuts its lines
       row.appendChild(el('span', 'muted', c.code));
       row.appendChild(el('span', 'main', c.name));                   // a click on the title: what it means (3.6)
@@ -1771,7 +1861,7 @@
     const main = el('span', 'main mono');
     putText(main, (SAYS_WHAT.has(f.code) || f.line < 0 ? f.detail : m.texts[f.line]).slice(0, 400));
     row.appendChild(main);
-  });
+  }, undefined, { measure: measureTitles, any: () => [...titleLines.values()].some((k) => k > 1), lines: linesOfCheckRow });
 
   function renderChecks(keepScroll) {
     const fnd = state.m.findings;

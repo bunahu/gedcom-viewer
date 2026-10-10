@@ -40,10 +40,12 @@
 // over with FAM9, a BIRT put under a FAM, and the 7.0, 5.5.5 and 5.5.1 files written for the checks E10, N8
 // and N9: the wavy line under the tag, its hover text, Checks and what each check means, the plain line
 // under a selected line's tag, the problem report), and in the first part's step for the sample family,
-// which now reads 75 notes.
+// which now reads 75 notes; and in a part of its own, titles (every title in Checks shows whole: one too
+// long for its row goes on a second line, or a third, the count level with the first, at the default
+// width, wider, narrower, with the larger text, and in a list that scrolls).
 // --shots DIR saves pictures of the fictional files and of the sample family, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
-// third, scroll, drags, save, copy, look, bars, first, drawers, tags. Exit 0 when every step passes.
+// third, scroll, drags, save, copy, look, bars, first, drawers, tags, titles. Exit 0 when every step passes.
 //
 // The computer's Save dialog itself is not walked here: a person picks the name and the place in
 // it. The walk stands in for it as Chromium's behaves, the file picked created, or emptied when it
@@ -2634,6 +2636,152 @@ async function theTags(page, dir, shots) {
     'the problem report counts them by code ("Checks: E10 1 (line 29) · N8 1") and holds none of their words');
 }
 
+// ---------------------------------------------------------------------------------------------
+// 0.6.2, before the tag: every title in Checks shows whole. A title longer than its row goes on a
+// second line, or a third, with the fold, the code and the count level with its first; the row is as
+// tall as the lines it holds, and the list, which draws only the rows in view, lays them by their tops.
+// ---------------------------------------------------------------------------------------------
+
+// A made-up file with a check of every length of title: E4 (no TRLR), E9 (UNICODE over one-byte-looking
+// bytes), E10 (an XYZ9 under each of 300 people), N1 (a U+0085 in a value), N3 (nobody points at a
+// person) and N8 (a BIRT under a FAM), the last four with many lines, so that the list scrolls.
+function titlesFiction() {
+  const L = ['0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UNICODE', '1 SUBM @U1@', '0 @U1@ SUBM', '1 NAME Walk /Fixture/'];
+  for (let k = 1; k <= 300; k += 1) L.push(`0 @I${k}@ INDI`, `1 NAME Person${k} /Fixture/`, '1 XYZ9 x');
+  L.push('0 @F1@ FAM', '1 BIRT', '1 NOTE one\u0085two');
+  return Buffer.from(`${L.join('\n')}\n`, 'utf8');
+}
+
+// The Checks list as it stands: the rows with a box on the screen, each by its measure.
+const CHECK_LIST_NOW = `(() => {
+  const list = document.getElementById('checks-list'); const view = list.getBoundingClientRect(); const cs = getComputedStyle(list);
+  const rows = [...list.querySelectorAll('.v-inner > div')].filter((r) => r.style.display !== 'none').map((r) => {
+    const b = r.getBoundingClientRect(); const head = r.classList.contains('is-head'); const main = r.querySelector('.main'); const code = r.querySelector('.muted');
+    const end = r.querySelector('.end'); const line = parseFloat(getComputedStyle(main).lineHeight);
+    const e = end ? end.getBoundingClientRect() : null; const c = code.getBoundingClientRect();
+    return { head, code: code.textContent, text: main.textContent, top: b.top, bottom: b.bottom, height: b.height, wrapped: r.classList.contains('is-wrapped'),
+      lines: head ? Math.round(main.getBoundingClientRect().height / line) : 1, cut: main.scrollWidth > main.clientWidth + 1 || r.scrollHeight > r.clientHeight + 1,
+      level: head ? Math.abs(e.top - c.top) < 1 && Math.abs(e.height - c.height) < 1 : true, gap: head ? Math.round((b.right - 8 - e.right) * 10) / 10 : 0 };
+  });
+  return { base: parseFloat(cs.getPropertyValue('--list-row-height')), step: parseFloat(cs.getPropertyValue('--list-line-height')), width: Math.round(list.clientWidth),
+    view: { top: view.top + list.clientTop, bottom: view.top + list.clientTop + list.clientHeight }, client: list.clientHeight, scrollHeight: list.scrollHeight, scrollTop: list.scrollTop, rows }; })()`;
+
+async function theCheckTitles(page, dir, shots) {
+  const NAME = Object.fromEntries(core.CHECKS.map((c) => [c.code, c.name]));
+  const shot = (name) => (shots ? page.screenshot(path.join(shots, `titles-${name}.png`)) : null);
+  const fileA = path.join(dir, 'titles-a.ged');
+  fs.writeFileSync(fileA, titlesFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(fileA)));
+  const heads = core.CHECKS.filter((c) => m.findings.byCode[c.code].length).map((c) => c.code);
+  console.log(`\n== every title in Checks shows whole (0.6.2), on a fictional file of ${fmt(m.n)} lines with ${heads.join(', ')}`);
+  check(JSON.stringify(heads) === JSON.stringify(['E4', 'E9', 'E10', 'N1', 'N3', 'N8']), `the file holds one check of each length: ${heads.map((c) => `${c} "${NAME[c]}" (${NAME[c].length})`).join(', ')}`);
+
+  const openChecks = async () => {
+    await page.click("document.querySelector('.tab[data-panel=checks]')");
+    await page.waitFor(LAID_OUT('checks-list'));
+    await sleep(300);
+  };
+  const setLeft = async (px) => {
+    await page.ev(`document.documentElement.style.setProperty('--left-width', '${px}px'); true`);
+    await sleep(400);
+  };
+  // What must hold of every head row at any width: its title whole, nothing cut, the count at the row's right end and level with the first line, the row as tall as its lines
+  const wholeHeads = (now) => now.rows.filter((r) => r.head).every((r) => r.text === NAME[r.code] && !r.cut && r.level && Math.abs(r.gap) < 1.5
+    && Math.abs(r.height - (now.base + (r.lines - 1) * now.step)) < 0.6 && r.wrapped === (r.lines > 1) && r.lines >= 1);
+  // Each row begins where the one above ends
+  const contiguous = (now) => now.rows.every((r, k) => k === 0 || Math.abs(r.top - now.rows[k - 1].bottom) < 0.5);
+  const linesOf = (now) => now.rows.filter((r) => r.head).map((r) => `${r.code} ${r.lines}`).join(', ');
+
+  await page.openFile(fileA);
+  await openChecks();
+  const wide = await page.ev(CHECK_LIST_NOW);
+  await shot('default');
+  const e10 = wide.rows.find((r) => r.code === 'E10' && r.head);
+  check(wide.width < 300 && wholeHeads(wide) && contiguous(wide),
+    `at the default width (${wide.width} px) every head on show reads its whole title, none cut, the count at the row's right end level with the first line, each row as tall as its lines: ${linesOf(wide)}`);
+  check(e10 && e10.lines === 2 && Math.abs(e10.height - (wide.base + wide.step)) < 0.6 && e10.text === 'Malformed: not a GEDCOM tag',
+    `"Malformed: not a GEDCOM tag" does not fit one line there: it goes on a second, and its row is ${e10 && e10.height} px, a row (${wide.base}) and a line (${wide.step})`);
+
+  // the list draws only the rows in view; with rows of different heights it must still fill its view, end where it ends, and send a click to the right line
+  const where = [];
+  for (const part of [0, 0.23, 0.5, 0.77, 1]) {
+    await page.ev(`(() => { const l = document.getElementById('checks-list'); l.scrollTop = Math.round((l.scrollHeight - l.clientHeight) * ${part}); })()`);
+    await sleep(100);
+    const now = await page.ev(CHECK_LIST_NOW);
+    const first = now.rows[0];
+    const last = now.rows[now.rows.length - 1];
+    where.push({ part, filled: first.top <= now.view.top + 0.5 && last.bottom >= now.view.bottom - 0.5, atEnd: part !== 1 || Math.abs(last.bottom - now.view.bottom) < 1.5,
+      atStart: part !== 0 || (first.head && first.code === 'E4' && Math.abs(first.top - now.view.top) < 0.5), ok: contiguous(now) && wholeHeads(now), rows: now.rows.length });
+  }
+  check(where.every((w) => w.filled && w.atEnd && w.atStart && w.ok),
+    `scrolled to ${where.map((w) => `${Math.round(w.part * 100)}%`).join(', ')}: the rows fill the list each time (${where.map((w) => w.rows).join(', ')} on show), end where it ends and begin with E4, each beginning where the one above ends`);
+  await page.ev("(() => { const l = document.getElementById('checks-list'); l.scrollTop = Math.round((l.scrollHeight - l.clientHeight) * 0.5); })()");
+  await sleep(100);
+  const target = await page.ev(`(() => { const r = [...document.querySelectorAll('#checks-list .v-inner > div')].filter((x) => x.style.display !== 'none' && x.classList.contains('is-sub'))[3]; return r.querySelector('.muted').textContent; })()`);
+  await page.click(`[...document.querySelectorAll('#checks-list .v-inner > div')].filter((x) => x.style.display !== 'none' && x.classList.contains('is-sub'))[3]`);
+  const picked = await page.ev(`(${SELECTED}).ln`);
+  check(String(picked) === target.replace(/,/g, ''), `a row in the middle of the list, clicked, selects its own line: the row says ${target} and line ${picked} is selected`);
+
+  // a check shut: only its head is left, and the list is laid out again at once; every check shut, no row but the heads
+  await page.ev("document.getElementById('checks-list').scrollTop = 0; true");
+  await sleep(100);
+  for (const code of ['E10', 'N3', 'N1', 'N8', 'E9', 'E4']) {
+    await page.click(`[...document.querySelectorAll('#checks-list .v-inner > div')].filter((x) => x.style.display !== 'none').find((x) => x.classList.contains('is-head') && x.querySelector('.muted').textContent === '${code}').querySelector('.fold')`);
+    await sleep(100);
+  }
+  const shut = await page.ev(CHECK_LIST_NOW);
+  check(shut.rows.length === 6 && shut.rows.every((r) => r.head) && wholeHeads(shut) && contiguous(shut) && shut.scrollHeight <= shut.client + 1
+    && Math.abs(shut.rows[shut.rows.length - 1].bottom - shut.rows[0].top - shut.rows.reduce((sum, r) => sum + r.height, 0)) < 1,
+  `every check shut: six heads, each whole, laid end to end (${Math.round(shut.rows.reduce((sum, r) => sum + r.height, 0))} px), and nothing to scroll`);
+
+  // every title on one line when the list is wide, and more lines, still whole, as it narrows: the six heads together
+  const start = await page.ev(CHECK_LIST_NOW);
+  await setLeft(560);
+  const wider = await page.ev(CHECK_LIST_NOW);
+  await setLeft(200);
+  const narrow = await page.ev(CHECK_LIST_NOW);
+  await shot('narrow');
+  await setLeft(160);
+  const least = await page.ev(CHECK_LIST_NOW);
+  await setLeft(290);
+  const back = await page.ev(CHECK_LIST_NOW);
+  const lines = (now) => now.rows.filter((r) => r.head).map((r) => r.lines);
+  check(wholeHeads(wider) && contiguous(wider) && lines(wider).every((k) => k === 1) && wider.rows.every((r) => Math.abs(r.height - wider.base) < 0.6),
+    `dragged wider (${wider.width} px) every title is on one line and every row one row tall: ${linesOf(wider)}`);
+  check(wholeHeads(narrow) && contiguous(narrow) && lines(narrow).every((k, i) => k >= lines(back)[i]) && lines(narrow).filter((k) => k >= 2).length > lines(back).filter((k) => k >= 2).length,
+    `dragged narrower (${narrow.width} px) a title takes more lines and still shows whole, nothing cut or overlapping: ${linesOf(narrow)}`);
+  check(wholeHeads(least) && contiguous(least) && lines(least).every((k, i) => k >= lines(narrow)[i]),
+    `at the least the bar can be dragged to (${least.width} px) each title is still whole, on ${Math.max(...lines(least))} lines at most: ${linesOf(least)}`);
+  check(wholeHeads(start) && JSON.stringify(lines(back)) === JSON.stringify(lines(start)) && contiguous(back),
+    `back at the default width the titles take the lines they took: ${linesOf(back)}`);
+
+  // the larger text: a taller row, a taller line
+  await setting(page, 'text-larger');
+  await sleep(400);
+  const larger = await page.ev(CHECK_LIST_NOW);
+  await shot('larger');
+  check(larger.base === 32 && larger.step === 24 && wholeHeads(larger) && contiguous(larger),
+    `at Text, Larger a row is ${larger.base} px and a line ${larger.step}: every title still whole, the rows laid end to end: ${linesOf(larger)}`);
+  await setting(page, 'text-normal');
+  await sleep(400);
+
+  // other files, other checks: N6 (27 characters) and N9 (36), each measured as it comes
+  const fileB = path.join(dir, 'titles-b.ged');
+  fs.writeFileSync(fileB, Buffer.concat([Buffer.from('0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR ANSEL\n1 SUBM @U1@\n0 @U1@ SUBM\n1 NAME Walk\n0 @I1@ INDI\n1 NAME Fix'), Buffer.from([0xe9]), Buffer.from('\n0 TRLR\n')]));
+  await page.openFile(fileB);
+  await openChecks();
+  const six = await page.ev(CHECK_LIST_NOW);
+  const n6 = six.rows.find((r) => r.head && r.code === 'N6');
+  check(n6 && n6.text === 'Encoding shown as it can be' && wholeHeads(six) && contiguous(six), `N6, "${n6 && n6.text}", shows whole (${n6 && n6.lines} line${n6 && n6.lines > 1 ? 's' : ''}), as E9's does`);
+  await page.openFile(path.join(ROOT, 'fixtures', 'synthetic', 'n9-undeclared.ged'));
+  await openChecks();
+  const nine = await page.ev(CHECK_LIST_NOW);
+  const n9 = nine.rows.find((r) => r.head && r.code === 'N9');
+  await shot('seven');
+  check(n9 && n9.text === 'Extension not declared in the header' && n9.lines >= 2 && wholeHeads(nine) && contiguous(nine),
+    `N9, "${n9 && n9.text}", shows whole, on ${n9 && n9.lines} lines, in a file opened after another's`);
+}
+
 async function waitForFile(dir, pattern, timeout = 10000, not = null) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
@@ -2702,6 +2850,7 @@ async function waitForFile(dir, pattern, timeout = 10000, not = null) {
     if (part('first')) await inChrome((page) => theFirstScreen(page, shots));
     if (part('drawers')) await inChrome((page) => theDrawers(page, shots));
     if (part('tags')) await inChrome((page) => theTags(page, dir, shots));
+    if (part('titles')) await inChrome((page) => theCheckTitles(page, dir, shots));
     console.log('\n== the whole walk');
     check(log.errors.length === 0, `no error in the console${log.errors.length ? `: ${log.errors.join(' | ')}` : ''}`);
     // file:// is the page and its files; blob: is a download the page made of its own bytes
