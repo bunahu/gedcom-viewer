@@ -1717,3 +1717,17 @@ with the others and stay within section 16's budgets. Built as 0.6.2 after his w
 `index.html` loads `tags.js`, `publish.yml` and `tests/page.test.js` name it, `core.js` gains the
 two checks (section 7), `ui.js` the tooltip, the right frame's line, the Tags list's meanings and
 the wavy line, with tests and walk steps. The wiring checklist in the tag table's notes applies.
+
+Picked 2026-10-10: **M3**, the right frame only, to be widened later if he wants it. **C1**, with
+the error titled **Malformed: not a GEDCOM tag** (E10), listed in Checks with its count as every
+finding is, and the note titled **Out of place** (N8). A file is judged by the version it declares;
+an override, so that a 5.5.1 file can be judged by 5.5.5 or 7.0 to see what an upgrade needs, is
+its own build, 0.6.3, with a 5.5.5 table derived as the others were. Extension tags are judged by
+the version's rule for custom tags: in 5.5.1 a tag outside the standard must begin with an
+underscore, so `FAM9` is E10 and `_FAM9` is a custom tag; in 7.0 the same, and a custom tag not
+declared in the header's `SCHMA` is a note (N9, "extension not declared in the header"). Their
+placement is not judged. Well-known custom tags (`_MREL`, `_FREL`, `_APID`, `_META`, `_MTTAG`,
+`_MTCAT`, `_UID`, `_PRIM` and the like) get a plain meaning in the right frame, with who uses them,
+from a short list in the table; one not on the list reads "a custom tag". The table's additions
+(the extension rule, the custom-tag list, the 5.5.5 table) are data work the tag-table session
+prepares while 0.6.1 builds; the page work is 0.6.2, after 0.6.1's tag.
