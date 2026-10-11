@@ -9,8 +9,7 @@ const h = require('./helpers.js');
 const K = require('./contrast.js');
 const core = require('../core.js');
 
-const PAGE = ['index.html', 'style.css', 'tags.js', 'core.js', 'save.js', 'sample.js', 'ui.js'];
-const SAMPLE_SHA256 = 'f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff';   // washington.ged, as found (BUILD-BRIEF section 19, 0.6.1)
+const PAGE = ['index.html', 'style.css', 'tags.js', 'core.js', 'save.js', 'ui.js'];
 const FORBIDDEN = ['fetch(', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'sendBeacon', 'import(', '@import',
   'url(http', 'http://', 'https://'];
 const read = (name) => fs.readFileSync(path.join(h.ROOT, name), 'utf8');
@@ -18,12 +17,12 @@ const FEEDBACK = 'feedback@gedcom-viewer.net';
 const loads = (page) => [...page.matchAll(/\b(?:src|href)="([^"]*)"/g)].map((m) => m[1]);
 
 describe('the page', () => {
-  it('index.html loads style.css and the icons, then tags.js, core.js, save.js, sample.js and ui.js as classic scripts, in that order (the table before the code that reads it); links privacy.html and its How to check; and nothing else', () => {
+  it('index.html loads style.css and the icons, then tags.js, core.js, save.js and ui.js as classic scripts, in that order (the table before the code that reads it); links privacy.html; and nothing else', () => {
     const page = read('index.html');
     assert.deepEqual([...page.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]),
-      ['<script src="tags.js" charset="utf-8">', '<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="sample.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
+      ['<script src="tags.js" charset="utf-8">', '<script src="core.js" charset="utf-8">', '<script src="save.js" charset="utf-8">', '<script src="ui.js" charset="utf-8">']);
     assert.deepEqual(loads(page),
-      ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'privacy.html', 'privacy.html#how-to-check', 'tags.js', 'core.js', 'save.js', 'sample.js', 'ui.js']);
+      ['style.css', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'privacy.html', 'tags.js', 'core.js', 'save.js', 'ui.js']);
     assert.ok(!/type="module"/.test(page), 'no modules: a page opened from disk may not import one');
   });
 
@@ -141,7 +140,7 @@ describe('the page', () => {
     assert.ok(!privacy.includes('the whole of what leaves your computer'), 'the old sentence is still there');
     assert.ok(privacy.includes('That is everything this page sends.'));
     assert.ok(privacy.includes('<h2>What the page cannot control</h2>'));
-    assert.ok(privacy.includes('<h2 id="how-to-check">How to check it yourself</h2>'), 'the first screen\'s How to check links to it');
+    assert.ok(/<h2(?: id="how-to-check")?>How to check it yourself<\/h2>/.test(privacy), 'the section on checking it yourself');
     assert.ok(privacy.includes('refuse requests, images, fonts and scripts from anywhere else'));
   });
 
@@ -319,60 +318,16 @@ describe('the page', () => {
     assert.ok(policy.includes("form-action 'none'") && policy.includes("connect-src 'none'") && !/mailto/.test(policy), 'the policy is untouched: a mailto link is a navigation');
   });
 
-  it('the first screen (0.6.1): one column of text, centred: the purpose, Open GEDCOM and the drop, Try a sample family and its line, the line on the file with Privacy Policy and How to check, the line on saving; nothing else', () => {
+  it('the empty page is as 0.6.0 had it (0.6.3): Open GEDCOM, and under it "The file does not leave your computer." with one link, Privacy Policy, to privacy.html, and nothing else; the side frames, the counts bar and the strip are there, not hidden', () => {
     const page = read('index.html');
+    const note = page.match(/<p class="empty-note">([^]*?)<\/p>/);
+    assert.ok(note, 'no empty-note paragraph');
+    assert.equal(note[1], 'The file does not leave your computer. <a href="privacy.html">Privacy Policy</a>');
     const empty = between(page, '<div class="empty" id="empty">', '<div class="notice"');
-    const texts = [...empty.matchAll(/<(p|button)\b[^>]*>([^]*?)<\/\1>/g)].map((m) => m[2]);
-    assert.deepEqual(texts, [
-      'Read a GEDCOM file, check it, count what it holds, and make clean hand edits.',
-      'Open GEDCOM',
-      'or drop a .ged file anywhere on the page',
-      'Try a sample family',
-      'a public-domain file of George Washington\'s relations, 529 people; a copy of it saves as a download',
-      'The file does not leave your computer. <a href="privacy.html">Privacy Policy</a> <a href="privacy.html#how-to-check">How to check</a>',
-      'Save writes a dated copy where you choose, in Chrome and Edge; Safari and Firefox download it.',
-    ]);
-    assert.ok(!/disabled/.test(empty) && (empty.match(/<button\b/g) || []).length === 2, 'two buttons, and nothing greyed');
-    for (const t of texts) assert.ok(!/[\u{2014}\u{00b7}]/u.test(t), `no em dash or middle dot: ${t}`);
-    assert.ok(/<main class="work no-file" id="work">/.test(page) && /id="counts"[^>]*\shidden><\/nav>/.test(page) && page.includes('<div class="strip" id="strip" hidden>'),
-      'before the script runs: no side columns, no counts bar, no strip');
-    const css = read('style.css');
-    assert.ok(css.includes('.work.no-file { grid-template-columns: minmax(0, 1fr); }') && css.includes('.work.no-file > :not(.middle) { display: none; }'), 'the side columns are not there at all, not shrunk');
-    assert.ok(css.includes('.counts[hidden], .strip[hidden] { display: none; }'));
-    assert.ok(/\.empty-column \{ margin: auto; max-width: var\(--empty-width\);[^}]*text-align: center; \}/.test(css), 'one column, centred, from its top when the frame is too short');
-    const ui = read('ui.js');
-    assert.ok(ui.includes("for (const id of ['counts', 'strip']) $(id).hidden = !doc;") && ui.includes("w.classList.toggle('no-file', !open);"), 'and after: they come with a file');
-  });
-
-  it('Try a sample family opens sample.js\'s file as a dropped file opens, with no handle, so Save is a download of a copy in every browser', () => {
-    const ui = read('ui.js');
-    const handler = between(ui, "$('try-sample').addEventListener('click', async () => {", '});');
-    assert.ok(handler.includes('const sample = window.GedSample;') && handler.includes('await openFile(new File([sample.text], sample.name), null);'));
-    assert.ok(/function canPick\(\) \{ return PICKERS && \(!state\.doc \|\| !!state\.handle\); \}/.test(ui), 'no handle: Download a copy');
-    const privacy = read('privacy.html').replace(/\s+/g, ' ');
-    assert.ok(privacy.includes('<li><strong>The sample.</strong> Try a sample family opens George Washington\'s relations, a public-domain file from the <a href="https://github.com/D-Jeffrey/gedcom-samples">gedcom-samples</a> collection that is part of the page, so opening it sends nothing.</li>'),
-      'privacy.html credits the sample under Your file');
-    assert.ok(/\| `sample\.js` \| [^\n]*gedcom-samples[^\n]*public domain/.test(read('README.md')), 'and the README\'s Files table');
-  });
-
-  it('sample.js holds the sample family as found: washington.ged under one global, its text hashing to the brief\'s sha256 with its line endings as found, and nothing that runs but the setting of the global', () => {
-    const sample = require('../sample.js');
-    assert.deepEqual(Object.keys(sample), ['name', 'text']);
-    assert.equal(sample.name, 'washington.ged');
-    assert.equal(h.sha256(Buffer.from(sample.text, 'utf8')), SAMPLE_SHA256);
-    assert.equal(Buffer.byteLength(sample.text, 'utf8'), 139870);
-    assert.equal(sample.text.split('\n').length - 1, 9190, 'its 9,190 lines, each ending in LF, as found');
-    assert.ok(!sample.text.includes('\r'));
-    const src = read('sample.js');
-    assert.ok(src.includes('else root.GedSample = factory();'), 'one global, set as the other page scripts set theirs');
-    const code = (src.slice(0, src.indexOf('`')) + src.slice(src.lastIndexOf('`') + 1)).replace(/\/\*[^]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    const calls = [...new Set([...code.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))].filter((w) => !['if', 'function'].includes(w));
-    assert.deepEqual(calls, ['factory'], 'nothing is called but the wrapper that sets the global');
-    const m = core.read(new Uint8Array(Buffer.from(sample.text, 'utf8')));
-    assert.deepEqual(core.recordCounts(m), [['INDI', 529], ['FAM', 114]]);
-    assert.deepEqual([m.findings.errors, m.findings.notes], [0, 75], 'no error; its header says CHAR ANSI, and its bytes are all ASCII, so N6 has nothing to note; the 75 notes are N8, from 0.6.2: an SLGC under a CHIL, as its exporter wrote it (tests/tags-page.test.js)');
-    assert.equal(m.findings.byCode.N8.length, 75);
-    assert.equal(m.encodingLabel, 'ANSI');
+    assert.deepEqual([...empty.matchAll(/<(p|button)\b[^>]*>([^]*?)<\/\1>/g)].map((m) => m[2]), ['Open GEDCOM', note[1]], 'a button, and that one line');
+    assert.equal((empty.match(/<a\b/g) || []).length, 1, 'one link');
+    assert.ok(/<main class="work" id="work">/.test(page) && !/id="counts"[^>]*\shidden/.test(page) && !/id="strip"[^>]*\shidden/.test(page), 'no class and no attribute hides a frame, the counts bar or the strip');
+    assert.ok(!/no-file|try-sample|empty-column/.test(page + read('style.css') + read('ui.js')), 'nothing of a first screen is left in the page');
   });
 
   it('the story\'s styles are stripped from its HTML, by core.js, right before the page reads it, so a _META that parses draws no refusal; and the What happened label says who can see what', () => {
@@ -436,7 +391,7 @@ describe('the page', () => {
 
   it('the strip above the lines: Top, Back and Collapse all in a group at its left; Go to Line…, Edit, Undo and Redo, in that order, in a group at its right, which wraps under the left one when the width runs out', () => {
     const page = read('index.html');
-    const strip = between(page, '<div class="strip" id="strip" hidden>', '<div class="grid"');
+    const strip = between(page, '<div class="strip" id="strip">', '<div class="grid"');
     assert.deepEqual(idsIn(between(strip, 'id="strip-left"', 'id="strip-right"')), ['top', 'back', 'fold-all']);
     assert.deepEqual(idsIn(strip.slice(strip.indexOf('id="strip-right"'))), ['goto-box', 'goto', 'goto-go', 'goto-clear', 'edit', 'undo', 'redo']);
     assert.ok(strip.indexOf('id="strip-left"') < strip.indexOf('id="strip-right"'));
@@ -560,12 +515,12 @@ describe('the page', () => {
     assert.equal((ui.match(/leaveTagsSearch\(\);/g) || []).length, 5, 'the way back goes for a search of one\'s own (typed, Tag turned), a file opened or refused, and once it is taken');
   });
 
-  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.2", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
+  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.3", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
     const page = read('index.html');
     const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
     const foot = menu.match(/<div class="menu-foot">Version <span id="version">(\d+\.\d+\.\d+)<\/span><\/div>\s*$/);
     assert.ok(foot, 'no version line, three parts, at the foot of the Settings menu');
-    assert.equal(foot[1], '0.6.2');
+    assert.equal(foot[1], '0.6.3');
     assert.ok(/\.menu-foot \{[^}]*text-align: center;/.test(read('style.css')), 'the line is centred');
     assert.ok(menu.lastIndexOf('class="menu-row"') < menu.indexOf('class="menu-foot"'), 'at its foot');
     assert.equal((page.match(/\bid="version"/g) || []).length, 1, 'the version is written once');
@@ -590,7 +545,7 @@ describe('the page', () => {
     assert.ok(between(ui, 'async function openFile(file, handle) {', 'async function pickFile()').includes('state.drawer = null;'), 'shut as a file opens, whatever is stored');
     const toggle = between(ui, 'function toggleFrame(side) {', 'function setDrawer');
     assert.ok(toggle.indexOf('if (isDrawer(side)) {') < toggle.indexOf("store.set('hideLeft'"), 'a drawer opens and shuts before anything is stored, and nothing of it is');
-    assert.ok(between(ui, 'function applyFrames() {', 'function toggleFrame').includes("w.classList.toggle('right-hidden', open && !drawer.right && state.hiddenRight);"), 'the stored state counts only where the frame is a column');
+    assert.ok(between(ui, 'function applyFrames() {', 'function toggleFrame').includes("w.classList.toggle('right-hidden', !drawer.right && state.hiddenRight);"), 'the stored state counts only where the frame is a column');
     for (const [where, from] of [['Records', "$('records-list').addEventListener('click'"], ['Checks', "$('checks-list').addEventListener('click'"],
       ['Changes', "$('changes-list').addEventListener('click'"], ['Tags', "$('tags-list').addEventListener('click'"]]) {
       assert.ok(between(ui, from, '});').includes("chosenIn('left');"), `a line chosen in ${where} shuts the left drawer`);
@@ -628,7 +583,7 @@ describe('the page', () => {
     assert.ok(core.includes('})(typeof self !== \'undefined\' ? self : this, function (tags) {'));
     assert.ok(read('tags.js').includes('else root.GedTags = factory();'), 'the table sets the global core.js reads');
     assert.ok(/\| `tags\.js` \|[^\n]*5\.5\.1[^\n]*5\.5\.5[^\n]*7\.0[^\n]*Apache[^\n]*notice[^\n]*header/.test(read('README.md')), 'the README\'s Files table: the standards it came from, and the 7.0 text\'s licence and notice');
-    assert.ok(read('privacy.html').includes("The page's seven files hold no code that fetches"), 'privacy.html counts seven files');
+    assert.ok(read('privacy.html').includes("The page's six files hold no code that fetches"), 'privacy.html counts six files');
   });
 
   it('0.6.2: a tag the table finds wanting has a wavy line under it, red for E10 and gold for N8 and N9, as properties at the top of style.css, and the finding\'s words as its hover text', () => {

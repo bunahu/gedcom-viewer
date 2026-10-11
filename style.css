@@ -183,8 +183,6 @@
   --drawer-right-below: 1100px;       /* a window narrower than this has the right frame as a drawer over the lines, not a column (0.6.1); ui.js reads it */
   --drawer-left-below: 800px;         /* …and narrower than this, the left bar too */
   --drawer-shadow: var(--shadow);     /* an open drawer's shadow on the lines */
-  --empty-width: 44em;                /* the first screen's column of text */
-  --empty-gap: 22px;                  /* the space between its parts */
   --aside-shade: color-mix(in srgb, var(--color-text) 28%, transparent);   /* the shade at the number column's edge while the lines are scrolled sideways */
   --frame-ease: 200ms;                /* how long a side frame takes to hide or show */
   --menu-width: 19em;                 /* the Settings menu */
@@ -431,13 +429,6 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 .middle { grid-column: 3; }
 #split-right { grid-column: 4; }
 .right { grid-column: 5; }
-
-/* The first screen (0.6.1): with no file open, the side columns are not there at all, nor the counts
-   bar or the strip; the main frame holds the whole width. */
-.work.no-file { grid-template-columns: minmax(0, 1fr); }
-.work.no-file > :not(.middle) { display: none; }
-.work.no-file .middle { grid-column: 1 / -1; }
-.counts[hidden], .strip[hidden] { display: none; }
 
 /* The drawers (0.6.1). In a window narrower than --drawer-right-below the right frame leaves its
    column and lies over the lines, which keep the whole width; below --drawer-left-below the left
@@ -785,28 +776,22 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   font-size: var(--font-size-small);
 }
 
-/* the first screen: one column of text at the main frame's centre, from its top when the frame is too
-   short for it (0.6.1) */
 .empty {
   position: absolute;
   inset: 0;
   display: flex;
-  overflow: auto;
-  padding: 24px 16px;
-  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   background: var(--color-bg-card);
 }
 .empty[hidden] { display: none; }
-.empty-column { margin: auto; max-width: var(--empty-width); display: flex; flex-direction: column; align-items: center; gap: var(--empty-gap); text-align: center; }
-.empty-lead { margin: 0; }
-/* a button, and its line under it */
-.empty-step { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .empty .button { font-size: 1.1em; padding: 0.5rem 1.4rem; }
 .message { max-width: 34em; text-align: center; color: var(--color-danger); }
-/* the lines under the buttons, and what the page does with a file, and where that is said in full */
-.empty-note { margin: 0; text-align: center; color: var(--color-text-muted); font-size: var(--font-size-small); line-height: 1.5; }
+/* under the button: nothing is uploaded, and where that is said in full */
+.empty-note { max-width: 34em; margin: 0; text-align: center; color: var(--color-text-muted); font-size: var(--font-size-small); line-height: 1.5; }
 .empty-note a { color: var(--color-accent-hover); }
-.empty-note a + a { margin-left: 0.8em; }
 
 /* what an act or a save has to say: at the foot of the grid, until clicked or replaced */
 .notice {

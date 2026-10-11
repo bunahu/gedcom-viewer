@@ -1258,14 +1258,13 @@
 
   // Whether Save asks where, in the computer's Save dialog: the browser has it, and the file the page
   // is on has a handle, for step 6 to tell the files of the visit apart. Otherwise Save downloads the
-  // copy (10.2); so the sample, and a download, are downloads again.
+  // copy (10.2); so a file with no handle, and a page on a download, give a download again.
   function canPick() { return PICKERS && (!state.doc || !!state.handle); }
 
   function updateBar() {
     const doc = state.doc;
     const changed = !!doc && C.unsaved(doc);                        // what no file holds yet: not the original, nor any copy (10.2)
     for (const id of ['goto-box', 'edit', 'undo', 'redo', 'save']) $(id).hidden = !doc;   // P9: hidden, not disabled, until a file is open
-    for (const id of ['counts', 'strip']) $(id).hidden = !doc;      // 0.6.1: the first screen has neither
     $('edit').setAttribute('aria-pressed', String(!!doc && state.editing));
     $('middle').classList.toggle('is-edit-on', !!doc && state.editing);   // P10: the lines' editor's look, while Edit is on
     $('fold-all').hidden = !doc;
@@ -2459,7 +2458,7 @@
     updateGridWidth();
     updateBack();
     updateBar();
-    applyFrames();                                                   // the first screen: no side columns at all
+    applyFrames();                                                   // no file, no drawers: the frames are columns again, as 0.6.0 has them
     $('empty').hidden = false;
     $('message').hidden = !message;
     $('message').textContent = message || '';
@@ -2544,7 +2543,7 @@
     updateSearch();
     updateBack();
     updateBar();
-    applyFrames();                                                   // the side columns, the counts bar and the strip, as 0.6.0 had them
+    applyFrames();                                                   // a window narrow enough has its drawers now, shut
     rebuildRows();
     grid.setCount(rowCount());
     select(0);
@@ -2568,14 +2567,6 @@
   }
 
   $('open-empty').addEventListener('click', pickFile);
-  // Try a sample family (0.6.1): the file sample.js holds, opened as a dropped file is, with no
-  // handle, so Save is a download of a copy in every browser. Nothing is fetched: the file is part of
-  // the page.
-  $('try-sample').addEventListener('click', async () => {
-    const sample = window.GedSample;
-    if (!sample || !(await mayDropChanges())) return;
-    await openFile(new File([sample.text], sample.name), null);
-  });
   $('report').addEventListener('click', () => {
     try { $('settings-menu').hidePopover(); } catch (err) { /* not open */ }
     reportProblem();
@@ -2763,7 +2754,7 @@
   // over the lines, and narrower than --drawer-left-below the left bar too. The same icon opens and
   // shuts it, one drawer at a time, and nothing of it is stored, so the stored hidden or shown is
   // left alone for a wider window. A drawer is shut as a file opens, when a line is chosen in it, and
-  // on Esc. With no file open the side frames are not there at all.
+  // on Esc. With no file open there are no drawers: the frames are columns, as 0.6.0 has them.
   const pxOf = (prop) => parseFloat(getComputedStyle(root).getPropertyValue(prop));
   const narrow = {
     right: window.matchMedia(`(width < ${pxOf('--drawer-right-below')}px)`),
@@ -2773,12 +2764,10 @@
 
   function applyFrames() {
     const w = $('work');
-    const open = !!state.doc;
     const drawer = { left: isDrawer('left'), right: isDrawer('right') };
     if (state.drawer && !drawer[state.drawer]) state.drawer = null;
-    w.classList.toggle('no-file', !open);
-    w.classList.toggle('left-hidden', open && !drawer.left && state.hiddenLeft);
-    w.classList.toggle('right-hidden', open && !drawer.right && state.hiddenRight);
+    w.classList.toggle('left-hidden', !drawer.left && state.hiddenLeft);
+    w.classList.toggle('right-hidden', !drawer.right && state.hiddenRight);
     w.classList.toggle('left-drawer', drawer.left);
     w.classList.toggle('right-drawer', drawer.right);
     w.classList.toggle('left-open', state.drawer === 'left');

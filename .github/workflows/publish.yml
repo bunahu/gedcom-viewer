@@ -44,7 +44,7 @@ jobs:
       - name: Gather the page's files
         run: |
           mkdir site
-          cp index.html style.css tags.js core.js save.js sample.js ui.js privacy.html favicon.svg favicon.ico apple-touch-icon.png LICENSE site/
+          cp index.html style.css tags.js core.js save.js ui.js privacy.html favicon.svg favicon.ico apple-touch-icon.png LICENSE site/
           ls -la site
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
@@ -71,7 +71,7 @@ jobs:
       - name: Write the release notes
         run: |
           ANNOTATION="$(git tag -l --format='%(contents)' "$TAG")"
-          sha256sum index.html style.css tags.js core.js save.js sample.js ui.js privacy.html favicon.svg favicon.ico apple-touch-icon.png LICENSE > sums.txt
+          sha256sum index.html style.css tags.js core.js save.js ui.js privacy.html favicon.svg favicon.ico apple-touch-icon.png LICENSE > sums.txt
           {
             printf '%s\n\n' "$ANNOTATION"
             echo '## Files served at gedcom-viewer.net'

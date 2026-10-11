@@ -80,12 +80,12 @@
     </span>
   </div>
   <!-- the version, written here once: Report a problem reads it from this line -->
-  <div class="menu-foot">Version <span id="version">0.6.2</span></div>
+  <div class="menu-foot">Version <span id="version">0.6.3</span></div>
 </div>
 
-<nav class="counts" id="counts" aria-label="Records by type" translate="no" hidden></nav>
+<nav class="counts" id="counts" aria-label="Records by type" translate="no"></nav>
 
-<main class="work no-file" id="work">
+<main class="work" id="work">
   <aside class="side" id="side">
     <!-- the left bar's head: its tabs, and at their right end the icon that shrinks the bar to the icon alone -->
     <div class="side-head">
@@ -146,7 +146,7 @@
     <!-- the strip above the lines: Top, Back and Collapse all at its left; Go to Line…, Edit, Undo and Redo
          at its right, none of them until a file is open. When the width runs out, the right group goes
          under the left one -->
-    <div class="strip" id="strip" hidden>
+    <div class="strip" id="strip">
       <div class="strip-group" id="strip-left">
         <button class="button" id="top" type="button" title="Line 1" disabled>↑ Top</button>
         <button class="button" id="back" type="button" hidden>← Back</button>
@@ -166,22 +166,10 @@
       </div>
     </div>
     <div class="grid" id="grid" tabindex="0" aria-label="Lines" translate="no"></div>
-    <!-- the first screen (0.6.1): with no file open, the main frame alone holds one column of text, centred -->
     <div class="empty" id="empty">
-      <div class="empty-column">
-        <p class="empty-lead">Read a GEDCOM file, check it, count what it holds, and make clean hand edits.</p>
-        <div class="empty-step">
-          <button class="button" id="open-empty" type="button">Open GEDCOM</button>
-          <p class="empty-note">or drop a .ged file anywhere on the page</p>
-        </div>
-        <div class="message" id="message" hidden></div>
-        <div class="empty-step">
-          <button class="button" id="try-sample" type="button">Try a sample family</button>
-          <p class="empty-note">a public-domain file of George Washington's relations, 529 people; a copy of it saves as a download</p>
-        </div>
-        <p class="empty-note">The file does not leave your computer. <a href="privacy.html">Privacy Policy</a> <a href="privacy.html#how-to-check">How to check</a></p>
-        <p class="empty-note">Save writes a dated copy where you choose, in Chrome and Edge; Safari and Firefox download it.</p>
-      </div>
+      <button class="button" id="open-empty" type="button">Open GEDCOM</button>
+      <div class="message" id="message" hidden></div>
+      <p class="empty-note">The file does not leave your computer. <a href="privacy.html">Privacy Policy</a></p>
     </div>
     <div class="notice" id="notice" role="status" hidden></div>
   </section>
@@ -210,7 +198,6 @@
 <script src="tags.js" charset="utf-8"></script>
 <script src="core.js" charset="utf-8"></script>
 <script src="save.js" charset="utf-8"></script>
-<script src="sample.js" charset="utf-8"></script>
 <script src="ui.js" charset="utf-8"></script>
 </body>
 </html>

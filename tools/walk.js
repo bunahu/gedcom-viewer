@@ -30,22 +30,23 @@
 // the strip at a narrow width, Edit on as a file opens and its look, the version in Settings),
 // and in the editing part (the delete question); every file now opens with Edit on, so the
 // read-only walk presses E first, and the parts that edit no longer turn it on. Release 0.6.1 is
-// walked in two parts of its own, first (the first screen, with no side frame, counts bar or strip,
-// and Try a sample family, which opens the page's own file with nothing fetched) and drawers (the
-// frames at 1,280, 1,000, 800 and 600 px, with the default widths and with wider ones stored: shut,
-// opened by their icons, one at a time, shut by a line chosen in them, by Esc and by a file opened,
-// nothing of it stored); and in the save and copy parts, rewritten for P11's D1: after a save, or a
-// download, the page is on the copy, and every file of the visit is refused in the Save dialog.
+// walked in a part of its own, drawers (the frames at 1,280, 1,000, 800 and 600 px, with the default
+// widths and with wider ones stored: shut, opened by their icons, one at a time, shut by a line chosen
+// in them, by Esc and by a file opened, nothing of it stored), on a fictional file; and in the save and
+// copy parts, rewritten for P11's D1: after a save, or a download, the page is on the copy, and every
+// file of the visit is refused in the Save dialog.
 // Release 0.6.2 is walked in a part of its own, tags (the table of tags in the page: a record's FAM typed
 // over with FAM9, a BIRT put under a FAM, and the 7.0, 5.5.5 and 5.5.1 files written for the checks E10, N8
 // and N9: the wavy line under the tag, its hover text, Checks and what each check means, the plain line
-// under a selected line's tag, the problem report), and in the first part's step for the sample family,
-// which now reads 75 notes; and in a part of its own, titles (every title in Checks shows whole: one too
-// long for its row goes on a second line, or a third, the count level with the first, at the default
-// width, wider, narrower, with the larger text, and in a list that scrolls).
-// --shots DIR saves pictures of the fictional files and of the sample family, and of nothing else.
+// under a selected line's tag, the problem report); and in a part of its own, titles (every title in
+// Checks shows whole: one too long for its row goes on a second line, or a third, the count level with
+// the first, at the default width, wider, narrower, with the larger text, and in a list that scrolls).
+// Release 0.6.3 is the empty page as 0.6.0 had it, walked in the bars part: the three frames, the
+// counts bar and the strip there and empty, and in the main frame Open GEDCOM, its one line and its
+// one link, and nothing else; the side frames' hidden or shown, remembered, applies with no file open.
+// --shots DIR saves pictures of the fictional files, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
-// third, scroll, drags, save, copy, look, bars, first, drawers, tags, titles. Exit 0 when every step passes.
+// third, scroll, drags, save, copy, look, bars, drawers, tags, titles. Exit 0 when every step passes.
 //
 // The computer's Save dialog itself is not walked here: a person picks the name and the place in
 // it. The walk stands in for it as Chromium's behaves, the file picked created, or emptied when it
@@ -1083,10 +1084,8 @@ async function thirdRound(page, dir, shots) {
   const hidden = await page.ev(FRAMES);
   await shot('frames-hidden');
   await page.goto(`file://${path.join(ROOT, 'index.html')}`);
-  const unopened = await page.ev("document.getElementById('work').className");   // 0.6.1: with no file open, no side frames at all
-  await page.openFile(file);
   const remembered = await page.ev("document.getElementById('work').className");
-  await sleep(350);                                                  // the frames ease to how they were left as the file opens, the left icon with its bar's edge
+  await sleep(350);                                                  // the frames ease to how they were left as the page loads, the left icon with its bar's edge
   await page.click("document.getElementById('hide-left')");
   await page.click("document.getElementById('hide-right')");
   await sleep(350);
@@ -1094,8 +1093,9 @@ async function thirdRound(page, dir, shots) {
   check(hidden.cls === 'work left-hidden right-hidden' && hidden.tabs === 'hidden' && hidden.detail === 'hidden' && hidden.icons === 'visible,visible' && hidden.width > 0 && hidden.width < 60
     && hidden.tab === 'true/Show left bar/Show right frame',
   `the icon in each side frame shrinks it to a strip holding the icon alone (${hidden.cls}, eased; the left bar ${Math.round(hidden.width)} px wide), and reads "${hidden.tab.split('/')[1]}"`);
-  check(unopened === 'work no-file' && remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tabs === 'visible' && shown.detail === 'visible' && shown.tab === 'false/Hide left bar/Hide right frame',
-    `hidden or shown is remembered across a reload (${unopened} until a file opens, then ${remembered}); the same icons bring them back (${shown.cls === 'work' ? 'both shown' : shown.cls})`);
+  check(remembered === 'work left-hidden right-hidden' && shown.cls === 'work' && shown.tabs === 'visible' && shown.detail === 'visible' && shown.tab === 'false/Hide left bar/Hide right frame',
+    `hidden or shown is remembered across a reload (${remembered}); the same icons bring them back (${shown.cls === 'work' ? 'both shown' : shown.cls})`);
+  await page.openFile(file);
   // the reading steps below want Edit off; the file opened with it on (0.6)
   const reopenedOn = await page.ev("document.getElementById('edit').getAttribute('aria-pressed')");
   await page.click("document.getElementById('edit')");
@@ -1986,15 +1986,24 @@ async function theBars(page, dir, shots) {
   console.log(`\n== the bars (0.6), on a fictional file of ${fmt(m.n)} lines`);
 
   // before a file is open: the top bar holds the name and Settings alone; Go to Line…, Edit, Undo, Redo
-  // and Save are not there at all; nor, from 0.6.1, the side frames, their icons, or the strip
+  // and Save are not there at all; the right frame's header holds its icon alone
   const before = await page.ev(`({ bar: ${TOP_BAR}, icons: document.querySelectorAll('.bar .icon-button').length,
     gone: ['goto-box', 'edit', 'undo', 'redo', 'save'].filter((id) => !document.getElementById(id).hidden || document.getElementById(id).getClientRects().length),
     strip: [...document.querySelectorAll('#strip button, #strip input')].filter((e) => e.getClientRects().length).map((e) => e.id + (e.disabled ? ' off' : '')).join(),
-    title: ${FRAME_TITLE}, frames: ['side', 'right', 'hide-left', 'hide-right', 'strip'].filter((id) => document.getElementById(id).getClientRects().length).join(),
-    foot: document.querySelector('#settings-menu .menu-foot').textContent, centred: getComputedStyle(document.querySelector('#settings-menu .menu-foot')).textAlign })`);
+    title: ${FRAME_TITLE}, icon: getComputedStyle(document.getElementById('hide-right')).visibility, foot: document.querySelector('#settings-menu .menu-foot').textContent,
+    centred: getComputedStyle(document.querySelector('#settings-menu .menu-foot')).textAlign })`);
   await shot('empty');
-  check(before.bar === 'app-name,settings' && before.icons === 0 && before.gone.length === 0 && before.strip === '' && before.title === '' && before.frames === '',
-    `with no file open the top bar holds ${before.bar.replace(',', ' and ')} alone, no icon; Go to Line…, Edit, Undo, Redo and Save are hidden, not just off; no side frame, icon or strip is there at all`);
+  check(before.bar === 'app-name,settings' && before.icons === 0 && before.gone.length === 0 && before.strip === 'top off' && before.title === '' && before.icon === 'visible',
+    `with no file open the top bar holds ${before.bar.replace(',', ' and ')} alone, no icon; the strip holds Top, off; Go to Line…, Edit, Undo, Redo and Save are hidden, not just off; the right frame's header holds its icon alone`);
+  // 0.6.3, the empty page as 0.6.0 had it: the three frames, the counts bar and the strip are there, empty;
+  // the main frame holds the Open GEDCOM button, and under it the one line with its one link, and nothing else
+  const bare = await page.ev(`({ lines: [...document.querySelectorAll('#empty button, #empty p')].filter((e) => e.getClientRects().length).map((e) => e.tagName.toLowerCase() + ' ' + e.textContent),
+    links: [...document.querySelectorAll('#empty a')].map((a) => a.getAttribute('href') + ' ' + a.textContent), message: document.getElementById('message').hidden,
+    frames: ['side', 'middle', 'right', 'counts', 'strip', 'hide-left', 'hide-right'].filter((id) => document.getElementById(id).getClientRects().length).join(),
+    columns: document.getElementById('work').className, filled: [document.getElementById('counts'), document.getElementById('detail'), document.getElementById('grid')].some((e) => e.textContent !== '') })`);
+  check(JSON.stringify(bare.lines) === JSON.stringify(['button Open GEDCOM', 'p The file does not leave your computer. Privacy Policy']) && JSON.stringify(bare.links) === JSON.stringify(['privacy.html Privacy Policy']) && bare.message
+    && bare.frames === 'side,middle,right,counts,strip,hide-left,hide-right' && bare.columns === 'work' && !bare.filled,
+  `the empty page, as 0.6.0 had it: the left bar, the main frame and the right frame show with their icons, the counts bar and the strip too, all empty; in the main frame the Open GEDCOM button, and under it "The file does not leave your computer." with its one link, Privacy Policy, to privacy.html, and nothing else`);
   check(before.foot === `Version ${VERSION}` && /^\d+\.\d+\.\d+$/.test(VERSION) && before.centred === 'center',
     `the version is out of the top bar and at the foot of Settings, in three parts, centred: "${before.foot}"`);
 
@@ -2201,79 +2210,8 @@ async function theBars(page, dir, shots) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0.6.1: the first screen and the sample family; the side frames as drawers in a narrow window
+// 0.6.1: the side frames as drawers in a narrow window
 // ---------------------------------------------------------------------------------------------
-
-const SAMPLE = require('../sample.js');
-const SAMPLE_SHA256 = 'f2b78584e7b9d456b4adf902a06e05dfe1c7a4a35e1544c5cec9c079509aecff';   // washington.ged as found (BUILD-BRIEF section 19)
-const FIRST_LINES = ['Read a GEDCOM file, check it, count what it holds, and make clean hand edits.', 'Open GEDCOM', 'or drop a .ged file anywhere on the page',
-  'Try a sample family', 'a public-domain file of George Washington\'s relations, 529 people; a copy of it saves as a download',
-  'The file does not leave your computer. Privacy Policy How to check', 'Save writes a dated copy where you choose, in Chrome and Edge; Safari and Firefox download it.'];
-
-// What the first screen shows, by measure: which parts have a box on the screen at all; the main
-// frame's width, and the column's centre against the frame's; its lines, links and buttons, in order.
-const FIRST_SCREEN = `(() => { const shows = (id) => document.getElementById(id).getClientRects().length > 0;
-  const col = document.querySelector('.empty-column').getBoundingClientRect(); const mid = document.getElementById('middle').getBoundingClientRect();
-  return { parts: ['side', 'split-left', 'right', 'split-right', 'counts', 'strip', 'hide-left', 'hide-right'].filter(shows).join(),
-    middle: Math.round(mid.width), window: innerWidth, off: Math.abs((col.left + col.right) / 2 - (mid.left + mid.right) / 2), inside: col.left >= mid.left - 0.5 && col.right <= mid.right + 0.5,
-    lines: [...document.querySelectorAll('.empty-column p, .empty-column button')].map((e) => e.textContent),
-    links: [...document.querySelectorAll('.empty-column a')].map((a) => a.getAttribute('href') + ' ' + a.textContent),
-    buttons: [...document.querySelectorAll('button')].filter((b) => b.getClientRects().length).map((b) => b.textContent + (b.disabled ? ' (off)' : '')) }; })()`;
-
-async function theFirstScreen(page, shots) {
-  console.log('\n== the first screen and the sample family (0.6.1)');
-  const shot = (name) => (shots ? page.screenshot(path.join(shots, `first-${name}.png`)) : null);
-  const size = (width, height) => page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-
-  // with no file open: the top bar, and one column of text at the main frame's centre, which holds the whole width
-  await size(1280, 800);
-  await sleep(100);
-  const first = await page.ev(FIRST_SCREEN);
-  await shot('screen');
-  check(first.parts === '' && first.middle === first.window && first.off < 1 && first.inside,
-    `with no file open the main frame holds the whole width (${first.middle} px); no side frame, icon, counts bar or strip is there at all; the column of text sits at its centre (${first.off.toFixed(1)} px off)`);
-  check(JSON.stringify(first.lines) === JSON.stringify(FIRST_LINES) && JSON.stringify(first.links) === JSON.stringify(['privacy.html Privacy Policy', 'privacy.html#how-to-check How to check']),
-    `the column, in order: ${first.lines.join(' | ')}`);
-  check(JSON.stringify(first.buttons) === JSON.stringify(['Settings', 'Open GEDCOM', 'Try a sample family']), `three buttons, none greyed: ${first.buttons.join(', ')}`);
-  await size(600, 700);
-  await sleep(100);
-  const narrow = await page.ev(FIRST_SCREEN);
-  check(narrow.parts === '' && narrow.inside && narrow.off < 1 && narrow.middle === 600, 'at 600 px the column still fits the main frame, at its centre');
-  await size(1600, 1000);
-  await sleep(100);
-
-  // How to check goes to that section of the privacy page
-  await page.click("document.querySelector('.empty-column a[href=\"privacy.html#how-to-check\"]')");
-  await page.waitFor("location.hash === '#how-to-check' && document.readyState === 'complete'");
-  const section = await page.ev("(() => { const h = document.getElementById('how-to-check'); return { text: h.textContent, top: Math.round(h.getBoundingClientRect().top) }; })()");
-  check(section.text === 'How to check it yourself' && section.top < 80, `How to check opens the privacy page at "${section.text}" (${section.top} px from the top)`);
-  await page.goto(`file://${path.join(ROOT, 'index.html')}`);
-
-  // Try a sample family: the page's own file, opened as a dropped file is, with no handle; nothing is fetched
-  const asked = page.log.requests.length;
-  await page.click("document.getElementById('try-sample')");
-  await page.waitFor("document.getElementById('file-name').textContent === 'washington.ged' && document.querySelector('#grid .row.is-sel')");
-  const opened = await page.ev(`({ parts: ['side', 'right', 'counts', 'strip', 'hide-left', 'hide-right'].filter((id) => document.getElementById(id).getClientRects().length).join(),
-    counts: [...document.querySelectorAll('#counts .count-item')].map((b) => b.querySelector('.count-name').textContent + ' ' + b.querySelector('.count-figure').textContent),
-    save: document.getElementById('save').textContent + (document.getElementById('save').disabled ? ' (off)' : ''), edit: document.getElementById('edit').getAttribute('aria-pressed'),
-    checks: document.getElementById('checks-sum').textContent, rows: document.getElementById('grid').querySelectorAll('.row').length > 0, leave: ${LEAVE_ASKS} })`);
-  await shot('sample');
-  if (await page.ev("document.getElementById('facts').hidden")) await page.click("document.getElementById('file-name')");
-  await page.click("document.querySelector('#facts .sha')");
-  const facts = await page.ev("({ text: document.getElementById('facts').textContent, sha: (document.querySelector('#facts .hash') || {}).textContent })");
-  await page.click("document.querySelector('.tab[data-panel=checks]')");
-  await page.waitFor(LAID_OUT('checks-list'));
-  const heads = await page.ev(`${VISIBLE('checks-list')}.filter((r) => r.classList.contains('is-head')).map((r) => r.querySelector('.muted').textContent)`);
-  await page.click("document.querySelector('.tab[data-panel=records]')");
-  const fetched = page.log.requests.slice(asked).filter((u) => !/favicon|apple-touch-icon/.test(u));   // the browser may ask for the page's icon late
-  check(opened.parts === 'side,right,counts,strip,hide-left,hide-right' && JSON.stringify(opened.counts) === JSON.stringify(['People 529', 'Families 114']) && opened.edit === 'true' && opened.rows,
-    `Try a sample family opens washington.ged: the side frames, the counts bar (${opened.counts.join(', ')}) and the strip come with it, and Edit is on`);
-  check(opened.save === 'Download a copy (off)' && !opened.leave, `it has no handle, so in this Chrome, which has the Save dialog, its button reads "${opened.save}"`);
-  check(['GEDCOM 5.5', 'ANSI', 'exported 12 MAR 1997 by FamilyOrigins 5.0', '139.9 KB', '9,190 lines'].every((x) => facts.text.includes(x)) && facts.sha === SAMPLE_SHA256,
-    `its facts: GEDCOM 5.5, ANSI, exported 12 MAR 1997 by FamilyOrigins 5.0, 139.9 KB, 9,190 lines, sha256 ${facts.sha.slice(0, 12)}…, the file as found`);
-  check(/^0 errors \S 75 notes$/.test(opened.checks) && JSON.stringify(heads) === JSON.stringify(['N8']), `Checks: ${opened.checks}, all N8 (0.6.2): the file's exporter put an SLGC under each CHIL, which no standard allows; its header says CHAR ANSI, and with every byte ASCII there is no N6`);
-  check(fetched.length === 0, `nothing was asked of the network or the disk to open it (${fetched.length} requests since the click): it is part of the page`);
-}
 
 // The frames now, by measure: the work area's classes; the left bar's, the right frame's and the main
 // frame's boxes; where each icon is; whether a control of the strip is under an icon, two overlap,
@@ -2293,24 +2231,22 @@ const FRAMES_NOW = `(() => { const box = (id) => { const e = document.getElement
     pressed: ['hide-left', 'hide-right'].map((id) => document.getElementById(id).getAttribute('aria-pressed')).join(),
     stored: ['hideLeft', 'hideRight', '--left-width', '--right-width'].map((k) => localStorage.getItem('gedview.' + k)).join() }; })()`;
 
-async function theDrawers(page, shots) {
-  console.log('\n== the drawers (0.6.1), on the sample family');
+async function theDrawers(page, dir, shots) {
+  const file = path.join(dir, 'drawers.ged');
+  fs.writeFileSync(file, barsFiction());
+  const m = core.read(new Uint8Array(fs.readFileSync(file)));
+  console.log(`\n== the drawers (0.6.1), on a fictional file of ${fmt(m.n)} lines`);
   const shot = (name) => (shots ? page.screenshot(path.join(shots, `drawers-${name}.png`)) : null);
-  const m = core.read(new Uint8Array(Buffer.from(SAMPLE.text, 'utf8')));
   const at = async (width) => {
     await page.send('Emulation.setDeviceMetricsOverride', { width, height: 760, deviceScaleFactor: 1, mobile: false });
     await sleep(350);                                                // a column that comes or goes eases over 200 ms
   };
   const now = () => page.ev(FRAMES_NOW);
   const shrunk = await page.ev("parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--icon-button')) + 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--frame-pad'))");
-  const openSample = async () => {
-    await page.click("document.getElementById('try-sample')");
-    await page.waitFor("document.getElementById('file-name').textContent === 'washington.ged' && document.querySelector('#grid .row.is-sel')");
-  };
   const reload = async () => {
     await at(1280);
     await page.goto(`file://${path.join(ROOT, 'index.html')}`);
-    await openSample();
+    await page.openFile(file);
     await sleep(350);
   };
   const tidy = (f) => !f.underIcon && !f.overlap && f.outside === 0 && f.linesUnder;
@@ -2847,8 +2783,7 @@ async function waitForFile(dir, pattern, timeout = 10000, not = null) {
     if (part('copy')) await inChrome((page) => copyWithoutPickers(page, dir, shots));
     if (part('look')) await inChrome((page) => theLook(page, dir, shots));
     if (part('bars')) await inChrome((page) => theBars(page, dir, shots));
-    if (part('first')) await inChrome((page) => theFirstScreen(page, shots));
-    if (part('drawers')) await inChrome((page) => theDrawers(page, shots));
+    if (part('drawers')) await inChrome((page) => theDrawers(page, dir, shots));
     if (part('tags')) await inChrome((page) => theTags(page, dir, shots));
     if (part('titles')) await inChrome((page) => theCheckTitles(page, dir, shots));
     console.log('\n== the whole walk');

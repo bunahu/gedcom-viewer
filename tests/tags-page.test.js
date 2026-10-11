@@ -2,7 +2,7 @@
 // by the table of the standard the file declares, which gives the checks E10 (malformed: not a
 // GEDCOM tag), N8 (out of place) and N9 (an extension the header does not declare), and words the
 // plain line the right frame shows under a selected line's tag. tests/tags.test.js holds the table
-// itself; here are the checks and the words, over written files and made-up text, and the sample.
+// itself; here are the checks and the words, over written files and made-up text.
 'use strict';
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
@@ -11,7 +11,6 @@ const path = require('node:path');
 const core = require('../core.js');
 const tags = require('../tags.js');
 const h = require('./helpers.js');
-const SAMPLE = require('../sample.js');
 
 const CODES = ['E10', 'N8', 'N9'];
 // What the three checks found, as [code, line number on the screen, the finding's words].
@@ -267,14 +266,14 @@ describe('the checks run again on every edit, in the same way as on a whole file
   });
 });
 
-describe('what the written files and the sample say', () => {
-  const NEW = ['e10-n8-tags.ged', 'n9-undeclared.ged', 'e10-555-afn.ged'];
+const NEW_FILES = ['e10-n8-tags.ged', 'n9-undeclared.ged', 'e10-555-afn.ged'];   // the three made for these checks
 
+describe('what the written files say', () => {
   it('every written file but the three made for these checks gives none of them: the files that were clean stay clean', () => {
     const names = h.gedFiles(h.SYNTHETIC).map((p) => path.basename(p));
     assert.ok(names.length >= 20);
     for (const name of names) {
-      if (NEW.includes(name)) continue;
+      if (NEW_FILES.includes(name)) continue;
       assert.deepEqual(found(fixture(name)), [], name);
     }
   });
@@ -284,17 +283,6 @@ describe('what the written files and the sample say', () => {
     assert.equal(fixture('e10-n8-tags.ged').tagVersion, '5.5.1');
     assert.deepEqual(found(fixture('e10-555-afn.ged')), [['E10', 12, 'AFN is not a tag of GEDCOM 5.5.5'], ['N8', 13, 'SUBM does not belong under INDI']]);
     assert.equal(fixture('e10-555-afn.ged').tagVersion, '5.5.5');
-  });
-
-  it('the sample family reads 75 notes and no error: each is an SLGC under a CHIL, which its exporter wrote and no standard allows', () => {
-    const m = core.read(new Uint8Array(Buffer.from(SAMPLE.text, 'utf8')));
-    assert.equal(m.tagVersion, '5.5.1', 'its header says 5.5');
-    assert.deepEqual([m.findings.errors, m.findings.notes], [0, 75]);
-    const all = found(m);
-    assert.equal(all.length, 75);
-    assert.ok(all.every((f) => f[0] === 'N8' && f[2] === 'SLGC does not belong under CHIL'));
-    assert.equal(all[0][1], 7939, 'the first, as the sample is now');
-    for (const [, line] of all) assert.equal(m.texts[line - 1], '2 SLGC', `line ${line}`);
   });
 });
 
@@ -317,18 +305,18 @@ describe('the lines are judged as parentOf says a line\'s parent is', () => {
     return out;
   }
 
-  it('over every written file, the sample, and files of lines out of order, jumping levels and not parsing', () => {
+  it('over every written file, and files of lines out of order, jumping levels and not parsing', () => {
     const odd7 = file('7.0', '0 @I1@ INDI\n1 NAME a\n3 GIVN b\n garbage\n2 SURN c\n1 FOO9\n2 DATE x\n0 @F1@ FAM\n3 BIRT\n1 _Z\n2 _Y\n1 HUSB @I1@\n\n1 CHIL @I1@\n4 DEAT\n',
       '1 SCHMA\n2 TAG _Z https://example.com/z\n');
     const odd5 = file('5.5.1', '2 NAME a\n0 @I1@ INDI\n3 GIVN b\n1 BIRT\n3 DATE x\n1 FOO9\n 2 DATE y\n1 _X\n3 DATE z\n0 @F1@ FAM\n1 NAME q\n0 @Q@ HEAD\n');
-    const texts = [...h.gedFiles(h.SYNTHETIC).map((p) => fs.readFileSync(p).toString('latin1')), SAMPLE.text, odd7, odd5];
+    const texts = [...h.gedFiles(h.SYNTHETIC).map((p) => fs.readFileSync(p).toString('latin1')), odd7, odd5];
     let judged = 0;
     for (const text of texts) {
       const m = h.readText(text, 'latin1');
       assert.deepEqual(found(m).map((f) => [f[0], f[1]]), plain(m), text.slice(0, 40));
       judged += m.n;
     }
-    assert.ok(judged > 9000);
+    assert.ok(judged > 250, `${judged} lines judged`);
   });
 });
 
@@ -391,17 +379,20 @@ describe('the plain line under a selected line\'s tag (M3)', () => {
     assert.equal(core.read(new Uint8Array(Buffer.from('0 HEAD\nnot a line\n0 TRLR\n'))).tag[1], null);
   });
 
-  it('every tag of the sample has one, and none says it is malformed', () => {
-    const m = core.read(new Uint8Array(Buffer.from(SAMPLE.text, 'utf8')));
+  it('every tag of the written files that are clean has one, and none says it is malformed', () => {
     const seen = new Set();
-    for (let i = 0; i < m.n; i += 1) {
-      const t = m.tag[i];
-      if (seen.has(t)) continue;
-      seen.add(t);
-      const line = core.tagMeaning(t, m.tagVersion, m.schema);
-      assert.ok(line && !/is not a /.test(line), `${t}: ${line}`);
+    for (const p of h.gedFiles(h.SYNTHETIC)) {
+      if (NEW_FILES.includes(path.basename(p))) continue;
+      const m = h.readText(fs.readFileSync(p).toString('latin1'), 'latin1');
+      for (let i = 0; i < m.n; i += 1) {
+        const t = m.tag[i];
+        if (t === null || t === undefined || seen.has(t)) continue;
+        seen.add(t);
+        const line = core.tagMeaning(t, m.tagVersion, m.schema);
+        assert.ok(line && !/is not a /.test(line), `${t}: ${line}`);
+      }
     }
-    assert.ok(seen.size > 20);
+    assert.ok(seen.size > 20, `${seen.size} tags`);
   });
 });
 
