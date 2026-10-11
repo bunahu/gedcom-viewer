@@ -561,10 +561,11 @@ tag clicked in Tags shows its lines in Search, with **← Back to Tags** at its 
 and the Tags order is never changed by it. The version reads "Version 0.6.0", centred, at the foot
 of Settings, and carries three parts from now on.
 
-0.6.1 (2026-10-10): with no file open the page is one centred column in the main frame (the purpose
-line; **Open GEDCOM** and "or drop a .ged file anywhere on the page"; **Try a sample family** and its
-line; the privacy line with its two links; the saving line) and no frames, counts bar or strip, which
-appear with a file. Below 1,100 px of width the right frame is a drawer over the lines, below 800 px
+0.6.1 (2026-10-10), withdrawn in 0.6.3 at his word: a first screen (one centred column of text, with
+the frames, the counts bar and the strip hidden until a file opened). With no file open the page is
+as 0.6.0 had it: the frames, the counts bar and the strip with Top, and in the main frame **Open
+GEDCOM** and the one line "The file does not leave your computer. Privacy Policy". From 0.6.1, kept:
+Below 1,100 px of width the right frame is a drawer over the lines, below 800 px
 the left bar too, each one icon wide when shut, opened and shut from its icon at the strip's end;
 a drawer shuts on a chosen line, Esc, Add line under or after, ⌘L, a file opening, or the window
 crossing a breakpoint, and opens for a check's title (the right), ⌘F or a click on the counts bar
@@ -577,11 +578,10 @@ stored.
 
 | File | Holds | Touches the page? |
 |---|---|---|
-| `index.html` | the markup; loads `core.js`, `save.js`, `sample.js`, `ui.js` as classic scripts, in that order | — |
+| `index.html` | the markup; loads `tags.js`, `core.js`, `save.js`, `ui.js` as classic scripts, in that order | — |
 | `style.css` | the whole look, its properties first | — |
 | `core.js` | bytes → encoding → lines → shape → records and pointers → checks → counts → labels; the document, the edits, undo, the net change, the stamps, the bytes of a save | **no** |
 | `save.js` | the dated name, the save of 10.2 over the handle the dialog gives, the read-back, the refusal of every file of the visit, the move onto the copy, the Changes text (10.3); the bytes a browser with no pickers downloads | **no** |
-| `sample.js` | the sample family, George Washington's, as found: its name and its text in one global, and no code | **no** |
 | `tags.js` | every tag of GEDCOM 5.5.1, 5.5.5 and 7.0 with a plain meaning and the parents each may sit under, the rule for a tag in each version, 29 well-known custom tags with sourced meanings, and the version mapper; loaded before `core.js`, which uses it for E10, N8 and N9; its 7.0 text is Apache 2.0, with the notice in its header | **no** |
 | `ui.js` | the grid, panels, dialogs, keys; the only file that knows the pickers exist | yes |
 | `privacy.html` | how the page treats a file, in full; loads `style.css` and the icons, and no script (0.5.2) | — |
@@ -694,7 +694,7 @@ findings it expects, by code and line number.
 | Save, fake handles | the order of 10.2: the original's own handle refused at step 6 and nothing written; a copy that reads back wrong said loudly, the original untouched; the stamps taken back on a cancel; the dated name, and a stem's old timestamp replaced; the Changes text of 10.3 |
 | The original picked in the Save dialog | step 6 refuses, and puts the file back when the browser emptied it (10.2) |
 | Names | the dated name of 10.1, with `.GED`, `.cleaned.ged`, and a stem's old timestamp replaced |
-| No network | the seven files of the page (`index.html`, `style.css`, `core.js`, `save.js`, `sample.js`, `tags.js`, `ui.js`) hold no `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `import(`, `@import`, `url(http`, `http://` or `https://` — no exceptions; an inline SVG in HTML needs no namespace; `index.html` and `privacy.html` each carry a content-security policy — `default-src 'none'`, `connect-src 'none'`, scripts the page's own alone; styles may be inline in `index.html`, since Chrome styles its own XML parse-error block inline in the inert document a malformed `_META` is read in, and a style can reach nothing outside the page — ahead of anything they load, which the browser enforces and the test reads (0.5.2) |
+| No network | the six files of the page (`index.html`, `style.css`, `core.js`, `save.js`, `tags.js`, `ui.js`) hold no `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, `import(`, `@import`, `url(http`, `http://` or `https://` — no exceptions; an inline SVG in HTML needs no namespace; `index.html` and `privacy.html` each carry a content-security policy — `default-src 'none'`, `connect-src 'none'`, scripts the page's own alone; styles may be inline in `index.html`, since Chrome styles its own XML parse-error block inline in the inert document a malformed `_META` is read in, and a style can reach nothing outside the page — ahead of anything they load, which the browser enforces and the test reads (0.5.2) |
 
 ### Gates — all of them, before a phase is called done
 
@@ -937,7 +937,7 @@ is, beside the four files it loads.
 
 | # | Do | Expect |
 |---|---|---|
-| 1 | **Open GEDCOM** → `local/walk/<file>.ged`, the walk copy | opens in under 2 seconds; the first screen gives way to the frames, the counts bar and the strip; the file's name shows as a chip |
+| 1 | **Open GEDCOM** → `local/walk/<file>.ged`, the walk copy | opens in under 2 seconds; the file's name shows as a chip |
 | 2 | Read the counts bar; click **People** | the counts of the measured table (`local/measured.json`), People first; Records lists the people |
 | 3 | Click the file's name | GEDCOM 5.5.1 · UTF-8 · exported 16 Sep 2026 by Ancestry.com Family Trees 2025.08 · its size · its lines · sha256. **GEDCOM 5.5.1** goes to line 18, **exported…** to line 15; **sha256** shows `<sha256>` and says on hover what it is |
 | 4 | **Checks** | 0 errors. Notes: Line break inside the value 3 · Nothing points at it 9 · Over 255 characters 93 · Mixed line endings, once, for the whole file |
@@ -1612,6 +1612,8 @@ entry, section 11, P9 and P10.
 
 ### 0.6.1: the first screen, the sample and the drawers (2026-10-09, planned)
 
+**Withdrawn 2026-10-10, in 0.6.3** (see "0.6.3, the walk-back" below): the first screen and the sample.
+
 **The first screen** (the review's item 5). With no file open, the side columns are hidden
 entirely, not shrunk: their icons mean nothing before a file. The main frame holds one column of
 text, centred:
@@ -1770,7 +1772,7 @@ places 5.5.5 changed listed in its notes. Two things from it for 0.6.2: the 7.0 
 2.0 and asks a derived work to carry its NOTICE, which `tags.js` holds in its header and the README
 and page do not yet; and `_META` is sourced only to this project's README.
 
-### 0.6.3: judging by another version (2026-10-10, planned; his addition to P12)
+### 0.6.4: judging by another version (2026-10-10, planned; his addition to P12; was 0.6.3 until the walk-back took that number)
 
 His words: "The file's detected version judges it, BUT the user can override it (i.e. if they are
 trying to upgrade from 5.5.1 to 5.5.5, they should be able to see what needs changing. This may be
@@ -1783,7 +1785,7 @@ a 5.5.5 tag; 5.5.1 defines it"), N8 for a place that version does not allow, N9 
 5.5.1", the problem report says the same, and the counts bar is untouched. The stamps and the
 header's note are written as the file's own version has them (10.4, 10.6), whatever is judged by.
 Not in it: changing the file's declared version, or rewriting lines for the newer standard; those
-are hand edits the findings point at. Built after 0.6.2, by Sonnet, from this entry and P12.
+are hand edits the findings point at. Built after 0.6.3, by Sonnet, from this entry and P12.
 
 ### 0.6.2 built and tagged (2026-10-10)
 
@@ -1814,3 +1816,25 @@ without its retry; the workarounds the fix made unnecessary are listed in the dr
 notes (the retry in `inChrome`, the drawers' and drags' orderings), for a cleanup after this
 release; the click on Save for the second save stays, since that one is the dialog's close event,
 not a key.
+
+### 0.6.3, the walk-back (2026-10-10)
+
+His words, on seeing 0.6.1 and 0.6.2 together: "I want to walk back the changes you made when
+adding the sample tree. You created a completely different landing page, which I did not want. And
+the sample tree itself is, bluntly, garbage; if we do use one, I want to find one that doesn't use
+GEDCOM incorrectly. NSFX holding '[America's 1st President]' instead of NOTE is bush league!"
+
+Rulings. The first screen of 0.6.1 was never his: the review's item 5 and a design entry the main
+session wrote while he waited on another build, summarised to him in chat and built without his eyes
+on a mockup, against rule 2 of section 17. The empty page is as 0.6.0 had it, and a change to the
+page's face is shown to him before it is built. Item 5 of the punch list is closed as not wanted,
+its "hide empty panes" included. The Washington file is withdrawn: its exporter put "[FIRST U.S.
+PRESIDENT]" into `NSFX` and `TITL` where a `NOTE` belongs, and `SLGC` under each `CHIL`; a sample,
+if there is ever one, is a real file that uses the standard correctly, with no living people, under
+a licence that allows serving it, and shown to him before it goes in. Of the files looked at on
+2026-10-10, the page's checks raise nothing on Shakespeare (31 people, 5.5.1, webtreeprint, MIT with
+attribution; one empty `SEX` value, titles in `TITL` where they belong), on Bach (33 people, 5.5,
+47 `_UID` lines, a submitter's home address to cut) or on the Brontës (14 people); none has been
+read line by line for how it uses the standard, which is the test he set. 0.6.3 removes the first
+screen and the sample and keeps the drawers, the page on the copy and the tag table; Judge by moves
+to 0.6.4.
