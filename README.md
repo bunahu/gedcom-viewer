@@ -129,8 +129,9 @@ everything under it) follows; a `0` line takes its whole record, and a type row 
 only at a sibling's edge, so no line's level or parent changes: a fact among its person's facts,
 a record among records, a type among types. `HEAD` stays first, `TRLR` last, the submitter record
 directly after `HEAD` below version 7, and a `CONC` or `CONT` line never leaves its line. Release
-to move; Esc, or a release where no gold line shows, moves nothing. One Undo brings it back. Two
-lines of one tag under one parent, two `1 NAME`, may be reordered: the first is the one the
+to move; Esc, or a release where no gold line shows, moves nothing. One Undo brings it back. From the
+keyboard, ⌥↑ and ⌥↓ move the selected line's block past the sibling above or below it, under the same rules,
+and say why when they cannot. Two lines of one tag under one parent, two `1 NAME`, may be reordered: the first is the one the
 standard reads as preferred, and the Save dialog says so. A moved line is written from its own
 bytes, so a moved block changes the file's sha256 and not its size.
 

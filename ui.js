@@ -461,26 +461,6 @@
     if (shut) state.folds.add(e); else state.folds.delete(e);
   }
 
-  // The file's record types as sections — each type's records in one run — when every type is in
-  // one run, the file being bunched by type; else null, and no section rows.
-  function sectionsOf(m) {
-    const out = [];
-    const seen = new Set();
-    for (const line of m.records) {
-      const tag = m.tag[line];
-      const last = out[out.length - 1];
-      if (last && last.tag === tag) {
-        last.records += 1;
-        continue;
-      }
-      if (seen.has(tag)) return null;
-      seen.add(tag);
-      out.push({ tag, from: line, to: 0, records: 1, index: out.length });
-    }
-    out.forEach((s, k) => { s.to = k + 1 < out.length ? out[k + 1].from : m.n; });
-    return out.length > 1 ? out : null;
-  }
-
   // The removed lines of the net change, by the place they were: the row of each goes just above
   // the line now at that place.
   function removedByPlace() {
@@ -1212,7 +1192,7 @@
     }
     state.m = state.doc.view;
     const m = state.m;
-    state.sections = sectionsOf(m);
+    state.sections = C.sectionsOf(m);
     state.maxLevel = Math.max(0, ...[...m.levelCounts.keys()].map(Number));
     updateMarks();
     $('grid').style.setProperty('--ln-width', `${fmt(m.n).length + 1}ch`);
@@ -2505,7 +2485,7 @@
     state.sel = -1;
     state.back = [];
     state.folds = new Set();
-    state.sections = sectionsOf(doc.view);
+    state.sections = C.sectionsOf(doc.view);
     state.shutSections = new Set();
     state.range = null;
     state.pick = null;
@@ -3086,6 +3066,13 @@
       if (e.shiftKey) doRedo(); else doUndo();
       return;
     }
+    if (e.altKey && !mod && !e.shiftKey && (key === 'ArrowUp' || key === 'ArrowDown')) {
+      if (state.editing) {                                           // ⌥↑, ⌥↓: the selected block past its sibling (3.4a); Edit off, nothing
+        e.preventDefault();
+        moveSelected(key === 'ArrowUp' ? -1 : 1);
+      }
+      return;
+    }
     if (mod || e.altKey || !state.m.n) return;
     const page = grid.pageRows();
     const moves = { ArrowDown: 1, ArrowUp: -1, PageDown: page, PageUp: -page };
@@ -3138,6 +3125,10 @@
   let clickAfterDrag = false;
   let scrollTimer = 0;
 
+  // The block a line holds ends here: the line and everything under it, a 0 line its whole record.
+  // What a press on a row takes hold of, and what the keys move.
+  const blockEnd = (i) => C.subtreeEnd(state.m, i);
+
   // The row at whose top edge the block would land before line `to`: the first row at or after
   // `to`, a type's own row included, or the row after the last for the end. For a record dragged
   // to the top of its own type (`own` is that type's first line), its type's row is passed over,
@@ -3167,17 +3158,9 @@
       notice(l.reason, 'error');
       return false;
     }
-    let tos = l.at;
-    if (state.sections) {
-      const starts = new Set(state.sections.map((s) => s.from));
-      if (d.section) tos = tos.filter((to) => starts.has(to));
-      else if (state.m.level[d.from] === 0) {
-        const sec = state.sections.find((s) => d.from >= s.from && d.from < s.to);
-        tos = tos.filter((to) => to >= sec.from && to <= sec.to);
-      }
-    }
+    const tos = C.keepBunched(state.doc, d.from, l.at, !!d.section);
     if (!tos.length) {
-      notice('This block has nowhere else to go among its siblings.', 'error');
+      notice(C.NOWHERE_ELSE, 'error');
       return false;
     }
     const ownSection = !d.section && state.sections && state.m.level[d.from] === 0 ? state.sections.find((s) => d.from >= s.from && d.from < s.to).from : -1;
@@ -3248,7 +3231,7 @@
     if (k < 0 || e.target.closest('input, .copy')) return;
     const v = state.rows[k];
     let from; let end; let section = null;
-    if (v >= 0) { from = v; end = C.subtreeEnd(state.m, v); }
+    if (v >= 0) { from = v; end = blockEnd(v); }
     else if (v <= -2 && extraOf(v).kind === 'section') { section = extraOf(v).sec; from = section.from; end = section.to; }
     else return;
     drag = { from, end, section, x0: e.clientX, y0: e.clientY, y: e.clientY, id: e.pointerId, started: false, at: -1, edges: null, stay: null };
@@ -3277,14 +3260,43 @@
     clickAfterDrag = true;
     setTimeout(() => { clickAfterDrag = false; }, 0);
     if (to < 0) return;
+    moveBlock(from, end, to);
+  });
+  $('grid').addEventListener('pointercancel', () => endDrag());
+
+  // The blocks from..end moved to stand before line `to`, by a drag or by a key: one step, and the
+  // page drawn again with the block's first line selected where it now stands, in view.
+  function moveBlock(from, end, to) {
     const r = C.moveLines(state.doc, from, end, to);
     if (!r.ok) {
       notice(r.reason, 'error');
       return;
     }
     if (r.step) afterAct(to < from ? to : to - (end - from));
-  });
-  $('grid').addEventListener('pointercancel', () => endDrag());
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Moving by key (3.4a, WCAG 2.5.7): with Edit on, ⌥↑ and ⌥↓ move the selected line's block past the
+  // sibling above or below it, for a hand that does not drag.
+  // ---------------------------------------------------------------------------------------------
+
+  // The selected line's block moved past the sibling directly above it (dir -1) or below it (dir 1):
+  // the place and the rules are core.js's (neighbourLanding), the same as a drag's; a refusal is
+  // said in its words. The same line stays selected at its new number, and a block that was shut
+  // stays shut, its fold following its lines. A type row is no line to select, so no key moves a
+  // type. A button can call this as the key does.
+  function moveSelected(dir) {
+    if (!state.doc || !state.editing || drag || state.pick || state.sel < 0 || !state.m.n) return;
+    if (state.edit && !commitEdit(false)) return;
+    const from = state.sel;
+    const end = blockEnd(from);
+    const r = C.neighbourLanding(state.doc, from, end, dir);
+    if (!r.ok) {
+      notice(r.reason, 'error');
+      return;
+    }
+    moveBlock(from, end, r.to);
+  }
 
   applyTheme();
   applyTextSize();

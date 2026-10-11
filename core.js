@@ -1632,6 +1632,28 @@
 
   const continues = (m, i) => i < m.n && (m.tag[i] === 'CONC' || m.tag[i] === 'CONT');
 
+  // The file's record types as sections, when it is bunched by type: each type's records in one run.
+  // A section is { tag, from, to, records, index }, its lines from..to of the view. Null when some
+  // type stands in more than one run, or the file has one type only. The page draws a row between
+  // sections and moves a whole type by its row; keepBunched holds a move to them (3.4a).
+  function sectionsOf(m) {
+    const out = [];
+    const seen = new Set();
+    for (const line of m.records) {
+      const tag = m.tag[line];
+      const last = out[out.length - 1];
+      if (last && last.tag === tag) {
+        last.records += 1;
+        continue;
+      }
+      if (seen.has(tag)) return null;
+      seen.add(tag);
+      out.push({ tag, from: line, to: 0, records: 1, index: out.length });
+    }
+    out.forEach((s, k) => { s.to = k + 1 < out.length ? out[k + 1].from : m.n; });
+    return out.length > 1 ? out : null;
+  }
+
   // The lines from..end of the view as whole sibling blocks: the line whose subtree holds them
   // (their parent; -1 for the file), the blocks under that parent and which of them these are,
   // and the nearest and farthest places they may land (HEAD stays first, TRLR last, and below
@@ -1671,6 +1693,7 @@
   const SUBM_AFTER_HEAD = 'The submitter record stays directly after HEAD, below GEDCOM 7.';
   const TRLR_LAST = 'TRLR stays last.';
   const AT_AN_EDGE = 'A block lands only at the edge of a sibling: between two lines that sit under the same line as it does.';
+  const NOWHERE_ELSE = 'This block has nowhere else to go among its siblings.';
 
   // Why the blocks of `r` may not land before the line at `to`; null when they may, or when `to`
   // is where they already are.
@@ -1699,6 +1722,45 @@
     for (const b of r.blocks) if (b[0] !== from && b[0] !== end && landingRefusal(r, b[0]) === null) at.push(b[0]);
     if (r.stop !== end && landingRefusal(r, r.stop) === null) at.push(r.stop);
     return { reason: null, at, parent: r.parent };
+  }
+
+  // 3.4a, in a file bunched by type (sectionsOf): of the places `at` that landings gives for the
+  // blocks from `from`, those where they keep the file bunched. A record lands only among the
+  // records of its own type, the edge before the next type's first record being the last of those
+  // places; a whole type, `section` (the page's type row, which no line stands for), only at the
+  // edge of another type; a line under a record anywhere among its siblings. A file not bunched is
+  // held to nothing here: every place stands.
+  function keepBunched(doc, from, at, section) {
+    const sections = sectionsOf(doc.view);
+    if (!sections) return at;
+    if (section) {
+      const starts = new Set(sections.map((s) => s.from));
+      return at.filter((to) => starts.has(to));
+    }
+    if (doc.view.level[from] !== 0) return at;
+    const own = sections.find((s) => from >= s.from && from < s.to);
+    return at.filter((to) => to >= own.from && to <= own.to);
+  }
+
+  // 3.4a, by key: where the blocks from..end land to stand before the sibling block directly above
+  // them (dir -1) or directly after the one below (dir +1), the one `to` that moveLines(doc, from,
+  // end, to) then moves them to: { ok: true, to }. Or { ok: false, reason }, in the words of a
+  // drag: the rule that place breaks (HEAD first, TRLR last, the submitter record, nothing between a
+  // line and its CONC or CONT lines), the reason they cannot move at all (a line that did not parse,
+  // a CONC or CONT line), or that they stand first or last among their siblings already, or, in a
+  // file bunched by type, among the records of their type. The place is one that landings gives and
+  // keepBunched leaves, so a key moves a block under every rule of a drag: no line's level or parent
+  // changes. A whole type is moved by the page's type row, not by a line, so no key moves one.
+  function neighbourLanding(doc, from, end, dir) {
+    const l = landings(doc, from, end);
+    if (l.reason) return refuse(l.reason);
+    const { blocks } = blocksUnder(doc.view, l.parent);
+    const sibling = blocks[dir < 0 ? blocks.findIndex((b) => b[0] === from) - 1 : blocks.findIndex((b) => b[1] === end) + 1];
+    if (!sibling) return refuse(NOWHERE_ELSE);
+    const to = dir < 0 ? sibling[0] : sibling[1];
+    if (!l.at.includes(to)) return refuse(moveRefusal(doc, from, end, to));
+    if (!keepBunched(doc, from, [to], false).length) return refuse(NOWHERE_ELSE);
+    return { ok: true, to };
   }
 
   // 3.4a — the blocks from..end moved to stand before the line at `to`; every line keeps its
@@ -2417,13 +2479,13 @@
 
 
   return {
-    TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE_MAX,
+    TERM, TERM_NAMES, KIND, CHECKS, STAMP_NOTE_MAX, NOWHERE_ELSE,
     read, detect, bytesOf, summary,
     recordEnd, subtreeEnd, parentOf, blocksUnder, valueOf, isPointerLine, joinedValue,
     search, searchTag, recordCounts, codePoints,
     openDocument, saveBytes, textOf, termOf,
     editRefusal, editLine, addChild, addSibling, deleteLine, recordDeletion, deleteRecord, undo, redo,
-    moveRefusal, moveLines, landings,
+    moveRefusal, moveLines, landings, sectionsOf, keepBunched, neighbourLanding,
     moveOntoCopy, takeBack, isChanged, asOpened, unsaved, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
     nameParts, nameShown, linkAt, clip, deleteQuestion, linePath, tagMeaning, stripStyles, metaRebuild, metaParts, lineShape,

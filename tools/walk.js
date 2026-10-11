@@ -44,6 +44,9 @@
 // Release 0.6.3 is the empty page as 0.6.0 had it, walked in the bars part: the three frames, the
 // counts bar and the strip there and empty, and in the main frame Open GEDCOM, its one line and its
 // one link, and nothing else; the side frames' hidden or shown, remembered, applies with no file open.
+// Release 0.6.4's ⌥↓ and ⌥↑ are walked in the drags part, by keys alone: a block moved past the sibling below
+// or above it, a shut one, a record by its 0 line, the rows, the right frame's Moved line and Changes read,
+// Undo and Redo once each, a refusal's notice, and the keys doing nothing with Edit off.
 // --shots DIR saves pictures of the fictional files, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
 // third, scroll, drags, save, copy, look, bars, drawers, tags, titles. Exit 0 when every step passes.
@@ -970,6 +973,18 @@ const ROW_RECT = (n) => `(() => { const r = [...document.querySelectorAll('#grid
 const SECTION_RECT = (tag) => `(() => { const r = [...document.querySelectorAll('#grid .row.is-section')].find((x) => x.querySelector('.tg').textContent === '${tag}');
   if (!r) return null; const b = r.getBoundingClientRect(); return { x: b.left + 160, y: b.top + b.height / 2, top: b.top, bottom: b.bottom }; })()`;
 const CHANGES = "[...document.querySelectorAll('#changes-list .v-inner > div')].filter((r) => r.style.display !== 'none').map((r) => r.querySelector('.main').textContent)";
+// The selected row as the grid shows it now: a row the grid has set aside keeps its old look, hidden.
+// Then the rows for lines a to b, as the text of each, one tinted as moved marked [moved]; the selected
+// row's place in the frame (its gap to the frame's bottom edge, and whether it lies inside); the notice shown.
+const SEL_ROW = "[...document.querySelectorAll('#grid .row.is-sel')].find((r) => r.style.display !== 'none')";
+const SEL_NOW = `(() => { const r = ${SEL_ROW}; if (!r) return null; const q = (s) => { const e = r.querySelector(s); return e ? e.textContent : null; };
+  return { ln: Number(q('.ln').replace(/,/g, '')), lv: q('.lv'), id: q('.id'), tag: q('.tg'), shut: !!r.querySelector('.fold.is-shut') }; })()`;
+const KEYED_ROWS = (a, b) => `[...document.querySelectorAll('#grid .row')].filter((r) => { const x = r.querySelector('.ln'); const n = x && Number(x.textContent.replace(/,/g, '')); return r.style.display !== 'none' && n >= ${a} && n <= ${b}; })
+  .map((r) => r.querySelector('.tx').textContent + (r.classList.contains('is-moved') ? ' [moved]' : ''))`;
+const SEL_IN_VIEW = `(() => { const g = document.getElementById('grid'); const r = ${SEL_ROW}; if (!r) return null;
+  const top = g.getBoundingClientRect().top; const bottom = top + g.clientHeight; const b = r.getBoundingClientRect();
+  return { inside: b.top >= top - 1 && b.bottom <= bottom + 1, gap: bottom - b.bottom, scrolled: g.scrollTop }; })()`;
+const NOTICE = "(() => { const n = document.getElementById('notice'); return n.hidden ? null : { text: n.textContent, error: n.classList.contains('is-error') }; })()";
 
 async function thirdRound(page, dir, shots) {
   const file = path.join(dir, 'third.ged');
@@ -1367,6 +1382,103 @@ async function fourthDrags(page, dir, shots) {
   await page.mouse('mouseReleased', i2Rect.x, i2Rect.y + 6);
   check(atHead.line && Math.abs(atHead.y - indiHead.bottom) < 2 && (await page.ev("document.getElementById('changes-count').textContent")) === '',
     'a person dragged to the top of the people: the gold line sits under the INDI row, not above it; released back over its own row, nothing moves');
+
+  // 3.4a by key (0.6.4, the review's A4, WCAG 2.5.7): ⌥↓ and ⌥↑ move the selected line's block past the
+  // sibling below or above it, under every rule of a drag, with Edit on only. Keys alone, no click, so
+  // that none goes in before the drag let go with Esc at the end of this part.
+  const sex = line('1 SEX F');
+  const selectedAt = (n) => `(${SEL_NOW} || {}).ln === ${n}`;
+  const noChanges = "document.getElementById('changes-count').textContent === ''";
+  const noNotice = "(() => { document.getElementById('notice').hidden = true; return true; })()";
+  const birtRows = ['1 BIRT', '2 DATE 1 JAN 1900', '2 PLAC Fixtureville'];
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 520, deviceScaleFactor: 1, mobile: false });   // a frame of about 15 rows, under the file's 50
+  await gotoLine(page, sex);
+  await page.ev(`(() => { const g = document.getElementById('grid'); const r = ${SEL_ROW}; g.scrollTop += r.getBoundingClientRect().bottom - (g.getBoundingClientRect().top + g.clientHeight); return true; })()`);
+  await sleep(60);
+  const atEdge = await page.ev(SEL_IN_VIEW);                         // the line at the frame's bottom edge, so that its new place lies below it
+  await page.key('ArrowDown', 'ArrowDown', 40, 1);                   // ⌥↓
+  await page.waitFor(selectedAt(sex + 3));
+  const down = await page.ev(`({ rows: ${KEYED_ROWS(sex, sex + 3)}, sel: ${SEL_NOW}, view: ${SEL_IN_VIEW}, changes: ${CHANGES}, detail: (document.querySelector('#detail .detail-moved') || {}).textContent,
+    undo: document.getElementById('undo').title, rule: document.querySelectorAll('#grid .row.is-moved-above').length, notice: ${NOTICE} })`);
+  check(atEdge.gap < 2 && JSON.stringify(down.rows) === JSON.stringify([...birtRows, '1 SEX F [moved]']) && down.sel.ln === sex + 3 && down.sel.tag === 'SEX' && down.view.inside && down.view.scrolled > atEdge.scrolled
+    && down.changes.length === 1 && down.changes[0].startsWith('moved: SEX') && down.changes[0].endsWith('1 line') && down.detail.startsWith('Moved') && down.detail.endsWith(`line ${fmt(sex)} as saved`)
+    && down.rule === 1 && down.undo === `Undo: Move line ${sex} to ${sex + 3} (⌘Z)` && down.notice === null,
+  `⌥↓ on 1 SEX F, at the frame's bottom edge: it stands after the BIRT block, still selected as line ${sex + 3} and scrolled into view; Changes reads "${down.changes[0]}"; the right frame says "${down.detail}"; a rule marks where it was; Undo says "${down.undo}"`);
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await page.key('ArrowUp', 'ArrowUp', 38, 1);                       // ⌥↑: back where it was
+  await page.waitFor(selectedAt(sex));
+  const back = await page.ev(`({ rows: ${KEYED_ROWS(sex, sex + 3)}, sel: ${SEL_NOW}, count: document.getElementById('changes-count').textContent, dirty: !document.getElementById('dirty').hidden, undo: document.getElementById('undo').title })`);
+  check(JSON.stringify(back.rows) === JSON.stringify(['1 SEX F', ...birtRows]) && back.sel.ln === sex && back.sel.tag === 'SEX' && back.count === '' && !back.dirty && back.undo === `Undo: Move line ${sex + 3} to ${sex} (⌘Z)`,
+    '⌥↑ puts it back, still selected: the rows as they were; moved back to where it was, it is no change at all, no ● and nothing in Changes');
+  await page.key('z', 'KeyZ', 90, 4);                                // ⌘Z: the ⌥↑ taken back, one step
+  await page.waitFor("document.getElementById('changes-count').textContent === '1'");
+  const undone = await page.ev(KEYED_ROWS(sex, sex + 3));
+  await page.key('Z', 'KeyZ', 90, 12);                               // ⇧⌘Z: and made again
+  await page.waitFor(noChanges);
+  const redone = await page.ev(KEYED_ROWS(sex, sex + 3));
+  check(JSON.stringify(undone) === JSON.stringify([...birtRows, '1 SEX F [moved]']) && JSON.stringify(redone) === JSON.stringify(['1 SEX F', ...birtRows]),
+    'one ⌘Z takes back one press and one ⇧⌘Z makes it again');
+
+  // a block that was shut stays shut, its lines hidden, and the right frame names the lines it holds
+  await gotoLine(page, birt);
+  await page.key('ArrowLeft', 'ArrowLeft', 37);                      // ← shuts the BIRT block
+  await page.waitFor(`(${SEL_NOW} || {}).shut`);
+  await page.key('ArrowUp', 'ArrowUp', 38, 1);                       // ⌥↑: the shut block before the SEX line
+  await page.waitFor(selectedAt(sex));
+  const shut = await page.ev(`({ rows: ${KEYED_ROWS(sex, sex + 3)}, sel: ${SEL_NOW}, title: document.getElementById('frame-title').textContent })`);
+  check(shut.sel.shut && JSON.stringify(shut.rows) === JSON.stringify(['1 BIRT', '1 SEX F [moved]']) && shut.sel.tag === 'BIRT' && shut.title === `Lines ${fmt(sex)}-${fmt(sex + 2)}`,
+    `⌥↑ on a shut BIRT block: it stands before the SEX line, still shut, its 2 lines hidden (the rows are ${shut.rows.join(', ')}); the right frame says "${shut.title}"`);
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor(noChanges);
+  await gotoLine(page, birt);
+  await page.key('ArrowRight', 'ArrowRight', 39);                    // → opens it again
+  await page.waitFor(`!(${SEL_NOW} || {}).shut`);
+
+  // a 0 line takes its whole record; the rules of a drag hold: the submitter record stays directly after HEAD
+  const i1k = line('0 @I1@ INDI');
+  await gotoLine(page, line('0 @I2@ INDI'));
+  await page.key('ArrowUp', 'ArrowUp', 38, 1);                       // ⌥↑ on a record's 0 line
+  await page.waitFor(selectedAt(i1k));
+  const rec = await page.ev(`({ rows: ${KEYED_ROWS(i1k, i1k + 3)}, sel: ${SEL_NOW}, changes: ${CHANGES}, detail: (document.querySelector('#detail .detail-moved') || {}).textContent })`);
+  check(rec.rows.length === 4 && rec.rows.every((t) => t.endsWith(' [moved]')) && rec.sel.id === '@I2@' && rec.sel.tag === 'INDI' && rec.changes.length === 1 && rec.changes[0].startsWith('moved: record') && rec.changes[0].endsWith('4 lines')
+    && rec.detail.endsWith(`line ${fmt(line('0 @I2@ INDI'))} as saved`),
+  `⌥↑ on @I2@'s 0 line: its whole record, 4 lines, stands before @I1@'s, still selected as line ${i1k}; Changes reads "${rec.changes[0]}"`);
+  await page.ev(noNotice);
+  await page.key('ArrowUp', 'ArrowUp', 38, 1);                       // ⌥↑ again: now the submitter record is above it
+  await page.waitFor("!document.getElementById('notice').hidden");
+  const subm = await page.ev(`({ notice: ${NOTICE}, sel: ${SEL_NOW}, changes: ${CHANGES} })`);
+  check(subm.notice.error && subm.notice.text === 'The submitter record stays directly after HEAD, below GEDCOM 7.' && subm.sel.ln === i1k && subm.changes.length === 1,
+    `⌥↑ again, with the submitter record above: refused, as a drag is, "${subm.notice.text}"; the record stays where it is`);
+  await page.key('z', 'KeyZ', 90, 4);
+  await page.waitFor(noChanges);
+
+  // the other refusals, each in the words a drag uses, and none a step
+  const refusal = async (n, arrow) => {
+    await gotoLine(page, n);
+    await page.ev(noNotice);
+    const undo = await page.ev("document.getElementById('undo').title");
+    await page.key(arrow, arrow, arrow === 'ArrowUp' ? 38 : 40, 1);
+    await page.waitFor("!document.getElementById('notice').hidden");
+    const got = await page.ev(`({ notice: ${NOTICE}, sel: ${SEL_NOW}, count: document.getElementById('changes-count').textContent, same: document.getElementById('undo').title === ${JSON.stringify(undo)} })`);
+    return { ...got, ok: got.notice.error && got.sel.ln === n && got.count === '' && got.same };
+  };
+  const lastPerson = await refusal(line('0 @I3@ INDI'), 'ArrowDown');
+  const lastRecord = await refusal(line('0 @O1@ OBJE'), 'ArrowDown');
+  const firstLine = await refusal(line('1 NAME Jane /Fixture/'), 'ArrowUp');
+  check(lastPerson.ok && lastPerson.notice.text === 'This block has nowhere else to go among its siblings.' && firstLine.ok && firstLine.notice.text === lastPerson.notice.text && lastRecord.ok && lastRecord.notice.text === 'TRLR stays last.',
+    `refused, in the words a drag uses, and no step made: the last person down (the next record is a family) "${lastPerson.notice.text}"; the last record down "${lastRecord.notice.text}"; the first line under its record up "${firstLine.notice.text}"`);
+
+  // with Edit off the keys do nothing
+  await page.press('e', 'KeyE', 69, 'e');                            // E: Edit off
+  await page.waitFor("document.getElementById('edit').getAttribute('aria-pressed') === 'false'");
+  await gotoLine(page, sex);
+  await page.ev(noNotice);
+  await page.key('ArrowDown', 'ArrowDown', 40, 1);
+  await sleep(100);
+  const off = await page.ev(`({ rows: ${KEYED_ROWS(sex, sex + 3)}, sel: ${SEL_NOW}, count: document.getElementById('changes-count').textContent, notice: ${NOTICE} })`);
+  await page.press('e', 'KeyE', 69, 'e');                            // E: Edit on again
+  await page.waitFor("document.getElementById('edit').getAttribute('aria-pressed') === 'true'");
+  check(JSON.stringify(off.rows) === JSON.stringify(['1 SEX F', ...birtRows]) && off.sel.ln === sex && off.count === '' && off.notice === null, 'with Edit off ⌥↓ does nothing: the line stays, nothing is moved, nothing is said');
 
   // a release over its own place moves nothing; then, last of all — a drag let go with Escape is
   // where this Chrome can stop answering (tools/chrome.js, `press`) — a record dragged beyond its
