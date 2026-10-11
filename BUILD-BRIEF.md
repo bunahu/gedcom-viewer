@@ -564,8 +564,8 @@ of Settings, and carries three parts from now on.
 0.6.1 (2026-10-10), withdrawn in 0.6.3 at his word: a first screen (one centred column of text, with
 the frames, the counts bar and the strip hidden until a file opened). With no file open the page is
 as 0.6.0 had it: the frames, the counts bar and the strip with Top, and in the main frame **Open
-GEDCOM** and the one line "The file does not leave your computer. Privacy Policy". From 0.6.1, kept:
-Below 1,100 px of width the right frame is a drawer over the lines, below 800 px
+GEDCOM** and the one line "The file does not leave your computer. Privacy Policy". From 0.6.1, kept,
+with a file open: below 1,100 px of width the right frame is a drawer over the lines, below 800 px
 the left bar too, each one icon wide when shut, opened and shut from its icon at the strip's end;
 a drawer shuts on a chosen line, Esc, Add line under or after, ⌘L, a file opening, or the window
 crossing a breakpoint, and opens for a check's title (the right), ⌘F or a click on the counts bar
@@ -1838,3 +1838,9 @@ attribution; one empty `SEX` value, titles in `TITL` where they belong), on Bach
 read line by line for how it uses the standard, which is the test he set. 0.6.3 removes the first
 screen and the sample and keeps the drawers, the page on the copy and the tag table; Judge by moves
 to 0.6.4.
+
+0.6.3 was built by Sonnet, walked by him and tagged the same day (376 tests; the walk at 252
+steps). The empty page renders byte for byte as v0.6.0's own files do at the same size. The
+drawers are for an open file only, so with no file the empty page keeps 0.6.0's three columns at
+every width, squeezed below about 1,100 px as 0.6.0 was; a change there is his to see first. The
+drawers' walk steps moved onto the bars part's made-up file.
