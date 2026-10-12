@@ -1468,6 +1468,31 @@ async function fourthDrags(page, dir, shots) {
   check(lastPerson.ok && lastPerson.notice.text === 'This block has nowhere else to go among its siblings.' && firstLine.ok && firstLine.notice.text === lastPerson.notice.text && lastRecord.ok && lastRecord.notice.text === 'TRLR stays last.',
     `refused, in the words a drag uses, and no step made: the last person down (the next record is a family) "${lastPerson.notice.text}"; the last record down "${lastRecord.notice.text}"; the first line under its record up "${firstLine.notice.text}"`);
 
+  // a line removed from a record that then moves goes back into that record (the beta-readiness review,
+  // 2026-10-12): @I3@'s FAMC deleted by its key, and @I3@, three lines now, pressed above @I2@'s four by
+  // ⌥↑; the struck FAMC is drawn under @I3@'s NAME at its new place, and Restore puts it there, not
+  // under @I2@, where @I3@ was
+  const rowsSeen = "[...document.querySelectorAll('#grid .row')].filter((r) => r.style.display !== 'none' && r.querySelector('.tx')).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((r) => r.querySelector('.tx').textContent + (r.classList.contains('is-removed') ? ' [removed]' : ''))";
+  const underAda = (rows) => rows[rows.indexOf('1 NAME Ada /Fixture/') + 1];
+  await gotoLine(page, line('1 FAMC @F1@'));
+  await page.ev(noNotice);
+  await page.key('Delete', 'Delete', 46);                            // Delete: the line, which has nothing under it
+  await page.waitFor("document.querySelector('#grid .row.is-removed')");
+  await gotoLine(page, line('0 @I3@ INDI'));
+  await page.key('ArrowUp', 'ArrowUp', 38, 1);                       // ⌥↑: @I3@ before @I2@
+  await page.waitFor(selectedAt(i2));
+  const drawn = await page.ev(rowsSeen);
+  await page.click("document.querySelector('#grid .row.is-removed')");
+  const restoreOffer = await page.ev("[...document.querySelectorAll('#detail .detail-actions button')].map((b) => b.textContent)");
+  await page.click(ACTION('Restore'));
+  await page.waitFor("!document.querySelector('#grid .row.is-removed')");
+  const restored = await page.ev(`({ rows: ${rowsSeen}, changes: ${CHANGES}, notice: ${NOTICE} })`);
+  check(underAda(drawn) === '1 FAMC @F1@ [removed]' && restoreOffer[0] === 'Restore' && underAda(restored.rows) === '1 FAMC @F1@'
+    && restored.rows.indexOf('1 NAME Ada /Fixture/') < restored.rows.indexOf('1 NAME Joe /Fixture/') && restored.changes.length === 1 && restored.changes[0].startsWith('moved: record') && restored.notice === null,
+  `a line deleted from @I3@, and @I3@ pressed above @I2@ by ⌥↑: the struck FAMC is drawn under @I3@'s NAME, where it now belongs; Restore puts it there, so Changes reads only "${restored.changes[0]}"`);
+  for (let k = 0; k < 3; k += 1) await page.key('z', 'KeyZ', 90, 4);   // ⌘Z three times: the restore, the press and the delete
+  await page.waitFor(noChanges);
+
   // with Edit off the keys do nothing
   await page.press('e', 'KeyE', 69, 'e');                            // E: Edit off
   await page.waitFor("document.getElementById('edit').getAttribute('aria-pressed') === 'false'");

@@ -130,6 +130,24 @@ describe('N8: a standard tag where the standard does not put it', () => {
     assert.deepEqual(found(read(undeclared)).map((f) => f[0]), ['N9'], 'an undeclared one: its own note, and nothing for the BIRT');
   });
 
+  it('nothing at any depth below an extension is judged: a standard tag two or more lines down is not out of place (the beta-readiness review)', () => {
+    const seven = file('7.0', '0 @L1@ _LOC\n1 NAME Town\n2 DATE FROM 1800 TO 1900\n3 TIME 10:00\n1 _LOC @L1@\n', '1 SCHMA\n2 TAG _LOC https://example.org/_LOC\n');
+    assert.deepEqual(found(read(seven)), [], 'a DATE under _LOC.NAME, as 7.0\'s own example has it: an extension-defined substructure');
+    const five = file('5.5.1', '0 _PLAC_DEFN\n1 PLAC Town\n2 ABBR T\n3 FOO9 x\n');
+    assert.deepEqual(found(read(five)), [], 'an ABBR two lines below a custom record, and a made-up tag below that');
+    const deep = file('5.5.1', '0 @I1@ INDI\n1 _MILT\n2 NOTE n\n3 HUSB @I1@\n4 BIRT\n1 BIRT\n2 HUSB @I1@\n');
+    assert.deepEqual(found(read(deep)), [['N8', at(deep, '2 HUSB @I1@'), 'HUSB does not belong under BIRT']],
+      'the lines under _MILT raise nothing; the BIRT after it is judged again, and the HUSB under that BIRT is out of place');
+  });
+
+  it('7.0\'s own example of an extension record raises nothing of the kind', { skip: h.NO_CORPORA }, () => {
+    const m = h.readFile(path.join(h.CORPORA, 'gedcom7', 'extension-record.ged'));
+    assert.equal(m.tagVersion, '7.0');
+    assert.deepEqual(found(m).filter((f) => f[0] !== 'N9'), [], 'the DATE under _LOC.NAME at line 13 is the extension\'s own');
+    assert.deepEqual(found(m).map((f) => f.slice(0, 2)), [['N9', 10], ['N9', 11], ['N9', 14], ['N9', 15]],
+      'its _LOC, which no SCHMA declares, is noted where it stands, as before');
+  });
+
   it('a tag under the wrong standard tag is one finding, on the line that is out of place, and what is under it is judged by it', () => {
     const t = file('5.5.1', '0 @I1@ INDI\n1 HUSB @I2@\n2 AGE 30\n1 CHIL @I2@\n0 @I2@ INDI\n');
     assert.deepEqual(found(read(t)), [['N8', at(t, '1 HUSB @I2@'), 'HUSB does not belong under INDI'], ['N8', at(t, '1 CHIL @I2@'), 'CHIL does not belong under INDI']],

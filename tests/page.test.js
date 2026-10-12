@@ -515,12 +515,12 @@ describe('the page', () => {
     assert.equal((ui.match(/leaveTagsSearch\(\);/g) || []).length, 5, 'the way back goes for a search of one\'s own (typed, Tag turned), a file opened or refused, and once it is taken');
   });
 
-  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.3", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
+  it('the version is out of the title bar and at the foot of the Settings menu, "Version 0.6.4", in three parts, centred, written once; the problem report reads it there; the README has a row for it', () => {
     const page = read('index.html');
     const menu = page.slice(page.indexOf('id="settings-menu"'), page.indexOf('</div>\n\n<nav class="counts"'));
     const foot = menu.match(/<div class="menu-foot">Version <span id="version">(\d+\.\d+\.\d+)<\/span><\/div>\s*$/);
     assert.ok(foot, 'no version line, three parts, at the foot of the Settings menu');
-    assert.equal(foot[1], '0.6.3');
+    assert.equal(foot[1], '0.6.4');
     assert.ok(/\.menu-foot \{[^}]*text-align: center;/.test(read('style.css')), 'the line is centred');
     assert.ok(menu.lastIndexOf('class="menu-row"') < menu.indexOf('class="menu-foot"'), 'at its foot');
     assert.equal((page.match(/\bid="version"/g) || []).length, 1, 'the version is written once');

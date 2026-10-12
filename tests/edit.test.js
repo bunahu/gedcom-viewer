@@ -731,6 +731,83 @@ describe('refused, loudly (I11)', () => {
     ok(core.editLine(lf, 2, ''));                                    // allowed, and malformed: E5 says so
     assert.deepEqual(h.findingsOf(lf.view).E5, [3]);
   });
+
+  it('in a file read as LF CR, an act that would leave it a first line ending otherwise, with a line ending LF CR after it (the beta-readiness review)', () => {
+    // LF CR is one line ending only in a file whose first line ends that way (6.2): HEAD deleted,
+    // 0 @I1@ INDI (CR LF) would be first, and 1 NAME's LF CR would read back as LF, then a blank line
+    const mixed = '0 HEAD\n\r1 CHAR UTF-8\n\r0 @I1@ INDI\r\n1 NAME Ada /L/\n\r0 TRLR\n\r';
+    const doc = openText(mixed);
+    assert.equal(doc.view.n, 5);
+    const r = core.deleteLine(doc, 0);
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'The first line would then end CR LF, not LF CR, and LF CR is one line ending only in a file whose first line ends that way (6.2): ' +
+      'line 2, which ends LF CR, would read back as two lines, the second of them blank.');
+    assert.equal(doc.done.length, 0, 'refused, and undone at once');
+    assert.equal(hash(doc), h.sha256(doc.m.bytes));
+    assert.equal(core.read(core.saveBytes(doc)).n, 5);
+    // a record moved to the top of a file with no HEAD: the same, by a move
+    const headless = openText('0 @I1@ INDI\n\r1 NAME Ada /L/\n\r0 @I2@ INDI\r\n1 NAME Bob /S/\r\n0 TRLR\n\r');
+    assert.equal(core.neighbourLanding(headless, 2, 4, -1).to, 0);
+    assert.match(core.moveLines(headless, 2, 4, 0).reason, /^The first line would then end CR LF, not LF CR,.* line 3, which ends LF CR,/);
+    // the same acts in a file that ends every line LF CR: the next first line ends LF CR too
+    const all = openText('0 HEAD\n\r1 CHAR UTF-8\n\r0 @I1@ INDI\n\r1 NAME Ada /L/\n\r0 TRLR\n\r');
+    ok(core.deleteLine(all, 0));
+    sameAsFreshRead(all);
+    assert.equal(core.read(core.saveBytes(all)).n, 3);
+  });
+});
+
+describe('a file read as LF CR, with other endings after its first line: every act is what a fresh read shows (6.2, I11)', () => {
+  // Small made-up files of that shape: the first line ends LF CR, and later lines end LF CR, CR LF,
+  // LF or CR; some with no HEAD, so that a record may move to the top.
+  const ENDINGS = ['\n\r', '\r\n', '\n', '\r'];
+  function mixedFile(rnd, head) {
+    const lines = head ? ['0 HEAD', '1 CHAR UTF-8'] : [];
+    for (let p = 1, people = 2 + Math.floor(rnd() * 3); p <= people; p += 1) {
+      lines.push(`0 @I${p}@ INDI`, `1 NAME P${p} /Made/`);
+      if (rnd() < 0.5) lines.push('1 BIRT', `2 DATE ${1900 + p}`);
+    }
+    lines.push('0 TRLR');
+    return lines.map((line, k) => line + (k === 0 ? '\n\r' : ENDINGS[Math.floor(rnd() * ENDINGS.length)])).join('');
+  }
+
+  it('acts at random over 60 such files: each accepted act re-reads as shown, each refused one says why', () => {
+    const rnd = prng(2026);
+    let refusedFirst = 0;
+    let made = 0;
+    for (let f = 0; f < 60; f += 1) {
+      const text = mixedFile(rnd, f % 3 !== 0);
+      const doc = openText(text);
+      assert.equal(doc.m.term[0], core.TERM.LFCR, 'read as LF CR');
+      for (let k = 0; k < 20 && doc.order.length; k += 1) {
+        const pos = rnd() < 0.3 ? 0 : Math.floor(rnd() * doc.order.length);
+        const end = core.subtreeEnd(doc.view, pos);
+        const roll = rnd();
+        let r;
+        if (roll < 0.3) r = core.deleteLine(doc, pos);
+        else if (roll < 0.45) r = core.deleteRecord(doc, pos);
+        else if (roll < 0.7) {
+          const at = core.landings(doc, pos, end).at;
+          r = at.length ? core.moveLines(doc, pos, end, at[Math.floor(rnd() * at.length)]) : null;
+        } else if (roll < 0.8) {
+          const run = core.changeRuns(doc).find((x) => x.kind === 'removed');
+          r = run ? core.restoreLines(doc, run.before, run.lines.length) : null;
+        } else if (roll < 0.9) r = { ok: true, step: core.undo(doc) };
+        else r = { ok: true, step: core.redo(doc) };
+        if (!r) continue;
+        if (!r.ok) {
+          assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
+          if (/^The first line would then end/.test(r.reason)) refusedFirst += 1;
+          continue;
+        }
+        made += 1;
+        sameAsFreshRead(doc);
+      }
+      while (doc.done.length) core.undo(doc);
+      assert.equal(hash(doc), h.sha256(new Uint8Array(Buffer.from(text, 'utf8'))), 'everything undone');
+    }
+    assert.ok(made > 300 && refusedFirst > 10, `${made} acts, ${refusedFirst} refused for the first line's ending`);
+  });
 });
 
 // A small seeded generator (mulberry32), so a failure can be run again.

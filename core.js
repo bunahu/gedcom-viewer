@@ -408,10 +408,13 @@
   //   N8   a standard tag whose parent line's tag is a standard one too, and the table does not put
   //        the first under the second (allowedUnder).
   //   N9   7.0 only: a custom tag the header's SCHMA does not declare.
-  // A line is judged by E10 and N8 only when what it stands under is a standard tag (or it is a
-  // record's own line): a line under a malformed, custom or undeclared tag is not, so that one
-  // mistake, FAM9, makes one finding and not one for each line under it. N9 is a fact about the tag
-  // alone, and is said on every undeclared one. The parent of a line is the nearest line above it at
+  // A line is judged by E10 and N8 only when what it stands under is a standard tag that was judged
+  // itself (or it is a record's own line): a line under a malformed, custom or undeclared tag is
+  // not, so that one mistake, FAM9, makes one finding and not one for each line under it; and
+  // nothing at any depth below an extension is, since 7.0 calls such a line an extension-defined
+  // substructure, as tags.js's header warns: the DATE under `_LOC.NAME` in 7.0's own example is not
+  // out of place (the beta-readiness review, 2026-10-12). N9 is a fact about the tag alone, and is
+  // said on every undeclared one. The parent of a line is the nearest line above it at
   // a lower level, as parentOf has it; a line that did not parse ends nothing (6.4).
   // The table is asked once for each tag, and once for each tag under each parent.
   function judgeTags(n, texts, level, tag, valAt, records, declared, add) {
@@ -442,7 +445,7 @@
       }
       openLevel[depth] = lv;
       openTag[depth] = t;
-      openStandard[depth] = kind === 'standard';
+      openStandard[depth] = kind === 'standard' && place !== null;
       depth += 1;
     }
     return { version, schema };
@@ -1056,24 +1059,37 @@
     });
   }
 
+  // Whether the lines of `order`, written out, would be read as a file whose first line ends LF CR
+  // (6.2), as read() decides it: the first line ends LF CR, or it ends LF and the next is an empty
+  // line whose ending begins with CR.
+  function readsLfcr(doc) {
+    const order = doc.order;
+    if (!order.length) return false;
+    const first = termOf(doc, order[0]);
+    return first === TERM.LFCR || (first === TERM.LF && order.length > 1 && textOf(doc, order[1]) === '' &&
+      TERM_BYTES[termOf(doc, order[1])][0] === CR);
+  }
+
   // Whether the lines of `order`, written out, read back as these same lines (6.2). A line's text
   // holds no CR or LF, so every line ends where its terminator starts; what can go wrong is where
   // two lines meet. A line with no terminator runs into the next; an empty last line with no
   // terminator is no line at all; and an empty line's terminator can join the one before it: CR
   // then LF is one CR LF, and LF then CR is one LF CR in a file whose first line ends that way.
+  // And in a file whose first line does not end that way, LF CR is two terminators: a line ending
+  // LF CR in a file read so (the beta-readiness review, 2026-10-12: an act that gives such a file
+  // another first line, with mixed endings after it) would read back as two lines, the second blank.
   // The line where it would go wrong, or -1.
   function joinFault(doc) {
     const order = doc.order;
     const n = order.length;
     if (n === 0) return -1;
-    const first = termOf(doc, order[0]);
-    const lfcr = first === TERM.LFCR || (first === TERM.LF && n > 1 && textOf(doc, order[1]) === '' &&
-      TERM_BYTES[termOf(doc, order[1])][0] === CR);
+    const lfcr = readsLfcr(doc);
     let before = -1;                                                 // the terminator of the line above
     for (let k = 0; k < n; k += 1) {
       const e = order[k];
       const t = termOf(doc, e);
       if (before === TERM.NONE) return k - 1;
+      if (t === TERM.LFCR && !lfcr) return k;
       if (textOf(doc, e).length === 0) {
         const unit = TERM_BYTES[t][0];
         if (t === TERM.NONE) return k;
@@ -1087,7 +1103,13 @@
 
   function faultReason(doc, k) {
     const at = num(k + 1);
-    if (termOf(doc, doc.order[k]) !== TERM.NONE) {
+    const t = termOf(doc, doc.order[k]);
+    if (t === TERM.LFCR && !readsLfcr(doc)) {
+      const first = ['no line ending', 'LF', 'CR', 'CR LF', 'LF CR'][termOf(doc, doc.order[0])];
+      return `The first line would then end ${first}, not LF CR, and LF CR is one line ending only in a file whose first line ends that way (6.2): ` +
+        `line ${at}, which ends LF CR, would read back as two lines, the second of them blank.`;
+    }
+    if (t !== TERM.NONE) {
       return `The empty line at line ${at} would not read back as a line: its line ending would join the one above it.`;
     }
     if (k < doc.order.length - 1) return `Line ${at} has no line ending, and the line after it would run into it.`;
@@ -1416,8 +1438,9 @@
   // and a line after of one lineage that kept its order are one line changed; a line the two
   // share that did not keep its order has moved (3.4a); the other lines before were removed, the
   // other lines after added. Each item holds the line's place before (in `savedOrder`) and after
-  // (in `order`), -1 where it has none. A removed line also holds `at`, the place after where it
-  // was; so does a moved line — where it was taken from — and a moved line whose entry differs as
+  // (in `order`), -1 where it has none. A removed line also holds `at`, the place in the lines now
+  // where it would go back: in its own block, wherever that block has moved since (placeRemoved). A
+  // moved line holds `at` too, where it was taken from, and a moved line whose entry differs as
   // well is `changed` too. Given `base` (`openedOrder`, the file first opened), the same, against it.
   function netChange(doc, base) {
     const S = base || doc.savedOrder;
@@ -1492,7 +1515,121 @@
         }
       }
     }
-    return movedOut.size ? items.filter((it) => !it.dead) : items;
+    const out = movedOut.size ? items.filter((it) => !it.dead) : items;
+    placeRemoved(doc, S, lineO, out);
+    return out;
+  }
+
+  // The walk puts a removed line after the lines that kept their order around it, and when the
+  // block that held it has moved (3.4a), that is the block's old place, in another block or another
+  // record (the beta-readiness review of 2026-10-12). So each run of removed lines, as changeRuns
+  // makes them (one after another as saved, in one record, and all written by a change stamp, all
+  // as the header's date, or all by neither), takes the place restorePlace gives it as its `at`:
+  // where the page draws it struck through, and where Restore puts it. Where no place keeps every
+  // line under its own, the walk's place stands for the page, and Restore says why it cannot.
+  function placeRemoved(doc, S, placeOf, items) {
+    const writer = (a) => { const role = stampOf(doc, S[a]); return role === null ? 0 : role === 'header' ? 2 : 1; };
+    for (let k = 0; k < items.length;) {
+      if (items[k].kind !== 'removed') { k += 1; continue; }
+      let e = k + 1;
+      while (e < items.length && items[e].kind === 'removed' && items[e].before === items[e - 1].before + 1 &&
+        shapeOf(doc, S[items[e].before]).level !== 0 && writer(items[e].before) === writer(items[k].before)) e += 1;
+      const place = restorePlace(doc, S, placeOf, items[k].before, items[e - 1].before + 1);
+      if (place.reason === undefined) for (let j = k; j < e; j += 1) items[j].at = place.at;
+      k = e;
+    }
+  }
+
+  // Where removed lines `s0` … `s1 - 1` of `S` (the file the page is on, as saved) go back into the
+  // lines now, so that each sits under the line it sat under in `S`, and no line comes to sit under
+  // another (6.4). The place is after the nearest line above them, among their siblings, that is
+  // still in the file, at the end of its block: so lines removed from a block that has moved since go
+  // back into it, wherever it is. With no such sibling, it is directly under the line they sat
+  // under, past its own CONC and CONT lines. From there it goes past any line deeper than the
+  // shallowest of them, which would otherwise come to sit under them; and it must leave each of
+  // them under the line it was under. Lines that did not parse sit in whatever they sit in, so they
+  // go after the nearest line above them that is still in the file. `placeOf` gives where a lineage
+  // is in the lines now (-1: not in the file). { at }, or { reason } when no place will do.
+  function restorePlace(doc, S, placeOf, s0, s1) {
+    const O = doc.order;
+    const level = (e) => shapeOf(doc, e).level;
+    const continuing = (e) => { const t = shapeOf(doc, e).tag; return t === 'CONC' || t === 'CONT'; };
+    const now = (a) => placeOf(lineageOf(doc, S[a]));
+    const afterNearest = () => {
+      for (let a = s0 - 1; a >= 0; a -= 1) if (now(a) >= 0) return now(a) + 1;
+      return 0;
+    };
+    const hang = [];                                                 // the levels at which they hang from lines above them
+    let head = -1;                                                   // the first of them that parsed
+    for (let a = s0; a < s1; a += 1) {
+      const lv = level(S[a]);
+      if (lv < 0) continue;
+      if (head < 0) head = a;
+      if (!hang.length || lv < hang[hang.length - 1]) hang.push(lv);
+    }
+    if (head < 0) return { at: afterNearest() };
+    const top = hang[0];
+    const shallowest = hang[hang.length - 1];
+    const they = s1 - s0 > 1 ? 'These lines' : 'This line';
+    const lineAt = (a) => clipped(textOf(doc, S[a]), QUESTION_CHARS);
+    const above = parentsAbove((a) => level(S[a]), s0, hang);
+    const parent = above[0];
+    if (parent >= 0 && now(parent) < 0) {
+      return { reason: `${they} sat under ${lineAt(parent)}, which is no longer in the file: restore that line first.` };
+    }
+    const tries = [];
+    for (let a = s0 - 1; a > parent; a -= 1) {
+      if (level(S[a]) === top && now(a) >= 0) { tries.push(blockEnd(doc, now(a))); break; }
+    }
+    tries.push(parent >= 0 ? now(parent) + 1 : afterNearest());
+    let wrong = -1;                                                  // which of `above` the first try would not keep
+    for (let at of tries) {
+      if (!continuing(S[head])) while (at < O.length && level(O[at]) === top && continuing(O[at])) at += 1;
+      for (let p = at; p < O.length; p += 1) {
+        const lv = level(O[p]);
+        if (lv < 0) continue;
+        if (lv <= shallowest) break;
+        at = p + 1;
+      }
+      const below = parentsAbove((p) => level(O[p]), at, hang);
+      const k = hang.findIndex((_, j) => (above[j] < 0 ? below[j] >= 0
+        : below[j] < 0 || lineageOf(doc, O[below[j]]) !== lineageOf(doc, S[above[j]])));
+      if (k < 0) return { at };
+      if (wrong < 0) wrong = k;
+    }
+    const many = s1 - s0 > 1;
+    const was = above[wrong] >= 0 ? `under ${lineAt(above[wrong])}, the line ${many ? 'they' : 'it'} sat under` : `where ${many ? 'they were' : 'it was'}`;
+    return { reason: `${they} cannot be put back ${was}: the lines around that place have changed.` };
+  }
+
+  // For each level in `levels`, deepest first and each shallower than the last, the nearest place
+  // before `at` that holds a line that parsed at a shallower level (`levelAt` gives a place's
+  // level, -1 for a line that did not parse): the line a line at that level, put at `at`, would
+  // sit under. -1 where there is none, as for a line at level 0.
+  function parentsAbove(levelAt, at, levels) {
+    const out = new Array(levels.length).fill(-1);
+    let k = 0;
+    for (let p = at - 1; p >= 0 && k < levels.length && levels[k] > 0; p -= 1) {
+      const lv = levelAt(p);
+      if (lv < 0) continue;
+      while (k < levels.length && lv < levels[k]) { out[k] = p; k += 1; }
+    }
+    return out;
+  }
+
+  // The end of the block that line `j` of the lines now heads, as subtreeEnd has it, read from the
+  // lines themselves.
+  function blockEnd(doc, j) {
+    const O = doc.order;
+    const lv = shapeOf(doc, O[j]).level;
+    if (lv < 0) return j + 1;
+    let p = j + 1;
+    while (p < O.length) {
+      const l = shapeOf(doc, O[p]).level;
+      if (l >= 0 && l <= lv) break;
+      p += 1;
+    }
+    return p;
   }
 
   // The record a line of `savedOrder` (or of `base`) sat in, as its record line's place there (-1:
@@ -1614,15 +1751,20 @@
   }
 
   // Lines removed since the file the page is on was opened or saved, put back where they were:
-  // lines `before` … `before + count - 1` as saved, every one of them removed, back in their place,
-  // as one step. They are the saved lines themselves, so once back they are no change at all.
+  // lines `before` … `before + count - 1` as saved, every one of them removed, back in their own
+  // block, wherever it has moved since, each under the line it sat under (restorePlace), as one
+  // step; or refused, saying why, when no place keeps them so. They are the saved lines themselves,
+  // so once back where they were they are no change at all.
   function restoreLines(doc, before, count) {
+    const S = doc.savedOrder;
     const items = netChange(doc).filter((it) => it.kind === 'removed' && it.before >= before && it.before < before + count);
-    if (!count || items.length !== count || items.some((it) => it.at !== items[0].at)) {
+    if (!count || items.length !== count) {
       return refuse('Those lines are not all removed, side by side, since the file was opened or saved.');
     }
+    const place = restorePlace(doc, S, placesByLineage(doc, doc.order), before, before + count);
+    if (place.reason !== undefined) return refuse(place.reason);
     const done = [];
-    cut(doc, done, items[0].at, 0, items.map((it) => doc.savedOrder[it.before]));
+    cut(doc, done, place.at, 0, items.map((it) => S[it.before]));
     return finish(doc, count > 1 ? `Restore ${num(count)} lines` : 'Restore a line', done);
   }
 
