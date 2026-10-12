@@ -200,10 +200,35 @@ for byte. `shasum -a 256 <file>` in Terminal gives the same one, for the origina
 
 ## Report a problem
 
-**Settings → Report a problem…** writes a report of counts and codes (the file's size, lines,
-encoding, the header's program, record counts, check findings by code and line number, the
-browser, Edit and the unsaved changes, and the first twelve characters of the file's sha256) and
-never a line of the file, its name or its folder. It shows in a box to read, change or cut; **What
+**Settings → Report a problem…** writes a report of counts and codes, made so that a problem can be
+found again without the file:
+
+- the file: its size, lines, encoding, line endings, the header's program, record counts, and the
+  first twelve characters of its sha256;
+- the checks: each code with its count, then where its findings stand, the most common place first,
+  each with its first three lines, notes as well as errors: `N8 35: FORM under OBJE (lines 12, 40
+  and 77, of 35)`. A tag is written out only when a standard defines it or it is written as a custom
+  tag (an underscore, then capitals, digits or underscores); any other is "a malformed tag", since a
+  line typed that way can hold anything;
+- this visit: the last ten acts, oldest first, by the names Undo gives them (`Edit line 8`, `Add line
+  12`, `Delete lines 5–6`, `Move lines 5–6 to 8, by ⌥↑`, `Restore a line`, `Delete record INDI`, never
+  the record's id), with each Undo and Redo, each save (Save or Download a copy, with or without the
+  change stamps and the date in the header, and how it ended; never its note), each file opened, and
+  each act refused (`Edit line 9: refused`, never the reason, which can quote what was typed); the last
+  three errors the page hit, in the browser's words, with their place as `ui.js:1196:31` and the act
+  each came after, never the stack (a whole line, value or name of the file is cut from those words,
+  should one be there); how long the last open and the last act took, in milliseconds, the read's and
+  the re-check's own parts among them; the window's size and pixel ratio, and the browser;
+- Edit, the unsaved changes and the settings.
+
+The errors come in full where the page is served, as at gedcom-viewer.net. Opened from disk, Chrome
+treats the page's own scripts as from another origin and keeps their errors from it: one in a
+step the page takes at once is counted as `Script error.`, with no place, and one in a step that
+waits, such as a save, is not seen at all. An open that fails while the file is read is noted in full
+either way, since the page catches that error itself.
+
+Never a line of the file, its name, its folder or a record's id. What the visit did is kept in the
+tab alone while it is open, and stored nowhere. The report shows in a box to read, change or cut; **What
 happened** takes your own words; **Copy** puts the report as it reads, then What happened, on
 the clipboard, to paste into a new issue at github.com/bunahu/gedcom-viewer/issues, or into an email to
 feedback@gedcom-viewer.net, which needs no GitHub account (an issue is public and an email is not, so

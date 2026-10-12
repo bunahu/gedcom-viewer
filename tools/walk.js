@@ -47,6 +47,10 @@
 // Release 0.6.4's ⌥↓ and ⌥↑ are walked in the drags part, by keys alone: a block moved past the sibling below
 // or above it, a shut one, a record by its 0 line, the rows, the right frame's Moved line and Changes read,
 // Undo and Redo once each, a refusal's notice, and the keys doing nothing with Edit off.
+// The problem report's additions of 2026-10-12 are walked in the third round's report step (the visit's
+// acts by their undo labels, an error thrown and a promise left rejected, each with its place and never
+// its stack, the timings and the window's size) and in the tags part (each check with its tag, its
+// parent's tag and its line, and a malformed tag never written out).
 // --shots DIR saves pictures of the fictional files, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
 // third, scroll, drags, save, copy, look, bars, drawers, tags, titles. Exit 0 when every step passes.
@@ -1236,16 +1240,35 @@ async function thirdRound(page, dir, shots) {
 
   // P8 — Report a problem: the report reads as counts and codes and holds no line of the file; cut
   // a line and it no longer reads as built; Copy puts the box as it reads, then What happened, on
-  // the clipboard, and nothing else
+  // the clipboard, and nothing else. 2026-10-12: it lists the visit's acts by their undo labels, the
+  // errors the page hit (the walk throws one and leaves a promise rejected, and takes the console's
+  // two lines for them out after), how long the open and the last act took, and the window's size.
+  const thrownBefore = page.log.errors.length;
+  await page.ev("setTimeout(() => { throw new TypeError('the walk threw this'); }, 0); Promise.reject(new RangeError('the walk rejected this')); true");
+  await sleep(200);
+  const thrown = page.log.errors.splice(thrownBefore);
   await setting(page, 'report');
   await page.waitFor("document.getElementById('report-text') !== null");
-  const p8Report = await page.ev("({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.getElementById('report-text').value, state: document.getElementById('report-state').textContent })");
+  const p8Report = await page.ev("({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.getElementById('report-text').value, state: document.getElementById('report-state').textContent, w: innerWidth, h: innerHeight, r: devicePixelRatio })");
   await shot('report');
   const p8Leaked = [];
   for (let i = 0; i < m.n; i += 1) { const t = m.texts[i].trim(); if (t.length >= 3 && p8Report.text.includes(t)) p8Leaked.push(i + 1); }
   check(p8Report.title === 'Report a problem' && p8Report.text.startsWith('GEDCOM Viewer ') && /\nRecords: INDI \d/.test(p8Report.text) && /\nchecksum: [0-9a-f]{8}$/.test(p8Report.text)
     && !/Fixture/.test(p8Report.text) && p8Leaked.length === 0 && /^As built/.test(p8Report.state),
     `Report a problem: ${p8Report.text.split('\n').length} lines of counts and codes, no line of the file, and it reads as built: "${p8Report.state}"`);
+  const p8Lines = p8Report.text.split('\n');
+  const p8Acts = p8Lines.slice(p8Lines.findIndex((l) => l.startsWith('Acts: ')) + 1).filter((l, k, all) => all.slice(0, k + 1).every((x) => x.startsWith('  ')));
+  const p8Errors = p8Lines.filter((l) => /^ {2}(TypeError|RangeError): the walk/.test(l));
+  check(p8Acts.length >= 3 && /^ {2}1\. Open by the file box: [\d,]+ lines, with no handle$/.test(p8Acts[0]) && p8Acts.some((l) => /^ {2}\d+\. Edit line [\d,]+$/.test(l))
+    && p8Acts.some((l) => /^ {2}\d+\. Undo: Edit line [\d,]+$/.test(l)) && p8Acts.some((l) => /^ {2}\d+\. Redo: Edit line [\d,]+$/.test(l)),
+    `the report lists the visit's acts, oldest first, by their undo labels: ${p8Acts.map((l) => `"${l.trim()}"`).slice(0, 4).join(', ')}…`);
+  check(p8Lines.includes('Errors: 2 this visit, oldest first') && p8Errors.length === 2 && p8Errors.every((l) => /, at [^ ,]+:\d+:\d+, after act \d+$/.test(l))
+    && thrown.length === 2 && !/\n {4}at /.test(p8Report.text),
+    `the page's errors, each with its place and the act it came after, never the stack: ${p8Errors.map((l) => `"${l.trim()}"`).join(', ')}`);
+  check(p8Lines.includes(`Window: ${fmt(p8Report.w)} × ${fmt(p8Report.h)} · pixel ratio ${p8Report.r}`)
+    && p8Lines.some((l) => /^Timing of the last open, in ms: [\d,.]+ in all · from disk [\d,.]+ · read [\d,.]+ \(lines [\d,.]+ · checks [\d,.]+ · gather [\d,.]+ · labels [\d,.]+\) · drawn [\d,.]+$/.test(l))
+    && p8Lines.some((l) => /^Timing of act \d+, the last timed, in ms: [\d,.]+ in all · the act [\d,.]+, its re-check [\d,.]+ \(checks [\d,.]+ · gather [\d,.]+ · labels [\d,.]+\) · drawn [\d,.]+$/.test(l)),
+    `and the window's size and the timings: "${p8Lines.find((l) => l.startsWith('Window: '))}", "${p8Lines.find((l) => l.startsWith('Timing of act'))}"`);
   await page.ev("(() => { const b = document.getElementById('report-text'); b.value = b.value.split('\\n').filter((l) => !l.startsWith('Where:')).join('\\n'); b.dispatchEvent(new Event('input', { bubbles: true })); })()");
   await page.waitFor("/^Changed/.test(document.getElementById('report-state').textContent)");
   await page.ev("document.getElementById('report-what').value = 'The walk cut the Where line.'; true");
@@ -2705,8 +2728,9 @@ async function theTags(page, dir, shots) {
   await page.waitFor("document.getElementById('report-text') !== null");
   const report = await page.ev("document.getElementById('report-text').value");
   await page.ev("document.getElementById('dialog').close(); true");
-  check(report.startsWith(`GEDCOM Viewer ${VERSION} `) && report.includes('\nChecks: E10 1 (line 29) · N8 1\n') && !/is not a GEDCOM tag|does not belong/.test(report),
-    'the problem report counts them by code ("Checks: E10 1 (line 29) · N8 1") and holds none of their words');
+  check(report.startsWith(`GEDCOM Viewer ${VERSION} `) && report.includes('\nChecks: E10 1 · N8 1\n  E10 1: a malformed tag at level 0 (line 29)\n  N8 1: BIRT under FAM (line 27)\n')
+    && !/is not a GEDCOM tag|does not belong|FAM9/.test(report),
+    'the problem report counts them by code, each with its tag, its parent\'s tag and its line ("E10 1: a malformed tag at level 0 (line 29)", "N8 1: BIRT under FAM (line 27)"), and holds none of their words, nor FAM9 as written');
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -414,17 +414,20 @@ describe('the plain line under a selected line\'s tag (M3)', () => {
   });
 });
 
-describe('the problem report counts the new checks by code, and says nothing of the tags', () => {
+describe('the problem report counts the new checks by code, with their tags and lines, and none of their words', () => {
   const INFO = { version: '0.6.2', where: 'opened from disk', browser: 'Chrome', bytes: 1, sha256: 'ab'.repeat(32), editing: false, unsaved: 0, settings: '' };
 
-  it('E10 with its line numbers, N8 and N9 with their counts', () => {
+  // 2026-10-12: each check's line names the tag and its parent's tag, and its first lines, notes
+  // too; a tag no standard defines and not of a custom tag's form (FAM9) is "a malformed tag".
+  it('E10, N8 and N9 each with its tag, its parent\'s tag and its line', () => {
     const text = (name) => core.report(fixture(name), INFO);
-    assert.ok(text('e10-n8-tags.ged').includes('\nChecks: E10 1 (line 29) · N8 1\n'), text('e10-n8-tags.ged'));
-    assert.ok(text('n9-undeclared.ged').includes('\nChecks: N9 1\n'), text('n9-undeclared.ged'));
-    assert.ok(text('e10-555-afn.ged').includes('\nChecks: E10 1 (line 12) · N8 1\n'), text('e10-555-afn.ged'));
+    assert.ok(text('e10-n8-tags.ged').includes('\nChecks: E10 1 · N8 1\n  E10 1: a malformed tag at level 0 (line 29)\n  N8 1: BIRT under FAM (line 27)\n'), text('e10-n8-tags.ged'));
+    assert.ok(text('n9-undeclared.ged').includes('\nChecks: N9 1\n  N9 1: _APID under INDI (line 12)\n'), text('n9-undeclared.ged'));
+    assert.ok(text('e10-555-afn.ged').includes('\nChecks: E10 1 · N8 1\n  E10 1: AFN under INDI (line 12)\n  N8 1: SUBM under INDI (line 13)\n'), text('e10-555-afn.ged'));
     for (const name of ['e10-n8-tags.ged', 'n9-undeclared.ged', 'e10-555-afn.ged']) {
       for (const f of fixture(name).findings.list) assert.ok(!text(name).includes(f.detail), `${name}: "${f.detail}" is in the report`);
     }
+    assert.ok(!text('e10-n8-tags.ged').includes('FAM9'), 'a malformed tag is never written as it is');
   });
 });
 

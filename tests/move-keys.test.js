@@ -435,7 +435,7 @@ describe('in the page (ui.js), read as text', () => {
     assert.ok(fn.includes('if (state.edit && !commitEdit(false)) return;'), 'a line being typed is kept first, as for Delete');
     assert.ok(fn.includes('const end = blockEnd(from);') && fn.includes('C.neighbourLanding(state.doc, from, end, dir)'));
     assert.ok(fn.includes("notice(r.reason, 'error');"), 'a refusal in core.js\'s words');
-    assert.ok(fn.includes('moveBlock(from, end, r.to);'));
+    assert.ok(fn.includes("const by = dir < 0 ? 'up' : 'down';") && fn.includes('moveBlock(from, end, r.to, by);'), 'the key it came by goes with it, for the problem report');
   });
 
   it('a press on a row and a key take the same block, and finish the same way', () => {
@@ -443,9 +443,9 @@ describe('in the page (ui.js), read as text', () => {
     assert.ok(ui.includes('if (v >= 0) { from = v; end = blockEnd(v); }'), 'a press on a row takes the block blockEnd gives');
     assert.equal(ui.split('C.subtreeEnd(state.m, v)').length - 1, 0, 'no second version of it');
     const up = between(ui, "$('grid').addEventListener('pointerup', (e) => {", "$('grid').addEventListener('pointercancel'");
-    assert.ok(up.includes('moveBlock(from, end, to);') && !up.includes('C.moveLines'), 'a drag lets go through moveBlock');
-    const fn = between(ui, 'function moveBlock(from, end, to) {', '\n  }\n');
-    assert.ok(fn.includes('C.moveLines(state.doc, from, end, to)') && fn.includes('afterAct(to < from ? to : to - (end - from));'));
+    assert.ok(up.includes("moveBlock(from, end, to, 'drag');") && !up.includes('C.moveLines'), 'a drag lets go through moveBlock');
+    const fn = between(ui, 'function moveBlock(from, end, to, by) {', '\n  }\n');
+    assert.ok(fn.includes('C.moveLines(state.doc, from, end, to)') && fn.includes("acted({ what: 'act', label: r.step.label, by }, t0, to < from ? to : to - (end - from));"));
   });
 
   it('the page asks core.js for the types and the places, and holds no second copy of the words', () => {

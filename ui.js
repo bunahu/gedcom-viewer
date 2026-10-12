@@ -12,6 +12,56 @@
   const C = window.GedCore;
   const S = window.GedSave;
   const $ = (id) => document.getElementById(id);
+
+  // The visit's trail, for Report a problem (2026-10-12): what was done, and what went wrong, since
+  // the page loaded, kept in this tab alone and gone with it; core.js words it (report). The acts,
+  // the last ten: a file opened, by its count of lines and how it came in; an act, by its undo label,
+  // and Undo and Redo by the label of the step they take back or make again; an act refused, by what
+  // it was and its line numbers, never its reason, which can quote what was typed; a save, by how it
+  // was made and how it ended, never its note or its name. The errors the page hit, the last three,
+  // each in the browser's words with its place in the page's code, never the stack. How long the
+  // last open and the last act took. The names of the files of the visit, which the report cuts from
+  // an error's words, should one hold one.
+  const trail = { acts: [], count: 0, errors: [], errorCount: 0, open: null, last: null, names: new Set() };
+  const TRAIL_ACTS = 10;
+  const TRAIL_ERRORS = 3;
+  function noteAct(entry) {
+    trail.count += 1;
+    trail.acts.push({ n: trail.count, ...entry });
+    if (trail.acts.length > TRAIL_ACTS) trail.acts.shift();
+    return trail.count;
+  }
+  // An error, by its words and its place, file:line:column; the same error again, with no act
+  // between, is counted, not kept twice.
+  function noteError(words, place) {
+    trail.errorCount += 1;
+    const last = trail.errors[trail.errors.length - 1];
+    if (last && last.words === words && last.place === place && last.after === trail.count) {
+      last.count += 1;
+      return;
+    }
+    trail.errors.push({ words, place, count: 1, after: trail.count });
+    if (trail.errors.length > TRAIL_ERRORS) trail.errors.shift();
+  }
+  // An error's words: its name and message; a rejection with something that is not an error, by
+  // what it is, never by what it holds. Its place: the first frame of its stack that names one.
+  const errorText = (e) => (e && typeof e === 'object' && 'message' in e ? `${e.name || 'Error'}: ${e.message}` : `not an error, a ${e === null ? 'null' : typeof e}`);
+  function stackPlace(e) {
+    const stack = e && typeof e === 'object' && typeof e.stack === 'string' ? e.stack : '';
+    for (const line of stack.split('\n')) {
+      const hit = /([^\s()@]+:\d+:\d+)\)?\s*$/.exec(line);
+      if (hit) return hit[1];
+    }
+    return '';
+  }
+  const caught = (e) => noteError(errorText(e), stackPlace(e));
+  window.addEventListener('error', (e) => {
+    noteError(e.error ? errorText(e.error) : String(e.message || 'an error with no words'),
+      e.filename ? `${e.filename}:${e.lineno}:${e.colno}` : stackPlace(e.error));
+  });
+  window.addEventListener('unhandledrejection', (e) => caught(e.reason));
+  // After the browser has drawn the next frame: how long an open or an act took, to the screen.
+  const afterFrame = (fn) => requestAnimationFrame(() => setTimeout(fn, 0));
   const fmt = (n) => n.toLocaleString('en-US');
   const root = document.documentElement;
   // The computer's own Open and Save dialogs (Chrome, Edge). Without them a file is opened through
@@ -1041,11 +1091,14 @@
     }
     const doc = state.doc;
     const was = ed.kind === 'edit' ? doc.order[ed.pos] : null;
+    const t0 = performance.now();
     let r;
     if (ed.kind === 'edit') r = C.editLine(doc, ed.pos, text);
     else if (ed.kind === 'inside') r = C.addChild(doc, ed.pos, text);
     else r = C.addSibling(doc, ed.pos, text);
+    const t1 = performance.now();
     if (!r.ok) {
+      noteAct(ed.kind === 'edit' ? { what: 'refused', act: 'edit', line: ed.pos + 1 } : { what: 'refused', act: 'add', line: ed.at + 1 });
       notice(r.reason, 'error');
       if (fromBlur) setTimeout(() => { if (state.edit === ed) ed.input.focus(); }, 0);
       return false;
@@ -1057,7 +1110,7 @@
     const grew = doc.view.n - state.m.n;                              // an added line moves those below it
     const sel = grew && state.sel >= ed.at ? state.sel + grew : state.sel;
     closeEditor();
-    if (r.step) afterAct(afterPress ? sel : ed.kind === 'edit' ? ed.pos : ed.at);
+    if (r.step) acted({ what: 'act', label: r.step.label }, t0, afterPress ? sel : ed.kind === 'edit' ? ed.pos : ed.at, t1);
     else refreshGrid(afterPress ? sel : ed.pos);
     if (!fromBlur) $('grid').focus();
     return true;
@@ -1095,12 +1148,15 @@
       }, [CANCEL, { label: 'Delete', value: 'go', primary: true }]);
       if (!yes) return;
     }
+    const t0 = performance.now();
     const r = C.deleteLine(state.doc, i);
     if (!r.ok) {
+      noteAct({ what: 'refused', act: 'delete', line: i + 1, end });
       notice(r.reason, 'error');
       return;
     }
-    afterAct(i);
+    if (r.step) acted({ what: 'act', label: r.step.label }, t0, i);
+    else afterAct(i);
   }
 
   // 9.3 — a record, and the lines elsewhere that point at it: shown first, each pointer ticked,
@@ -1111,6 +1167,7 @@
     const m = state.m;
     const plan = C.recordDeletion(state.doc, state.sel);
     if (!plan) {
+      noteAct({ what: 'refused', act: 'record', line: state.sel + 1 });
       notice('This line is in no record.', 'error');
       return;
     }
@@ -1142,23 +1199,30 @@
       body.appendChild(list);
     }, [CANCEL, { label: 'Delete', value: 'go', primary: true }]);
     if (!go) return;
-    const r = C.deleteRecord(state.doc, state.sel, boxes.filter((b) => b.checked).map((b) => Number(b.value)));
+    const chosen = boxes.filter((b) => b.checked).map((b) => Number(b.value));
+    const t0 = performance.now();
+    const r = C.deleteRecord(state.doc, state.sel, chosen);
     if (!r.ok) {
+      noteAct({ what: 'refused', act: 'record', line: plan.from + 1 });
       notice(r.reason, 'error');
       return;
     }
-    afterAct(plan.from);
+    if (r.step) acted({ what: 'act', label: r.step.label, line: plan.from + 1, pointers: chosen.length }, t0, plan.from);
+    else afterAct(plan.from);
   }
 
   // Removed lines put back where they were (Edit on): the whole run a removed line is in.
   function restoreRemoved(x) {
     if (!state.doc || !state.editing) return;
+    const t0 = performance.now();
     const r = C.restoreLines(state.doc, x.run.before, x.run.lines.length);
     if (!r.ok) {
+      noteAct({ what: 'refused', act: 'restore', count: x.run.lines.length });
       notice(r.reason, 'error');
       return;
     }
-    afterAct(x.run.at);
+    if (r.step) acted({ what: 'act', label: r.step.label }, t0, x.run.at);
+    else afterAct(x.run.at);
   }
 
   const firstPlace = (step) => Math.min(...step.splices.map((s) => s.at));
@@ -1169,15 +1233,31 @@
       cancelEdit(false);
       return;
     }
+    const t0 = performance.now();
     const step = C.undo(state.doc);
-    if (step) afterAct(firstPlace(step));
+    if (step) acted({ what: 'undo', label: step.label }, t0, firstPlace(step));
   }
 
   function doRedo() {
     if (!state.doc) return;
     if (state.edit && !commitEdit(false)) return;
+    const t0 = performance.now();
     const step = C.redo(state.doc);
-    if (step) afterAct(firstPlace(step));
+    if (step) acted({ what: 'redo', label: step.label }, t0, firstPlace(step));
+  }
+
+  // An act made, Undo and Redo among them: its entry in the trail, then the page drawn again. How
+  // long each part took is kept for the report: the act itself, from `t0` to `done` (now, when not
+  // given), with the whole file's re-check inside it (the view's timings), the drawing, and all of it
+  // to the next frame drawn.
+  function acted(entry, t0, pos, done) {
+    const t1 = done === undefined ? performance.now() : done;
+    const n = noteAct(entry);
+    const t2 = performance.now();
+    afterAct(pos);
+    const last = { n, act: t1 - t0, recheck: state.doc.view.timings, drawn: performance.now() - t2 };
+    trail.last = last;
+    afterFrame(() => { last.all = performance.now() - t0; });
   }
 
   // After any act, undo or save: the page drawn again from the document as it now is. A range
@@ -2062,13 +2142,25 @@
     const settings = `theme ${state.theme} · Text size ${state.textSize} · Indent ${state.indent ? 'on' : 'off'} · Bold surnames ${state.boldSurnames ? 'on' : 'off'} · File name in the tab ${state.nameInTab ? 'on' : 'off'} · Date in the header ${state.headerNote ? 'on' : 'off'}`;
     const info = {
       version, where, browser: browserName(),
+      window: { width: window.innerWidth, height: window.innerHeight, ratio: window.devicePixelRatio },
       bytes: state.disk ? state.disk.bytes : null,
       sha256: state.disk ? (state.disk.sha256 || await state.hashing) : null,
       editing: !!state.editing, settings,
       unsaved: state.doc && C.unsaved(state.doc) ? C.changeRuns(state.doc).length : 0,   // in no file of the visit yet, counted from the one the page is on
+      trail,                                                         // the acts, the errors and the timings of this visit
+      opened: state.doc ? state.doc.m : null,                       // the file as read, and the names of the visit's files: cut from an error's words
+      names: [...trail.names],
     };
     const encoder = new TextEncoder();
-    const text = C.report(state.m, info);
+    // The report failing to be built is an error the page hit too: it is noted, and the report built
+    // again without the file's part, then without the visit's, so that there is always one to copy.
+    let text = '';
+    for (const build of [() => C.report(state.m, info), () => C.report(null, info), () => C.report(null, { ...info, trail: null })]) {
+      try {
+        text = build();
+        break;
+      } catch (e) { caught(e); }
+    }
     const built = C.withChecksum(text, await sha256(encoder.encode(`${text}\n`)));
     let box;
     let what;
@@ -2083,7 +2175,7 @@
     };
     const composed = () => `${box.value.replace(/\n+$/, '')}\nWhat happened: ${what.value.trim() || '(nothing said)'}\n`;
     await dialog('Report a problem', (body) => {
-      body.appendChild(el('div', 'dialog-sum', 'Nothing is sent by this page. The box holds counts and codes only, never a line of the file. ' +
+      body.appendChild(el('div', 'dialog-sum', 'Nothing is sent by this page. The box holds counts and codes, and any error the page hit in the browser\'s own words; never a line of the file. ' +
         'Read it; change or cut anything; then Copy, and paste it into a new issue at github.com/bunahu/gedcom-viewer/issues, or into an email to feedback@gedcom-viewer.net. The privacy page says more.'));
       box = el('textarea', 'report');
       box.id = 'report-text';
@@ -2325,20 +2417,27 @@
 
   async function saveNow() {
     if (state.edit && !commitEdit(false)) return;
+    const picks = canPick();
+    const by = picks ? 'dialog' : 'download';
     // 1. nothing to save, the lines being the original's or a copy's: say so, write nothing
     if (!C.unsaved(state.doc)) {
+      noteAct({ what: 'save', by, outcome: 'nothing' });
       notice(S.nothingSince(state.doc));
       return;
     }
     // 2. the dialog
-    const picks = canPick();
     const choice = await saveDialog(picks);
-    if (!choice) return;
+    if (!choice) {
+      noteAct({ what: 'save', by, outcome: 'dropped' });
+      return;
+    }
     // 3 to 8: the stamps, the bytes, where (beside the file the page is on), none of the visit's files,
     // written and read back, and the page on the copy
     const pick = picks ? (name) => window.showSaveFilePicker({ suggestedName: name, startIn: state.handle, types: GEDCOM_TYPES }) : null;
     const r = await S.save({ doc: state.doc, file: { name: state.fileName, handle: state.handle }, visit: state.visit,
       when: choice.when, note: choice.note, stamps: choice.stamps, header: choice.header, hash: sha256, pick });
+    noteAct({ what: 'save', by, stamps: choice.stamps, note: choice.stamps && choice.note.trim() !== '', header: choice.header,
+      outcome: r.done ? (r.download ? 'downloaded' : 'saved') : r.cancelled ? 'cancelled' : 'stopped', step: r.step });
     if (r.done) onTheCopy(r);
     afterAct(state.sel);
     if (r.done && r.download) {
@@ -2358,6 +2457,7 @@
     const doc = state.doc;
     const lines = doc.savedOrder;
     state.fileName = r.name;
+    trail.names.add(r.name);
     state.handle = r.handle;
     state.disk = { sha256: r.sha256, bytes: r.size, lines: lines.length };
     state.hashing = Promise.resolve(r.sha256);
@@ -2454,21 +2554,35 @@
     return !!go;
   }
 
-  async function openFile(file, handle) {
+  // `by` says how the file came in, for the report: 'picker' (Open GEDCOM, the computer's Open
+  // dialog), 'input' (the file box, in a browser without that dialog) or 'drop'.
+  async function openFile(file, handle, by) {
+    const t0 = performance.now();
+    trail.names.add(file.name);
     let doc;
     let bytes;
+    let t1;
     try {
       bytes = new Uint8Array(await file.arrayBuffer());
+      t1 = performance.now();
       doc = C.openDocument(bytes);
     } catch (e) {
+      noteAct({ what: 'open', by, outcome: 'failed' });
+      caught(e);
       showEmpty(`${file.name}: ${e.name}: ${e.message}`);
       return;
     }
+    const t2 = performance.now();
     const most = Math.floor(MAX_PIXELS / grid.rowHeight());
     if (doc.m.n > most) {
+      noteAct({ what: 'open', by, outcome: 'long', lines: doc.m.n });
       showEmpty(`${file.name} has ${fmt(doc.m.n)} lines. This page can show at most ${fmt(most)}.`);
+      const refused = { disk: t1 - t0, read: doc.m.timings, drawn: performance.now() - t2 };
+      trail.open = refused;
+      afterFrame(() => { refused.all = performance.now() - t0; });
       return;
     }
+    noteAct({ what: 'open', by, lines: doc.m.n, handle: !!handle });
     if (state.edit) closeEditor();
     state.doc = doc;
     state.m = doc.view;
@@ -2528,6 +2642,9 @@
     grid.setCount(rowCount());
     select(0);
     $('grid').focus();
+    const open = { disk: t1 - t0, read: doc.m.timings, drawn: performance.now() - t2 };
+    trail.open = open;
+    afterFrame(() => { open.all = performance.now() - t0; });
   }
 
   async function pickFile() {
@@ -2543,7 +2660,7 @@
       if (e.name !== 'AbortError') notice(`${e.name}: ${e.message}`, 'error');
       return;
     }
-    await openFile(await handle.getFile(), handle);
+    await openFile(await handle.getFile(), handle, 'picker');
   }
 
   $('open-empty').addEventListener('click', pickFile);
@@ -2554,7 +2671,7 @@
   $('file-input').addEventListener('change', () => {
     const file = $('file-input').files[0];
     $('file-input').value = '';
-    if (file) openFile(file, null);
+    if (file) openFile(file, null, 'input');
   });
 
   // A file dropped anywhere on the page. Its handle (where the Save dialog opens, and what it may
@@ -2587,7 +2704,7 @@
     const asking = item.getAsFileSystemHandle ? item.getAsFileSystemHandle() : Promise.resolve(null);
     const file = item.getAsFile();
     asking.then((h) => h, () => null).then(async (h) => {
-      if (await mayDropChanges()) await openFile(file, h && h.kind === 'file' ? h : null);
+      if (await mayDropChanges()) await openFile(file, h && h.kind === 'file' ? h : null, 'drop');
     });
   });
 
@@ -3260,19 +3377,22 @@
     clickAfterDrag = true;
     setTimeout(() => { clickAfterDrag = false; }, 0);
     if (to < 0) return;
-    moveBlock(from, end, to);
+    moveBlock(from, end, to, 'drag');
   });
   $('grid').addEventListener('pointercancel', () => endDrag());
 
-  // The blocks from..end moved to stand before line `to`, by a drag or by a key: one step, and the
-  // page drawn again with the block's first line selected where it now stands, in view.
-  function moveBlock(from, end, to) {
+  // The blocks from..end moved to stand before line `to`, by a drag or by a key (`by`: 'drag', 'up'
+  // or 'down', for the report): one step, and the page drawn again with the block's first line
+  // selected where it now stands, in view.
+  function moveBlock(from, end, to, by) {
+    const t0 = performance.now();
     const r = C.moveLines(state.doc, from, end, to);
     if (!r.ok) {
+      noteAct({ what: 'refused', act: 'move', line: from + 1, end, by });
       notice(r.reason, 'error');
       return;
     }
-    if (r.step) afterAct(to < from ? to : to - (end - from));
+    if (r.step) acted({ what: 'act', label: r.step.label, by }, t0, to < from ? to : to - (end - from));
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -3291,11 +3411,13 @@
     const from = state.sel;
     const end = blockEnd(from);
     const r = C.neighbourLanding(state.doc, from, end, dir);
+    const by = dir < 0 ? 'up' : 'down';
     if (!r.ok) {
+      noteAct({ what: 'refused', act: 'move', line: from + 1, end, by });
       notice(r.reason, 'error');
       return;
     }
-    moveBlock(from, end, r.to);
+    moveBlock(from, end, r.to, by);
   }
 
   applyTheme();

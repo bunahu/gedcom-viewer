@@ -436,7 +436,7 @@ describe('the page', () => {
 
   it('P10: Edit is on whenever a file opens, and while it is on the lines take a darker look of their own; the README says so', () => {
     const ui = read('ui.js');
-    const open = between(ui, 'async function openFile(file, handle) {', 'async function pickFile()');
+    const open = between(ui, 'async function openFile(file, handle, by) {', 'async function pickFile()');
     assert.ok(open.includes('state.editing = true;') && !open.includes('state.editing = false'), 'a file opens with Edit on');
     assert.ok(ui.includes("$('middle').classList.toggle('is-edit-on', !!doc && state.editing);"));
     const css = read('style.css');
@@ -542,7 +542,7 @@ describe('the page', () => {
     assert.ok(/\.side \{ grid-column: 1; \}\n#split-left \{ grid-column: 2; \}\n\.middle \{ grid-column: 3; \}\n#split-right \{ grid-column: 4; \}\n\.right \{ grid-column: 5; \}/.test(css), 'each part in its own column');
     const ui = read('ui.js');
     assert.ok(ui.includes("right: window.matchMedia(`(width < ${pxOf('--drawer-right-below')}px)`),") && ui.includes("left: window.matchMedia(`(width < ${pxOf('--drawer-left-below')}px)`),"));
-    assert.ok(between(ui, 'async function openFile(file, handle) {', 'async function pickFile()').includes('state.drawer = null;'), 'shut as a file opens, whatever is stored');
+    assert.ok(between(ui, 'async function openFile(file, handle, by) {', 'async function pickFile()').includes('state.drawer = null;'), 'shut as a file opens, whatever is stored');
     const toggle = between(ui, 'function toggleFrame(side) {', 'function setDrawer');
     assert.ok(toggle.indexOf('if (isDrawer(side)) {') < toggle.indexOf("store.set('hideLeft'"), 'a drawer opens and shuts before anything is stored, and nothing of it is');
     assert.ok(between(ui, 'function applyFrames() {', 'function toggleFrame').includes("w.classList.toggle('right-hidden', !drawer.right && state.hiddenRight);"), 'the stored state counts only where the frame is a column');
@@ -565,7 +565,7 @@ describe('the page', () => {
       'state.visit.push({ name: r.name, handle: r.handle, bytes: () => C.saveBytes(doc, undefined, lines) });', "$('file-name').textContent = r.name;"]) {
       assert.ok(on.includes(want), `onTheCopy: ${want}`);
     }
-    assert.ok(between(ui, 'async function openFile(file, handle) {', 'async function pickFile()').includes('state.visit = [{ name: file.name, handle: state.handle, bytes: () => doc.m.bytes }];'), 'the visit begins with the file opened');
+    assert.ok(between(ui, 'async function openFile(file, handle, by) {', 'async function pickFile()').includes('state.visit = [{ name: file.name, handle: state.handle, bytes: () => doc.m.bytes }];'), 'the visit begins with the file opened');
     assert.ok(ui.includes("[{ label: 'Close', value: '' }, { label: `Download ${r.restoreName}`, value: 'get', primary: true }]"), 'a file of the visit that could not be put back is offered under its own name');
     assert.ok(/window\.addEventListener\('beforeunload', \(e\) => \{\s+if \(state\.doc && C\.unsaved\(state\.doc\)\)/.test(ui), 'leaving warns for lines no file of the visit holds');
     const saveJs = read('save.js');
