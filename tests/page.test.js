@@ -368,7 +368,7 @@ describe('the page', () => {
     const head = between(page, '<div class="side-head">', '<section class="panel"');
     assert.ok(head.indexOf('</nav>') < head.indexOf('id="hide-left"'), 'the left icon comes after the tabs');
     assert.ok(!between(head, '<nav class="tabs" role="tablist">', '</nav>').includes('hide-left'), 'and is not inside the tablist');
-    const right = between(page, '<aside class="right" id="right">', '</aside>');
+    const right = between(page, '<aside class="right" id="right"', '</aside>');
     const header = between(right, '<div class="frame-head">', '<div class="detail"');
     assert.ok(header.indexOf('id="frame-title"') >= 0 && header.indexOf('id="frame-title"') < header.indexOf('id="hide-right"'), 'the title, then the icon');
     assert.ok(/<div class="detail" id="detail" translate="no"><\/div>/.test(right), 'the frame\'s content under its header');
@@ -647,5 +647,103 @@ describe('the page', () => {
     const props = css.slice(0, css.indexOf('/* -------'));
     assert.ok(/--list-line-height: 20px;/.test(props) && /\.text-larger \{[^}]*--list-line-height: 24px;/.test(props), 'a line is a property, for both sizes of text');
     assert.ok(/\| `--list-line-height` \|/.test(read('README.md')), 'and the README lists it');
+  });
+
+  // The hover boxes (the owner's choice of 2026-10-13, option A): the page's own words about itself, in a box while the pointer
+  // rests on a part, with no title page over its frames. The words are provisional (the owner writes the final copy); this list
+  // is the one place the tests keep them, and index.html the one place the page does.
+  const HOVER_WORDS = [
+    ['tip-name', 'Read a GEDCOM file, check it, count what it holds, and make clean hand edits. Your file stays on this computer. The original is never written: Save makes a dated copy beside it. Works best in Chrome or Edge on a computer.'],
+    ['tip-counts', 'Once a file is open: how many people, families, sources and more it holds. A click lists them.'],
+    ['tip-side', 'Once a file is open: Records lists every person, family and source; Checks, what looks wrong and where; Changes, your edits; Search and Tags, the rest.'],
+    ['tip-middle', "The file's lines, as written, one per row, once a file is open. Open GEDCOM, or drop a .ged file anywhere on the page."],
+    ['tip-right', 'Once a file is open, this frame shows the selected line: what its tag means, where it sits in its record, what points at it, and anything wrong with it. With Edit on, it adds, deletes and restores lines.'],
+  ];
+  const plain = (html) => html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  it('the hover boxes: the five texts are in index.html, together, each in a box hidden until its part is hovered; each part names its box as its description; the name takes the keyboard\'s focus; no style attribute, no link, no network word', () => {
+    const page = read('index.html');
+    const boxes = [...page.matchAll(/<div class="tip" id="(tip-[a-z]+)" role="tooltip" hidden>([^]*?)<\/div>/g)];
+    assert.deepEqual(boxes.map((m) => m[1]), HOVER_WORDS.map((w) => w[0]), 'five boxes, the name\'s first, then the counts bar, the left bar, the lines\' frame, the right frame');
+    HOVER_WORDS.forEach(([id, words], k) => assert.equal(plain(boxes[k][2]), words, `${id} says something else`));
+    assert.equal((page.match(/class="tip"/g) || []).length, 5, 'no sixth box');
+    const first = page.indexOf('<div class="tip" id="tip-name"');
+    const last = page.indexOf('</div>', page.indexOf('id="tip-right"')) + '</div>'.length;
+    const block = page.slice(first, last);
+    assert.equal(block.match(/<div\b/g).length, 5, 'together: nothing but the five boxes between the first and the last');
+    assert.ok(page.lastIndexOf('<!--', first) > page.indexOf('<body>') && page.slice(page.lastIndexOf('<!--', first), first).includes('THE HOVER BOXES\' WORDS'), 'under a comment that says what they are and whose they are');
+    for (const [id] of HOVER_WORDS) assert.equal((page.match(new RegExp(`\\bid="${id}"`, 'g')) || []).length, 1, `${id} is written once`);
+    // the parts: the name (a focusable span), the counts bar, the left bar, the lines' frame and the right frame
+    const name = (page.match(/<span class="app-name"[^>]*>/) || [])[0];
+    assert.ok(name && /\btabindex="0"/.test(name), `the name takes the keyboard's focus: ${name}`);
+    const parts = [name, ...['counts', 'side', 'middle', 'right'].map((id) => tagOf(page, id))];
+    HOVER_WORDS.forEach(([id], k) => assert.ok(new RegExp(`\\baria-describedby="${id}"`).test(parts[k]), `${parts[k]} does not name ${id} as its description`));
+    assert.ok(!/\sstyle=/.test(page), 'no style attribute in the markup: the policy refuses it, and the boxes are placed through the CSSOM');
+    for (const word of [...FORBIDDEN, 'href', 'src=', '<a ', '<script', '<img', 'url(']) assert.ok(!block.includes(word), `the boxes' markup holds "${word}"`);
+    assert.ok(!/id="app-name"/.test(page), 'the name has no id: the top bar\'s list of ids (above) is unchanged');
+  });
+
+  it('the hover boxes in ui.js: a part\'s box shows after it has rested 300 ms (the name always, the other four while no file is open) or, for the name, on the keyboard\'s focus, and goes on leaving, on Esc, on a click and while a file is dragged over; placed through the CSSOM; the words are never in the code; nothing is stored, nothing is sent', () => {
+    const ui = read('ui.js');
+    const code = between(ui, '// The hover boxes: what the page is', '// Dragging (3.4a)');
+    assert.ok(code.includes('const TIP_REST = 300;'), 'about 300 ms');
+    for (const part of ["document.querySelector('.app-name')", "$('counts')", "$('side')", "$('middle')", "$('right')"]) assert.ok(code.includes(`{ el: ${part},`), `the part ${part} has its box`);
+    assert.ok(code.includes("box: $(p.el.getAttribute('aria-describedby'))"), 'a part\'s box is the element it names as its description');
+    assert.equal((code.match(/always: true/g) || []).length, 1, 'the name alone is always');
+    assert.ok(code.includes('const tipOn = (p) => p.always || !state.doc;'), 'a frame\'s box only while no file is open');
+    assert.ok(code.includes("p.el.removeAttribute('aria-describedby')") && code.includes("p.el.setAttribute('aria-describedby', p.box.id)"), 'and with a file open the frame\'s words stop describing it');
+    for (const want of ["'pointerenter'", "'pointermove'", "'pointerleave'", "tipName.el.addEventListener('focus'", ":focus-visible'", "tipName.el.addEventListener('blur'", "e.key === 'Escape'",
+      "['pointerdown', 'click']", "'dragenter'", "window.addEventListener('blur', tipReset)"]) assert.ok(code.includes(want), `ui.js has no ${want}`);
+    assert.ok(code.includes('const tipBlocked = (e) => e.pointerType === \'touch\' || e.buttons !== 0 || dragDepth > 0;'), 'no box for a touch, a button held (a bar dragged, a selection) or a file dragged over');
+    assert.ok(code.includes('const want = dragDepth > 0 || !kept ? null : kept;'), 'none while a file is dragged over, whoever asks');
+    assert.ok(code.includes('if (tip.dismissed === p || tip.rested === p) return;') || code.includes('tip.dismissed === p'), 'after Esc or a click it stays away until the pointer has left its part');
+    // the placement: left and top through the CSSOM, never a style attribute or a stylesheet written at run time
+    assert.ok(code.includes('box.style.left =') && code.includes('box.style.top =') && code.includes('box.style.maxWidth ='), 'placed through the CSSOM');
+    assert.ok(!/setAttribute\('style'|cssText|\.style\s*=\s*['"`]|insertRule|createElement\('style'|adoptedStyleSheets/.test(code), 'no inline style, and no stylesheet written by the page');
+    assert.ok(/pxOf\('--tip-edge'\)/.test(code) && /pxOf\('--tip-gap'\)/.test(code) && /pxOf\('--tip-drop'\)/.test(code), 'its distances are style.css\'s properties');
+    for (const head of ["head: '.side-head'", "head: '#strip'", "head: '.frame-head'"]) assert.ok(code.includes(`at: 'in', ${head} }`), `a frame's box starts under its head: ${head}`);
+    assert.ok(code.includes('p.el.querySelector(p.head).getBoundingClientRect().bottom + pxOf(\'--tip-drop\')'), 'under the head, not over what the box names');
+    // wired to the two ways the page's state changes: a file opened, and a file refused
+    assert.ok(between(ui, 'async function openFile(file, handle, by) {', 'async function pickFile()').includes('applyTips();'), 'a file opened turns the frames\' boxes off');
+    assert.ok(between(ui, 'function showEmpty(message) {', '// Changes not in any copy yet').includes('applyTips();'), 'a file refused turns them on');
+    // the words are index.html's alone
+    for (const [, words] of HOVER_WORDS) assert.ok(!ui.includes(words.slice(0, 24)) && !read('style.css').includes(words.slice(0, 24)), `the words "${words.slice(0, 24)}…" are in the code`);
+    // nothing sent, nothing kept
+    for (const word of FORBIDDEN) assert.ok(!code.includes(word), `the hover boxes' code holds "${word}"`);
+    assert.ok(!/\bstore\.|localStorage|sessionStorage|indexedDB|document\.cookie|navigator\./.test(code), 'nothing is stored');
+    assert.ok(!/\bkeys\b[^;]*tip|store\.(get|set)\('tip/.test(ui), 'no key of its own in the page\'s storage');
+  });
+
+  it('the hover boxes look: built from the Settings menu\'s tokens, at properties of their own at the top of style.css; placed by ui.js and taking no pointer; a fade that less motion takes away; the system\'s own colours when the computer forces them; a ring on the name', () => {
+    const css = read('style.css');
+    const own = ownProps(css);
+    assert.deepEqual(['--tip-max-width', '--tip-pad-x', '--tip-pad-y', '--tip-edge', '--tip-gap', '--tip-drop', '--tip-fade'].map((k) => own.get(k)), ['23em', '12px', '10px', '6px', '4px', '14px', '120ms']);
+    assert.ok(own.get('--menu-width') && css.indexOf('--tip-max-width') > css.indexOf('--menu-width') && css.indexOf('--tip-max-width') < css.indexOf('/* -------'), 'in the property block, beside the Settings menu\'s width');
+    const rule = (css.match(/\n\.tip \{([^}]*)\}/) || [])[1];
+    assert.ok(rule, 'no rule for .tip');
+    for (const want of ['position: fixed;', 'background: var(--color-bg-card);', 'color: var(--color-text);', 'border: 1px solid var(--control-border);', 'border-radius: var(--radius);', 'box-shadow: var(--shadow);',
+      'font-family: var(--font-body);', 'font-size: var(--font-size-small);', 'padding: var(--tip-pad-y) var(--tip-pad-x);', 'pointer-events: none;', 'animation: tip-in var(--tip-fade) ease;']) {
+      assert.ok(rule.includes(want), `.tip lacks ${want}`);
+    }
+    assert.ok(/max-width: min\(var\(--tip-max-width\), calc\(100vw - 2 \* \(var\(--tip-edge\) \+ var\(--tip-pad-x\) \+ 1px\)\)\);/.test(rule), 'the words 23em wide at most, and never wider than the window less its room and edge');
+    assert.ok(!/(?<![-\w])(left|top|right|bottom):/.test(rule), 'where it goes is ui.js\'s to say');
+    assert.ok(css.includes('.tip[hidden] { display: none; }') && css.includes('@keyframes tip-in { from { opacity: 0; } to { opacity: 1; } }'), 'hidden until shown, and a fade in');
+    assert.ok(/\.app-name:focus-visible \{ outline: var\(--focus-ring\);/.test(css), 'the name\'s ring');
+    const reduce = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'), css.indexOf('@media (forced-colors: active)'));
+    assert.ok(/\*, \*::before, \*::after \{[^}]*animation:\s*none !important/.test(reduce) && !/transition/.test(rule), 'the fade is an animation, which less motion stops, as it stops every one');
+    const forced = css.slice(css.indexOf('@media (forced-colors: active)'));
+    assert.ok(forced.includes('.tip { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }'), 'forced colours: the system\'s page and text, an edge in the text\'s colour, no shadow');
+    const readme = read('README.md');
+    for (const name of ['--tip-max-width', '--tip-pad-x', '--tip-pad-y', '--tip-edge', '--tip-gap', '--tip-drop', '--tip-fade']) assert.ok(readme.includes(`\`${name}\``), `the README does not list ${name}`);
+    assert.ok(/\| the top bar \|[^\n]*hover box[^\n]*\n\| the counts bar \|[^\n]*hover box[^\n]*\n\| the left bar \|[^\n]*hover box[^\n]*\n\| the main frame \|[^\n]*hover box[^\n]*\n\| the right frame \|[^\n]*hover box/.test(readme), 'the README\'s frames table says, in each row, what the hover box is');
+  });
+
+  it('privacy.html needs no change for the hover boxes: they keep nothing, so no setting is added to its list of what the page remembers, and they send nothing, so its six files and its network sections stand as they are', () => {
+    const ui = read('ui.js');
+    const code = between(ui, '// The hover boxes: what the page is', '// Dragging (3.4a)');
+    assert.equal((code.match(/store\./g) || []).length, 0, 'nothing of the hover boxes is stored');
+    const privacy = read('privacy.html');
+    assert.ok(privacy.includes("The page's six files hold no code that fetches"), 'still six files: none was added');
+    assert.ok(!/hover/i.test(privacy), 'there is nothing for the page to say about them');
   });
 });

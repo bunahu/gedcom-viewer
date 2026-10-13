@@ -2538,6 +2538,7 @@
     updateGridWidth();
     updateBack();
     updateBar();
+    applyTips();                                                     // no file: the frames' hover boxes are on again
     applyFrames();                                                   // no file, no drawers: the frames are columns again, as 0.6.0 has them
     $('empty').hidden = false;
     $('message').hidden = !message;
@@ -2637,6 +2638,7 @@
     updateSearch();
     updateBack();
     updateBar();
+    applyTips();                                                     // a file is open: the frames' hover boxes stop, the name's stays
     applyFrames();                                                   // a window narrow enough has its drawers now, shut
     rebuildRows();
     grid.setCount(rowCount());
@@ -3226,6 +3228,152 @@
       setEditing(!state.editing);
     }
   });
+
+  // ---------------------------------------------------------------------------------------------
+  // The hover boxes: what the page is, and what each frame will hold, in a box that shows while the
+  // pointer rests on its part. The name's box shows always; the counts bar's and the three frames'
+  // only while no file is open, since an open file says what they are. The words are index.html's:
+  // each part names its box in aria-describedby, and this only shows the box, places it and puts it
+  // away, so that its words are never in the code. A box shows once the pointer has rested on its
+  // part for TIP_REST ms (a pointer that moves starts the rest again), or, for the name, while the
+  // keyboard has it; it goes when the pointer leaves, on Esc, on a click, while a file is dragged
+  // over the page, and, for a frame's, when a file opens. After Esc or a click it stays away until
+  // the pointer has left its part and come back. A box takes no pointer, so a click goes through to
+  // what is under it. Nothing is stored and nothing is sent.
+  // ---------------------------------------------------------------------------------------------
+
+  const TIP_REST = 300;                                              // ms the pointer rests on a part before its box shows
+  const TIP_STILL = 3;                                               // px it may move and still be at rest
+  // `at`: 'under' the part, or 'in' it, near its top, below its `head` (the row that names it: the left bar's tabs, the strip, the right
+  // frame's header, so that the box never lies over what it says); `flush`: from the part's own left edge, not in from it
+  const TIP_PARTS = [
+    { el: document.querySelector('.app-name'), at: 'under', flush: true, always: true },
+    { el: $('counts'), at: 'under' },
+    { el: $('side'), at: 'in', head: '.side-head' },
+    { el: $('middle'), at: 'in', head: '#strip' },
+    { el: $('right'), at: 'in', head: '.frame-head' },
+  ].map((p) => ({ ...p, box: $(p.el.getAttribute('aria-describedby')) }));
+  const tip = {
+    shown: null,                      // the part whose box is up
+    over: null,                       // the part the pointer is on
+    rested: null,                     // the part it has rested on, until it leaves or the box is put away
+    focus: null,                      // the name, while the keyboard has it
+    hushed: false,                    // the name's box put away by Esc or a click, until the name loses the keyboard
+    dismissed: null,                  // a part whose box was put away by Esc or a click, until the pointer leaves it
+    at: [0, 0],                       // where the pointer was when its rest began
+    timer: 0,
+  };
+  const tipOn = (p) => p.always || !state.doc;                       // a frame's box only while no file is open
+
+  // The box that should be up now, and only that one: the pointer's, else the keyboard's; none while a file is dragged over.
+  function tipRender() {
+    const kept = [tip.rested, tip.focus && !tip.hushed ? tip.focus : null].find((p) => p && tipOn(p));
+    const want = dragDepth > 0 || !kept ? null : kept;
+    if (want === tip.shown) return;
+    if (tip.shown) tip.shown.box.hidden = true;
+    tip.shown = want;
+    if (want) tipPlace(want);
+  }
+
+  // Under the name or the counts bar, --tip-gap down; in a frame, --tip-drop under its head and --tip-edge in from its edge, its
+  // words no wider than the frame lets them, though never under 12em (a frame shrunk to its icon is a strip). Never off the
+  // window. It is measured at the window's full width first, so that where it goes cannot narrow it.
+  function tipPlace(p) {
+    const box = p.box;
+    const edge = pxOf('--tip-edge');
+    const r = p.el.getBoundingClientRect();
+    const round = pxOf('--tip-pad-x') + 1;                           // a side's room and its border, which come outside the words' width
+    box.style.left = '0px';
+    box.style.top = '0px';
+    box.style.maxWidth = p.at === 'in' ? `max(12em, min(var(--tip-max-width), ${Math.floor(r.width - 2 * (edge + round))}px))` : '';
+    box.hidden = false;
+    const x = p.at === 'under' ? r.left + (p.flush ? 0 : edge) : r.left + edge;
+    const y = p.at === 'under' ? r.bottom + pxOf('--tip-gap') : p.el.querySelector(p.head).getBoundingClientRect().bottom + pxOf('--tip-drop');
+    box.style.left = `${Math.round(Math.max(edge, Math.min(x, window.innerWidth - box.offsetWidth - edge)))}px`;
+    box.style.top = `${Math.round(Math.max(edge, Math.min(y, window.innerHeight - box.offsetHeight - edge)))}px`;
+  }
+
+  const tipStop = () => { clearTimeout(tip.timer); tip.timer = 0; };
+  // The pointer is on `p` and still: the box shows when it has been for TIP_REST ms.
+  function tipRest(p) {
+    tipStop();
+    if (!tipOn(p) || tip.dismissed === p || tip.rested === p) return;
+    tip.timer = setTimeout(() => {
+      tip.timer = 0;
+      if (tip.over !== p || !tipOn(p)) return;
+      tip.rested = p;
+      tipRender();
+    }, TIP_REST);
+  }
+  // Esc, a click: the box goes, and does not come back until the pointer has left its part, or the name has lost the keyboard.
+  function tipDismiss() {
+    tipStop();
+    if (tip.over) tip.dismissed = tip.over;
+    if (tip.focus) tip.hushed = true;
+    tip.rested = null;
+    tipRender();
+  }
+  // No pointer on any part: the window lost the focus, was resized, or a file is being dragged over it.
+  function tipReset() {
+    tipStop();
+    tip.over = null;
+    tip.rested = null;
+    tip.dismissed = null;
+    tipRender();
+  }
+  // A file opened, or was refused: a frame's box goes, and its words are no longer the frame's description.
+  function applyTips() {
+    for (const p of TIP_PARTS) {
+      if (p.always) continue;
+      if (state.doc) p.el.removeAttribute('aria-describedby'); else p.el.setAttribute('aria-describedby', p.box.id);
+    }
+    if (tip.rested && !tipOn(tip.rested)) tip.rested = null;
+    if (tip.over && !tipOn(tip.over)) tipStop();
+    tipRender();
+  }
+
+  const tipBlocked = (e) => e.pointerType === 'touch' || e.buttons !== 0 || dragDepth > 0;   // a touch, a button held (a drag of a bar, a selection), a file dragged over
+  for (const p of TIP_PARTS) {
+    p.el.addEventListener('pointerenter', (e) => {
+      tip.over = p;
+      tip.at = [e.clientX, e.clientY];
+      if (!tipBlocked(e)) tipRest(p);
+    });
+    p.el.addEventListener('pointermove', (e) => {
+      if (tipBlocked(e)) return;
+      if (tip.over !== p) tip.over = p;
+      if (Math.hypot(e.clientX - tip.at[0], e.clientY - tip.at[1]) <= TIP_STILL) return;
+      tip.at = [e.clientX, e.clientY];
+      tipRest(p);
+    });
+    p.el.addEventListener('pointerleave', () => {
+      if (tip.over === p) tip.over = null;
+      if (tip.dismissed === p) tip.dismissed = null;
+      tipStop();
+      if (tip.rested === p) {
+        tip.rested = null;
+        tipRender();
+      }
+    });
+  }
+  const tipName = TIP_PARTS[0];
+  tipName.el.addEventListener('focus', () => {
+    if (!tipName.el.matches(':focus-visible')) return;               // the keyboard's focus, not a click's
+    tip.focus = tipName;
+    tip.hushed = false;
+    tipRender();
+  });
+  tipName.el.addEventListener('blur', () => {
+    tip.focus = null;
+    tip.hushed = false;
+    tipRender();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && tip.shown) tipDismiss(); }, true);
+  for (const type of ['pointerdown', 'click']) document.addEventListener(type, () => { if (tip.shown || tip.timer) tipDismiss(); }, true);
+  document.addEventListener('dragenter', (e) => { if (carriesFiles(e)) tipReset(); });
+  for (const type of ['dragleave', 'drop']) document.addEventListener(type, (e) => { if (carriesFiles(e)) tipRender(); });
+  window.addEventListener('blur', tipReset);
+  window.addEventListener('resize', tipReset);
 
   // ---------------------------------------------------------------------------------------------
   // Dragging (3.4a): with Edit on, a press on a row — a type row, for a section — moved a few

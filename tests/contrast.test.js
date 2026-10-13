@@ -172,4 +172,24 @@ describe('contrast, measured from style.css', () => {
     assert.ok(/\.ptr\s*\{\s*color:\s*var\(--pointer-color\)/.test(rules), '.ptr must use --pointer-color');
     assert.ok(/--mark-error:\s*var\(--color-danger\)/.test(css), '--mark-error must follow --color-danger');
   });
+
+  // The hover boxes (the owner's choice of 2026-10-13): a box of words over the frames, the left bar or the page. Its words need 4.5:1
+  // on its own colour (1.4.3), and its edge 3:1 on that and on everything it can lie over (1.4.11), since the edge, not the shadow,
+  // is what sets it off: in Dusk and Dark the shadow is a glow, and the browser drops it altogether when it forces its colours.
+  it('a hover box: its words hold 4.5:1 on its own colour, and its edge 3:1 on that and on the frames, the left bar and the page it lies over, in all three looks', () => {
+    const rules = css.slice(css.indexOf('/* -------'));
+    const rule = (rules.match(/\n\.tip \{([^}]*)\}/) || [])[1];
+    assert.ok(rule, 'no rule for the hover box (.tip)');
+    const token = (re, what) => {
+      const m = re.exec(rule);
+      assert.ok(m, `the hover box takes no ${what} from a token`);
+      return m[1];
+    };
+    const words = token(/(?<![-\w])color:\s*var\((--[\w-]+)\)/, 'text colour');
+    const ground = token(/(?<![-\w])background:\s*var\((--[\w-]+)\)/, 'background');
+    const edge = token(/border:\s*1px solid var\((--[\w-]+)\)/, 'edge colour');
+    assert.deepEqual([words, ground, edge], ['--color-text', '--color-bg-card', '--control-border'], 'the Settings menu\'s own tokens');
+    holds(words, [[ground]], 4.5);
+    holds(edge, [[ground], ...BASES], 3);
+  });
 });

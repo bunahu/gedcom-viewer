@@ -20,12 +20,27 @@
 </head>
 <body>
 
+<!-- THE HOVER BOXES' WORDS, all five, here and nowhere else. They are provisional: the owner writes the final copy.
+     A box shows while the pointer rests on its part (the name, always; the counts bar and the three frames, until a
+     file is open), or while the name has the keyboard's focus. Each part names its box in aria-describedby, so its
+     words are its accessible description; ui.js ("The hover boxes") shows and places a box and never touches its
+     words. Nothing here shows until its part is hovered, and nothing is stored or sent. -->
+<div class="tip" id="tip-name" role="tooltip" hidden>
+  <p>Read a GEDCOM file, check it, count what it holds, and make clean hand edits.</p>
+  <p>Your file stays on this computer. The original is never written: Save makes a dated copy beside it.</p>
+  <p>Works best in Chrome or Edge on a computer.</p>
+</div>
+<div class="tip" id="tip-counts" role="tooltip" hidden>Once a file is open: how many people, families, sources and more it holds. A click lists them.</div>
+<div class="tip" id="tip-side" role="tooltip" hidden>Once a file is open: Records lists every person, family and source; Checks, what looks wrong and where; Changes, your edits; Search and Tags, the rest.</div>
+<div class="tip" id="tip-middle" role="tooltip" hidden>The file's lines, as written, one per row, once a file is open. Open GEDCOM, or drop a .ged file anywhere on the page.</div>
+<div class="tip" id="tip-right" role="tooltip" hidden>Once a file is open, this frame shows the selected line: what its tag means, where it sits in its record, what points at it, and anything wrong with it. With Edit on, it adds, deletes and restores lines.</div>
+
 <!-- The top bar: the name, and Settings; with a file open, the file's name (its facts under it) and Save
      too. Nothing else: the controls for the lines are in the strip above them, and each side frame's
-     icon is in the frame it hides (P9). -->
+     icon is in the frame it hides (P9). The name takes the keyboard's focus, so that its box can show. -->
 <header class="bar">
   <div class="bar-top">
-    <span class="app-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span></span>
+    <span class="app-name" tabindex="0" aria-describedby="tip-name"><span class="app-title"><span class="app-title-gedcom">GEDCOM</span> Viewer</span></span>
     <button class="file-name" id="file-name" type="button" aria-expanded="false" translate="no" hidden></button>
     <span class="dirty" id="dirty" title="Changes in no copy yet" hidden>●</span>
     <nav class="actions">
@@ -83,10 +98,10 @@
   <div class="menu-foot">Version <span id="version">0.6.4</span></div>
 </div>
 
-<nav class="counts" id="counts" aria-label="Records by type" translate="no"></nav>
+<nav class="counts" id="counts" aria-label="Records by type" aria-describedby="tip-counts" translate="no"></nav>
 
 <main class="work" id="work">
-  <aside class="side" id="side">
+  <aside class="side" id="side" aria-describedby="tip-side">
     <!-- the left bar's head: its tabs, and at their right end the icon that shrinks the bar to the icon alone -->
     <div class="side-head">
       <nav class="tabs" role="tablist">
@@ -142,7 +157,7 @@
 
   <div class="split" id="split-left" title="Drag to widen or narrow"></div>
 
-  <section class="middle" id="middle">
+  <section class="middle" id="middle" aria-describedby="tip-middle">
     <!-- the strip above the lines: Top, Back and Collapse all at its left; Go to Line…, Edit, Undo and Redo
          at its right, none of them until a file is open. When the width runs out, the right group goes
          under the left one -->
@@ -176,7 +191,7 @@
 
   <div class="split" id="split-right" title="Drag to widen or narrow"></div>
 
-  <aside class="right" id="right">
+  <aside class="right" id="right" aria-describedby="tip-right">
     <!-- the right frame's header: the line or lines the frame shows, and at its right end the icon that
          shrinks the frame to the icon alone -->
     <div class="frame-head">
