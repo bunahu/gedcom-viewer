@@ -1844,3 +1844,78 @@ steps). The empty page renders byte for byte as v0.6.0's own files do at the sam
 drawers are for an open file only, so with no file the empty page keeps 0.6.0's three columns at
 every width, squeezed below about 1,100 px as 0.6.0 was; a change there is his to see first. The
 drawers' walk steps moved onto the bars part's made-up file.
+
+### 0.6.4: the keys, and the beta-readiness fixes (2026-10-12, not yet tagged)
+
+0.6.4 began as the keys: ⌥↑ and ⌥↓ move the selected line's block past the sibling above or below
+it, under every rule of a drag (a51bc97, built by Sonnet on 2026-10-10, the review's A4; the entry
+above that plans Judge by as 0.6.4 was written before the keys took the number). It was neither
+walked nor tagged when the beta-readiness review of 2026-10-12, whose report is in `local/`, found
+three defects to fix before the first testers. The fixes are folded into 0.6.4, so that one walk
+covers both, and the page says 0.6.4; making them 0.6.5 instead is his pick (then the page and the
+README's row say 0.6.5, and a51bc97 is never tagged by itself, its page still saying 0.6.3). Built by
+Opus on main, `dde754f`:
+
+- **Restore after a move**, in 0.6.3 too. A removed line's place, where the page draws it struck
+  through and where Restore puts it, came from the net change's walk: after the lines that kept
+  their order around it, which after a move of its block or record is the block's old place (a
+  PLAC deleted from a BIRT came back under the NAME, a FAMS deleted from one person came back
+  inside another). Now a run of removed lines goes back into its own block: after its nearest
+  sibling above that is still in the file, at the end of that sibling's block, or else directly
+  under the line it sat under, past that line's CONC and CONT lines; then past any line deeper
+  than the run's shallowest, so that no other line comes to sit under it; and the place must
+  leave each of its lines under the line it was under (`restorePlace` in `core.js`). Where no
+  place does, Restore says why and does nothing: "This line sat under 1 BIRT, which is no longer
+  in the file: restore that line first.", or "These lines cannot be put back under 2 SOUR @S1@,
+  the line they sat under: the lines around that place have changed." The same rule settles a
+  quieter case with no move: a line added at the end of the block above a removed one no longer
+  comes to sit under it when it is restored.
+- **Nothing below an extension is judged.** A standard line two levels under a custom tag was
+  judged against its parent, which was not judged itself: 7.0's own `extension-record.ged` read N8
+  on the DATE under `_LOC.NAME`, as tags.js's header warns against. Over the 72 written and public
+  files that N8 is the only finding that changes.
+- **The LF CR copy** (I11). In a file whose first line ends LF CR, an act that would give it a
+  first line ending otherwise, while a later line ends LF CR, is refused, since the copy would read
+  back with blank lines the screen never showed: "The first line would then end CR LF, not LF CR,
+  and LF CR is one line ending only in a file whose first line ends that way (6.2): line 2, which
+  ends LF CR, would read back as two lines, the second of them blank."
+- **Not built: GEDCOM 5.5 judged by 5.5.1's table** (the review's other false alarm). How to
+  judge a 5.5 file is a choice, P13 below, for his pick.
+
+415 tests (399 before), among them `tests/restore.test.js`; each new test fails on a51bc97. The walk
+gained a step in its drags part (a line deleted from a person, the person pressed above another by
+⌥↑, the struck line drawn and restored in its own record) and passes whole at 278 steps on a long,
+wide fictional file, the read-only part included. `tools/compare.js fixtures`: 72 files, none
+differ. The net change takes about 28 ms longer on a made-up file of 480,012 lines with 60,001
+removed runs (53 to 81 ms), within section 16's budgets.
+
+### P13: how a GEDCOM 5.5 file is judged (2026-10-12, for his pick)
+
+`tags.versionFor` reads a file that declares 5.5 as 5.5.1, so a valid 5.5 file is judged by a table
+it was not written to: BLOB, which 5.5.1 removed, is "not a GEDCOM tag" (E10), and FORM straight
+under OBJE, OBJE under OBJE, AGE under a family event, SOUR under PLAC and TYPE under ASSO are "Out of
+place" (N8). On the 22 public files that declare 5.5, Checks lists 145 findings, all of them false:
+4 E10 and 141 N8, all in GEDitCOM's four torture tests and in Eichmann's `allged.ged`. A table of
+5.5 was derived from its grammar by script, the way the others were, from the text of 2 January 1996
+(the PDF gedcom.io's specifications page links to) and again from the text as amended by the errata
+sheet of 10 January 1996 (Paul McBride's copy on the web; a 1997 copy of GENDEX's, in the Internet
+Archive, gives the 2 January pairs), and held, in both texts, to 49 lists of children read from the
+text by hand, with no difference: 128 tags and their places. 5.5 has one tag 5.5.1 lacks (BLOB) and 15 places it
+lacks (AGE under the nine family events; BLOB, FORM and OBJE under OBJE; CONT under BLOB; SOUR under
+PLAC; TYPE under ASSO); 5.5.1 adds 10 tags (ADR3 EMAIL FACT FAX FONE LATI LONG MAP ROMN WWW) and 296
+places, most of them those tags' (and RESN or RELI under an event, NOTE under SUBM, and the like).
+The errata sheet moves two places, TYPE under ASSO out and SOUR under a multimedia record in; the
+table can take both, since files were written to each. The scripts, the texts read and their hashes
+are in the shared notes folder of the session that built it (`g55/`).
+
+| P13 | What judges a file that declares 5.5 | Worked example |
+|---|---|---|
+| **S**, recommended | **5.5's own table**, as a 5.5.5 or 7.0 file is judged by its own: what 5.5 defines, where 5.5 puts it | `TGC55C.ged`: Checks lists nothing, where today it lists Malformed: not a GEDCOM tag 1 (BLOB) and Out of place 35 (FORM under OBJE 33 times, SOUR under PLAC, AGE under ENGA). A 5.5 file whose submitter has `1 EMAIL made@example.org`: a red wavy line under EMAIL, "EMAIL is not a tag of GEDCOM 5.5"; a `2 RESN privacy` under its BIRT: gold, "RESN does not belong under BIRT" |
+| W | **5.5.1's table widened by what 5.5 allows**: BLOB, and the 15 places | `TGC55C.ged`: nothing, as in S. The 5.5 file with EMAIL and RESN: nothing, as today |
+
+Both clear all 145 findings on the 22 files and add none there. They differ only on a 5.5 file that
+uses what 5.5.1 added: S says so, W lets it pass. None of the 22 does; how often a real 5.5 export
+does is what the beta would show. S is the rule every other version is judged by ("a file is judged
+by the version it declares", P12); W cannot give a file that reads clean today a new finding. Either
+way the table gains a fourth version, BLOB a plain meaning, and the tests their counts; the stamps and
+the header's note are untouched.
