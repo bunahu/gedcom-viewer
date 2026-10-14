@@ -401,8 +401,9 @@
     return out;
   }
 
-  // Every line's tag against the table of the standard the file declares (tags.versionFor: 5.5 is
-  // read as 5.5.1, 5.5.5 as itself, any 7.x as 7.0, and a file that says nothing as 5.5.1).
+  // Every line's tag against the table of the standard the file declares (tags.versionFor: 5.5.5 is
+  // read as itself, any 7.x as 7.0, a file that says nothing as 5.5.1, and 5.5 by 5.5.1's table
+  // widened by what 5.5 allows, P13).
   //   E10  the tag is malformed there (tags.tagKind): not in that standard, and not a custom tag
   //        by its rule.
   //   N8   a standard tag whose parent line's tag is a standard one too, and the table does not put

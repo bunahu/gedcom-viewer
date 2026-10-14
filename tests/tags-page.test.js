@@ -169,9 +169,9 @@ describe('N8: a standard tag where the standard does not put it', () => {
 });
 
 describe('the version a file is judged by is the one it declares', () => {
-  it('5.5 is read as 5.5.1, a file that says nothing as 5.5.1, 5.5.5 as itself, and any 7.x as 7.0', () => {
+  it('5.5 is read as itself (5.5.1\'s table, widened by what 5.5 allows), a file that says nothing as 5.5.1, 5.5.5 as itself, and any 7.x as 7.0', () => {
     const version = (text) => read(text).tagVersion;
-    assert.equal(version(file('5.5', '')), '5.5.1');
+    assert.equal(version(file('5.5', '')), '5.5');
     assert.equal(version(file('5.5.1', '')), '5.5.1');
     assert.equal(version('0 HEAD\n1 CHAR UTF-8\n0 TRLR\n'), '5.5.1', 'no GEDC.VERS');
     assert.equal(version(file('5.5.5', '')), '5.5.5');
@@ -456,5 +456,67 @@ describe('within the budget on a file of about 300,000 lines', () => {
     const editMs = performance.now() - t1;
     assert.ok(readMs < 1000, `read took ${readMs.toFixed(0)} ms`);
     assert.ok(editMs < 1000, `the edit's whole-file check took ${editMs.toFixed(0)} ms`);
+  });
+});
+
+// P13, picked for the beta on 2026-10-14 (W): a file that declares 5.5 is judged by 5.5.1's table,
+// widened by what 5.5 allows, so a valid 5.5 file raises none of the findings 5.5.1's table gave it,
+// and a 5.5 file that uses what 5.5.1 added stays quiet too. A table of 5.5's own (S) is to come back.
+describe('a file that declares 5.5: 5.5.1\'s table, widened by what 5.5 allows (P13)', () => {
+  // 5.5's multimedia record (FORM, TITL, BLOB and its CONT lines, an OBJE to the record that goes on),
+  // a multimedia link with a FORM of its own, AGE under a family's event, SOUR under PLAC and TYPE
+  // under ASSO; with EMAIL under the submitter and RESN under a BIRT, which 5.5.1 added
+  const body = '0 @U1@ SUBM\n1 NAME Made /Up/\n1 EMAIL made@example.org\n' +
+    '0 @I1@ INDI\n1 NAME Ada /L/\n1 BIRT\n2 DATE 1900\n2 RESN privacy\n2 PLAC Here\n3 SOUR @S1@\n1 OBJE\n2 FORM jpeg\n2 FILE ada.jpg\n' +
+    '1 ASSO @I2@\n2 TYPE INDI\n2 RELA Godmother\n0 @I2@ INDI\n1 NAME Bea /L/\n' +
+    '0 @F1@ FAM\n1 WIFE @I1@\n1 ENGA\n2 AGE 20\n1 OBJE @O1@\n0 @S1@ SOUR\n1 TITL A register\n' +
+    '0 @O1@ OBJE\n1 FORM bmp\n1 TITL A picture\n1 BLOB\n2 CONT .HM.......k.1..F.jo3.ow\n2 CONT .HM.......k.1..F.jo3.oy\n1 OBJE @O2@\n' +
+    '0 @O2@ OBJE\n1 FORM gif\n1 BLOB\n2 CONT .HM.......k.1..F.jo3.oz\n';
+  const header = '1 SUBM @U1@\n';
+
+  it('the lines 5.5 allows raise nothing, and neither do 5.5.1\'s additions', () => {
+    const m = read(file('5.5', body, header));
+    assert.equal(m.tagVersion, '5.5');
+    assert.deepEqual(found(m), []);
+  });
+
+  it('the same lines in a 5.5.1 file are judged as they were: each place 5.5 alone allows is out of place, and BLOB is no tag of 5.5.1', () => {
+    const t = file('5.5.1', body, header);
+    assert.deepEqual(found(read(t)), [
+      ['N8', at(t, '3 SOUR @S1@'), 'SOUR does not belong under PLAC'],
+      ['N8', at(t, '2 FORM jpeg'), 'FORM does not belong under OBJE'],
+      ['N8', at(t, '2 TYPE INDI'), 'TYPE does not belong under ASSO'],
+      ['N8', at(t, '2 AGE 20'), 'AGE does not belong under ENGA'],
+      ['N8', at(t, '1 FORM bmp'), 'FORM does not belong under OBJE'],
+      ['E10', at(t, '1 BLOB'), 'BLOB is not a tag of GEDCOM 5.5.1'],
+      ['N8', at(t, '1 OBJE @O2@'), 'OBJE does not belong under OBJE'],
+      ['N8', at(t, '1 FORM gif'), 'FORM does not belong under OBJE'],
+      ['E10', at(t, '1 BLOB', 2), 'BLOB is not a tag of GEDCOM 5.5.1'],
+    ], 'the CONT lines under BLOB stand under a tag that is not judged');
+  });
+
+  it('a tag only another version has is no tag of 5.5, in words that say 5.5; the right frame says what BLOB is', () => {
+    const t = file('5.5', '0 @N1@ SNOTE x\n');
+    assert.deepEqual(found(read(t)), [['E10', at(t, '0 @N1@ SNOTE x'), 'SNOTE is not a tag of GEDCOM 5.5']]);
+    assert.equal(core.tagMeaning('BLOB', '5.5', new Set()), 'Multimedia, such as a picture, kept in the file itself as lines of encoded text (GEDCOM 5.5 only).');
+    assert.equal(core.tagMeaning('BLOB', '5.5.1', new Set()), 'BLOB is not a tag of GEDCOM 5.5.1.');
+    assert.equal(core.tagMeaning('EMAIL', '5.5', new Set()), tags.meaning('EMAIL'));
+  });
+
+  it('the 22 public files that declare 5.5 read with none of the 145 findings that 5.5.1\'s table gave them', { skip: h.NO_CORPORA }, () => {
+    const fives = h.gedFiles(h.CORPORA).map((p) => [p, h.readFile(p)]).filter(([, m]) => (m.version || '').trim() === '5.5');
+    assert.equal(fives.length, 22);
+    let was = 0;
+    for (const [p, m] of fives) {
+      const name = path.basename(p);
+      assert.equal(m.tagVersion, '5.5', name);
+      assert.deepEqual(found(m), [], name);
+      const doc = core.openDocument(h.bytesOfFile(p));               // its GEDC.VERS typed over as 5.5.1: judged as before P13
+      const r = core.editLine(doc, m.facts.lines.version, '2 VERS 5.5.1');
+      assert.ok(r.ok, `${name}: ${r.reason}`);
+      assert.equal(doc.view.tagVersion, '5.5.1', name);
+      was += found(doc.view).length;
+    }
+    assert.equal(was, 145, 'the four GEDitCOM torture tests and allged.ged, as 5.5.1\'s table judged them');
   });
 });

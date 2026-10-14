@@ -30,25 +30,39 @@
  *
  * The lookups:
  *   meaning(tag)
- *     The plain line, or null when the tag is not in the table.
+ *     The plain line, or null when the tag is not in the table. BLOB, which only 5.5 defines (see
+ *     GEDCOM 5.5 below), has a line too.
  *   allowedUnder(tag, parentTag, version)
- *     true or false, or null when the tag is not in the table. The version is '5.5.1', '5.5.5' or
- *     '7.0'. A tag that is in the table but not defined by that version gives false there (SNOTE
- *     under 'record' is false in 5.5.1). Any other version gives null.
+ *     true or false, or null when the tag is not in the table. The version is '5.5.1', '5.5.5',
+ *     '7.0' or '5.5'. A tag that is in the table but not defined by that version gives false there
+ *     (SNOTE under 'record' is false in 5.5.1). Any other version gives null.
  *   versionFor(declared)
- *     The version to judge a file by, from what it declares in HEAD.GEDC.VERS: '5.5.1', '5.5.5'
- *     or '7.0'. '5.5.5' and '7.0' are read as themselves, and any other 7.x as '7.0' (the text
- *     numbers its patches, 7.0.18, while a file says 7.0; a later 7.x has no table of its own).
- *     '5.5', which differs little from 5.5.1, and anything else, or nothing, are read as '5.5.1'.
+ *     The version to judge a file by, from what it declares in HEAD.GEDC.VERS: '5.5.1', '5.5.5',
+ *     '7.0' or '5.5'. '5.5.5', '7.0' and '5.5' are read as themselves, and any other 7.x as '7.0'
+ *     (the text numbers its patches, 7.0.18, while a file says 7.0; a later 7.x has no table of its
+ *     own). Anything else, or nothing, is read as '5.5.1'.
  *   tagKind(tag, version, declared)
  *     What a tag is in a file of that version: 'standard' (in the table for that version), 'custom'
  *     (the version lets anyone add it, and it is well formed), 'undeclared' (7.0 only: well
  *     formed as an extension, but the header's SCHMA does not declare it) or 'malformed' (none of
  *     those; that includes a tag only another version defines, which meaning() can tell apart).
  *     `declared` is a Set or an array of the extension tags the file's HEAD.SCHMA declares, or
- *     nothing; only 7.0 reads it. The version must be one of the three, else null. The lookup
- *     judges the tag alone, so a caller must not ask it about a line below an extension: 7.0 calls
- *     such a line an extension-defined substructure, and a standard tag there is not wrong.
+ *     nothing; only 7.0 reads it. The version must be one of the three or '5.5', else null. The
+ *     lookup judges the tag alone, so a caller must not ask it about a line below an extension: 7.0
+ *     calls such a line an extension-defined substructure, and a standard tag there is not wrong.
+ *
+ * GEDCOM 5.5 (the release of 2 January 1996, and the errata sheet of 10 January 1996) has no table
+ * of its own. A file that declares it is judged by 5.5.1's table, widened by what 5.5 allows and
+ * 5.5.1 does not: one tag, BLOB, multimedia held in the file itself, which 5.5.1 removed; and 15
+ * places, AGE under the nine family events (5.5's event detail holds AGE for a family's events too),
+ * FORM and OBJE under OBJE (5.5's multimedia record and link carry their format themselves, and a
+ * record may chain to the next), BLOB under OBJE and CONT under BLOB, SOUR under PLAC, and TYPE under
+ * ASSO (in the release, not in the errata sheet). They are read from 5.5's grammar by the scripts
+ * that read the other three, in both texts, and checked by hand. The owner picked this on
+ * 2026-10-14 for the beta (BUILD-BRIEF section 19, P13: W, lenient), with a table of 5.5's own,
+ * which would also call 5.5.1's additions in a 5.5 file out of place (S, strict), to return to.
+ * 5.5's rule for a tag is 5.5.1's: "All user-defined tags ... must begin with an underscore", and a
+ * tag is at most 31 characters.
  *   customMeaning(tag)
  *     For a well known tag no standard defines, { tag, meaning, vendor }: a plain line and who
  *     writes it. Otherwise null. CUSTOM_TAGS is the list, in order of tag. It is no registry: a
@@ -700,12 +714,34 @@
   const SITS = new Map();
   for (const e of TAGS) for (const v of e.versions) SITS.set(`${e.tag} ${v}`, new Set(e.under[v]));
 
+  // GEDCOM 5.5, as the header says: 5.5.1's table, widened by BLOB and by the places 5.5 gives a tag
+  // that 5.5.1 does not, read from 5.5's grammar (the release and the errata sheet alike).
+  const V55 = '5.5';
+  const BLOB = 'BLOB';
+  const BLOB_MEANING = 'Multimedia, such as a picture, kept in the file itself as lines of encoded text (GEDCOM 5.5 only).';
+  const PLACES_55 = new Map([
+    ['AGE', 'ANUL DIV DIVF ENGA MARB MARC MARL MARR MARS'],
+    [BLOB, 'OBJE'],
+    ['CONT', BLOB],
+    ['FORM', 'OBJE'],
+    ['OBJE', 'OBJE'],
+    ['SOUR', 'PLAC'],
+    ['TYPE', 'ASSO'],
+  ].map(([tag, list]) => [tag, new Set(list.split(' '))]));
+
   function meaning(tag) {
     const e = BY_TAG.get(tag);
-    return e ? e.meaning : null;
+    if (e) return e.meaning;
+    return tag === BLOB ? BLOB_MEANING : null;
   }
 
   function allowedUnder(tag, parentTag, version) {
+    if (version === V55) {
+      const more = PLACES_55.get(tag);
+      if (tag === BLOB) return more.has(parentTag);
+      const base = allowedUnder(tag, parentTag, V551);
+      return base === null ? null : base || Boolean(more && more.has(parentTag));
+    }
     if (!BY_TAG.has(tag) || !VERSIONS.includes(version)) return null;
     const sits = SITS.get(`${tag} ${version}`);
     return sits ? sits.has(parentTag) : false;
@@ -714,6 +750,7 @@
   function versionFor(declared) {
     const s = typeof declared === 'string' ? declared.trim() : '';
     if (s === V555) return V555;
+    if (s === V55) return V55;
     if (/^7\.\d+(\.\d+)*$/.test(s)) return V7;
     return V551;
   }
@@ -726,6 +763,7 @@
   }
 
   function tagKind(tag, version, declared) {
+    if (version === V55) return tag === BLOB ? 'standard' : tagKind(tag, V551, declared);
     if (!VERSIONS.includes(version)) return null;
     if (typeof tag !== 'string') return 'malformed';
     const e = BY_TAG.get(tag);

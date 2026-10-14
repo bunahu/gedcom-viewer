@@ -447,13 +447,16 @@ describe('the places: spot checks', () => {
     assert.equal(meaning('BIRT'), 'Birth: when and where a person was born.');
     assert.equal(typeof meaning('SNOTE'), 'string');
     assert.equal(typeof meaning('CONC'), 'string');
-    for (const odd of ['', 'birt', 'Birt', ' BIRT', 'BIRT ', 'EMAI', 'BLOB', undefined, null, 5, {}, ['BIRT']]) assert.equal(meaning(odd), null, String(odd));
+    assert.equal(meaning('BLOB'), 'Multimedia, such as a picture, kept in the file itself as lines of encoded text (GEDCOM 5.5 only).',
+      'BLOB, which only 5.5 defines, is in no table and has a line of its own (P13)');
+    for (const odd of ['', 'birt', 'Birt', ' BIRT', 'BIRT ', 'EMAI', 'blob', undefined, null, 5, {}, ['BIRT']]) assert.equal(meaning(odd), null, String(odd));
   });
 
-  it('answers only for the three versions it knows: anything else is null, and a tag a version lacks is false there', () => {
-    for (const version of ['5.5', '5', '7', '7.0.18', '7.1', '', undefined, null, 551, 'V7']) {
+  it('answers only for the three versions it knows, and 5.5: anything else is null, and a tag a version lacks is false there', () => {
+    for (const version of ['5', '5.4', '7', '7.0.18', '7.1', '', undefined, null, 551, 5.5, 'V7']) {
       assert.equal(allowedUnder('BIRT', 'INDI', version), null, String(version));
     }
+    assert.equal(allowedUnder('BIRT', 'INDI', '5.5'), true, '5.5 is judged by 5.5.1\'s table, widened (P13)');
     assert.equal(allowedUnder('CHAR', 'HEAD', V7), false);
     assert.equal(allowedUnder('SCHMA', 'HEAD', V551), false);
     assert.equal(allowedUnder('SCHMA', 'HEAD', V555), false);
@@ -564,8 +567,8 @@ describe('what makes a tag, version by version (tagKind)', () => {
   const kinds = (tag, declared) => VERSIONS.map((v) => tagKind(tag, v, declared));
   const long = (n) => `_${'X'.repeat(n - 1)}`;      // an extension tag n characters long, the underscore counted
 
-  it('knows the three versions, and answers null for any other', () => {
-    for (const version of ['5.5', '5', '7', '7.0.18', '7.1', '', undefined, null, 551, 'V7']) {
+  it('knows the three versions, and 5.5, and answers null for any other', () => {
+    for (const version of ['5', '5.4', '7', '7.0.18', '7.1', '', undefined, null, 551, 5.5, 'V7']) {
       assert.equal(tagKind('NAME', version), null, String(version));
       assert.equal(tagKind('_APID', version), null, String(version));
       assert.equal(tagKind('FAM9', version), null, String(version));
@@ -716,8 +719,13 @@ describe('the version a file declares (versionFor)', () => {
     for (const declared of ['7.0.18', '7.0.0', '7.1', '7.1.2', '7.12', '7.0.3.1']) assert.equal(versionFor(declared), V7, declared);
   });
 
-  it('reads 5.5, and anything else, or nothing, as 5.5.1', () => {
-    for (const declared of ['5.5', '5.4', '4.0', '3.0', '6.0', '7', '8.0', '5.5.2', '5.5.1.1', '5.5.5.1', '5.6', 'v7.0', '7.x', '7.', 'seven', '', ' ', '\n', undefined, null, 5.5, 7, {}, [], ['7.0']]) {
+  it('reads 5.5 as itself, to be judged by 5.5.1\'s table widened by what 5.5 allows (P13, picked 2026-10-14)', () => {
+    assert.equal(versionFor('5.5'), '5.5');
+    assert.equal(versionFor(' 5.5 '), '5.5');
+  });
+
+  it('reads anything else, or nothing, as 5.5.1', () => {
+    for (const declared of ['5.4', '4.0', '3.0', '6.0', '7', '8.0', '5.5.2', '5.5.1.1', '5.5.5.1', '5.6', 'v7.0', '7.x', '7.', 'seven', '5.50', '5.5.', '', ' ', '\n', undefined, null, 5.5, 7, {}, [], ['7.0'], ['5.5']]) {
       assert.equal(versionFor(declared), V551, String(declared));
     }
   });
@@ -728,8 +736,48 @@ describe('the version a file declares (versionFor)', () => {
     assert.equal(versionFor('\t5.5.1'), V551);
   });
 
-  it('always gives one of the three versions', () => {
-    for (const declared of ['5.5', '5.5.1', '5.5.5', '7.0', '7.0.18', '9.9', '', undefined]) assert.ok(VERSIONS.includes(versionFor(declared)), String(declared));
+  it('always gives one of the three versions, or 5.5', () => {
+    for (const declared of ['5.5', '5.5.1', '5.5.5', '7.0', '7.0.18', '9.9', '', undefined]) assert.ok([...VERSIONS, '5.5'].includes(versionFor(declared)), String(declared));
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// GEDCOM 5.5 (P13, W, picked for the beta on 2026-10-14): a file that declares 5.5 is judged by
+// 5.5.1's table, widened by BLOB and by the 15 places 5.5's grammar gives a tag that 5.5.1's does
+// not, in the release of 2 January 1996 and its errata sheet of 10 January 1996 alike.
+describe('GEDCOM 5.5: 5.5.1\'s table, widened by what 5.5 allows', () => {
+  const V55 = '5.5';
+  const MORE_55 = [['AGE', 'ANUL'], ['AGE', 'DIV'], ['AGE', 'DIVF'], ['AGE', 'ENGA'], ['AGE', 'MARB'], ['AGE', 'MARC'],
+    ['AGE', 'MARL'], ['AGE', 'MARR'], ['AGE', 'MARS'], ['BLOB', 'OBJE'], ['CONT', 'BLOB'], ['FORM', 'OBJE'], ['OBJE', 'OBJE'],
+    ['SOUR', 'PLAC'], ['TYPE', 'ASSO']];
+  const more = new Set(MORE_55.map(([t, p]) => `${t} ${p}`));
+  const parents = ['record', 'HEAD', ...TAGS.map((e) => e.tag), 'BLOB', '_APID', 'FAM9', 'constructor'];
+
+  it('allows the 15 places in 5.5, and none of them in 5.5.1', () => {
+    assert.equal(MORE_55.length, 15);
+    for (const [t, p] of MORE_55) {
+      assert.equal(allowedUnder(t, p, V55), true, `${t} under ${p} in 5.5`);
+      assert.notEqual(allowedUnder(t, p, V551), true, `${t} under ${p} in 5.5.1`);
+    }
+  });
+
+  it('answers as 5.5.1 does for every other tag under every other parent', () => {
+    for (const e of TAGS) {
+      for (const p of parents) if (!more.has(`${e.tag} ${p}`)) assert.equal(allowedUnder(e.tag, p, V55), allowedUnder(e.tag, p, V551), `${e.tag} under ${p}`);
+    }
+    assert.equal(allowedUnder('CONC', 'BLOB', V55), false, 'BLOB holds no value of its own, only the CONT lines the grammar draws under it');
+    assert.equal(allowedUnder('BLOB', 'INDI', V55), false);
+    assert.equal(allowedUnder('SNOTE', 'record', V55), false, 'a tag only 7.0 has, as in 5.5.1');
+    for (const odd of ['FAM9', '_APID', 'blob', 'constructor', undefined]) assert.equal(allowedUnder(odd, 'INDI', V55), null, String(odd));
+  });
+
+  it('calls BLOB standard in 5.5 and in no other version, and every other tag what 5.5.1 calls it, by the same rule for a tag of one\'s own', () => {
+    assert.equal(tagKind('BLOB', V55), 'standard');
+    assert.deepEqual(VERSIONS.map((v) => tagKind('BLOB', v)), ['malformed', 'malformed', 'malformed']);
+    for (const t of [...TAGS.map((e) => e.tag), ...CUSTOM_TAGS.map((c) => c.tag), 'FAM9', 'birt', 'blob', '_', '_A_B', '_X'.padEnd(32, 'X'), undefined, 5]) {
+      assert.equal(tagKind(t, V55, []), tagKind(t, V551, []), String(t));
+    }
+    assert.equal(tagKind('EMAIL', V55), 'standard', 'what 5.5.1 added passes in a 5.5 file (W); a table of 5.5\'s own would not (S)');
   });
 });
 
