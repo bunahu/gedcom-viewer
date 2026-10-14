@@ -831,6 +831,20 @@ say 5.5.1: flag it as such. His words: "Another option is to flag 5.5, since it 
 mis-labeled and should be 5.5.1. So we'll need to scope that out in a future session." For a session
 of its own to scope, beside the return to S (5.5 judged by a table of its own, P13).
 
+Raised 2026-10-14, at 0.6.4's tag, for later. The hover boxes' words: the five in `index.html`, under one
+comment, are the mockups' provisional words, and the owner writes the final ones (`HOVER_WORDS` in
+`tests/page.test.js` holds the same five; the walk reads them from `index.html`). And four calls the hover
+boxes' build made, kept as defaults until the owner says otherwise: the left bar's box sits under its tabs,
+not over them, since over them it covered the tabs it names; the counts bar's sits under the bar, which is
+too thin to hold it; the name's and the counts bar's boxes go when the pointer moves onto them, so they are
+not "hoverable" as WCAG 1.4.13 asks, where the frames' boxes are (about ten lines to change); and with a file
+open the four frames drop their descriptions, which describe an empty frame.
+
+Approved 2026-10-12 and not built: the empty page fitted to a phone, as the phone mockups' option 1 has it
+(the drawers whether or not a file is open, at the widths they have with one: the right frame below 1,100 px,
+the left bar below 800 px). The beta is for desktop browsers, and its invitation says so. The mockups and
+their build list are in the shared notes folder (`empty-page-phone/`).
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
@@ -1944,3 +1958,69 @@ lost their 145 findings and gained none, and the other 67 read exactly as before
 places and 5.5.1's EMAIL and RESN reading nothing, the same lines judged as before in a 5.5.1 file,
 and the 22 public 5.5 files reading nothing, each giving back its old findings, 145 in all, when its
 `2 VERS 5.5` is typed over as 5.5.1.
+
+### Report a problem: the trail, and each check's place (2026-10-12, built for 0.6.4)
+
+Gauge item 4 of the beta-readiness review: a report could not help reproduce a crash, a bug from a
+sequence of acts, slowness or a wrong finding, and the page listened for no error of its own. It now
+holds, still never a line, a value or a name from the file:
+
+- the window's size;
+- for each check, the tag, its parent's tag and the first three lines of each place, notes as well
+  as errors; a tag no standard defines and not of a custom tag's form reads "a malformed tag", in the
+  Records line too (`0 Smith` had put a surname there);
+- the visit's last ten acts by their undo labels, Delete record by its tag and line alone (a record's
+  id is the file's own and can hold a name), with each Undo, Redo, open and save (its way, its stamps,
+  whether a note was typed, never the note, the date in the header, how it ended) and each refused act;
+- the last three errors the page hit, from new `error` and `unhandledrejection` listeners, each with
+  its place in the code and the act it came after, never the stack, with any whole line, value or
+  file name of the file cut from the browser's words;
+- how long the last open and the last act took, in their parts.
+
+Built by Opus on a branch (`7da8e7d`), merged into 0.6.4 on 2026-10-14. A test builds a report from a
+made-up file full of names, places, dates, notes, and ids and malformed tags that hold names, after
+every kind of act and errors that quote the file, and finds none of them in it. One limit: opened from
+disk, Chrome keeps most of the page's own errors from it (an error at once reads only "Script error.",
+and one in a step that waits is not seen); served, as at gedcom-viewer.net, every one comes whole. A
+report now runs to about 28 lines in a box that shows about 14; it scrolls, and a taller box would
+change the page's face, so it would be a mockup first.
+
+### The hover boxes (2026-10-13, built for 0.6.4)
+
+The owner wants a first-time visitor to understand the page without a title or landing page covering
+its structure (the first screen was withdrawn in 0.6.3). On 2026-10-13, from two mockups, the owner
+chose option A: a box on the name, always, and on each empty frame (the counts bar, the left bar, the
+lines' frame, the right frame) until a file is open. Nothing shows before a hover and nothing covers
+the frames otherwise; no title page, tour or sample.
+
+Built by Sonnet as one commit (`5ebb9a3`), merged into 0.6.4 on 2026-10-14. The five boxes are in
+`index.html`, together under one comment, each a `role="tooltip"` element hidden until its part is
+hovered, and each part names its box in `aria-describedby`. `ui.js` ("The hover boxes") shows one after
+the pointer has rested about 300 ms and puts it away when the pointer leaves, on Esc, on a click, while
+a file is dragged over, and, for a frame's, when a file opens; after Esc or a click it stays away until
+the pointer has left and come back. The name takes the keyboard's focus, which shows its box and a
+ring. A box takes no pointer, and is placed through the CSSOM, never off the window. Its look is the
+Settings menu's, with seven `--tip-*` properties, a 120 ms fade that less motion removes, and the
+system's own colours when the computer forces them; its words hold 4.5 to 1 and its edge 3 to 1 in all
+three looks. The width is 23em of words, 348 px across at Normal, which the mockups' line breaks need.
+The words are provisional, and four calls of the build are kept as defaults for now (section 18).
+
+### 0.6.4 tagged (2026-10-14)
+
+Tagged at the owner's word on 2026-10-14 ("Tag and push 0.6.4, and let's get the web version updated
+and pushed out"), without a walk of the owner's own; the gates below stood in. 0.6.4 holds ⌥↑ and ⌥↓;
+the three fixes of the beta-readiness review (Restore into its own block, nothing below an extension
+judged, the LF CR refusal); P13's W, a 5.5 file judged by 5.5.1's table widened by what 5.5 allows; the
+problem report's trail; and the hover boxes.
+
+Gates: 444 tests, all pass, none skipped. `tools/check-real.js` on both real files: every number as
+measured, each edit and record deleted within budget, and undone to its sha256. `tools/compare.js` on
+the fixtures and both real files: 74 files, none differ. `tools/walk.js` on a long, wide fictional file
+of 48,202 lines (the longest 1,515 characters): every one of its 313 steps passes, with no error in the console and nothing sent. The walk was not run on the real files
+this time: the session's safety check refused to open them in the browser.
+
+Open after it: the hover boxes' words and four calls, P13's S and the flag for a mislabelled 5.5 file,
+and the empty page on a phone (all in section 18); the feedback address's delivery and the address
+replies come from, to settle before the first tester writes; and the review's backlog (`deleteRecord`
+at scale, `headerOp` on a long HEAD NOTE, a crafted file of thousands of levels, a file over the limit
+refused only after it is read).
