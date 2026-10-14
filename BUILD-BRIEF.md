@@ -825,6 +825,12 @@ has it, and the main frame darkened to an editor's look while it is on. Today Ed
 a file opens, and the pressed button is its only cue, which the review's item 13 also found. Logged
 as P10 (section 19), held lightly with P9.
 
+Raised by the owner on 2026-10-14, with his pick of P13: a file that declares 5.5 but uses what 5.5.1
+added (EMAIL, WWW, MAP and the like, or RESN under an event) is probably labelled wrong, and should
+say 5.5.1: flag it as such. His words: "Another option is to flag 5.5, since it may be erroneously
+mis-labeled and should be 5.5.1. So we'll need to scope that out in a future session." For a session
+of its own to scope, beside the return to S (5.5 judged by a table of its own, P13).
+
 `core.js` and `save.js` never touch the page, so if gedview is ever taken into the sibling project they move as
 they are.
 
@@ -1879,8 +1885,8 @@ Opus on main, `dde754f`:
   back with blank lines the screen never showed: "The first line would then end CR LF, not LF CR,
   and LF CR is one line ending only in a file whose first line ends that way (6.2): line 2, which
   ends LF CR, would read back as two lines, the second of them blank."
-- **Not built: GEDCOM 5.5 judged by 5.5.1's table** (the review's other false alarm). How to
-  judge a 5.5 file is a choice, P13 below, for his pick.
+- **GEDCOM 5.5 judged by 5.5.1's table** (the review's other false alarm). How to judge a 5.5
+  file was a choice, P13 below; he picked W for the beta on 2026-10-14, and it is built (P13).
 
 415 tests (399 before), among them `tests/restore.test.js`; each new test fails on a51bc97. The walk
 gained a step in its drags part (a line deleted from a person, the person pressed above another by
@@ -1919,3 +1925,22 @@ does is what the beta would show. S is the rule every other version is judged by
 by the version it declares", P12); W cannot give a file that reads clean today a new finding. Either
 way the table gains a fourth version, BLOB a plain meaning, and the tests their counts; the stamps and
 the header's note are untouched.
+
+Picked 2026-10-14: **W**, for the beta, with S to come back to. His words: "Pick lenient for beta, but
+then we'll return to strict later. Another option is to flag 5.5, since it may be erroneously
+mis-labeled and should be 5.5.1. So we'll need to scope that out in a future session." (The flag is
+in section 18.) Built by Opus on main for 0.6.4. `tags.versionFor` reads 5.5 as itself; `tagKind`
+and `allowedUnder` judge `'5.5'` by 5.5.1's answer, widened by BLOB (standard, under OBJE) and the 15
+places, from both texts, so a file written to either the release or its errata sheet passes; a tag
+of one's own follows 5.5.1's rule, which 5.5 words the same (an underscore first, 31 characters at
+most). The three tables are unchanged, and `VERSIONS` still names them; S, when it comes, is the
+fourth table, from the derivation already made. BLOB has a plain line in the right frame ("Multimedia,
+such as a picture, kept in the file itself as lines of encoded text (GEDCOM 5.5 only)."), and E10's
+words for a BLOB in a file of another version now name it as another version's tag, "BLOB is not a
+tag of GEDCOM 5.5.1", as they do SNOTE. On the 72 written and public files, the 5 that declare 5.5
+lost their 145 findings and gained none, and the other 67 read exactly as before, finding for finding;
+`tools/compare.js fixtures` finds no difference. 423 tests (415 before): the 15 places and BLOB in
+5.5 and in no other version, every other answer as 5.5.1's, a made-up 5.5 file with all of 5.5's
+places and 5.5.1's EMAIL and RESN reading nothing, the same lines judged as before in a 5.5.1 file,
+and the 22 public 5.5 files reading nothing, each giving back its old findings, 145 in all, when its
+`2 VERS 5.5` is typed over as 5.5.1.
