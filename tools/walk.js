@@ -47,6 +47,18 @@
 // Release 0.6.4's ⌥↓ and ⌥↑ are walked in the drags part, by keys alone: a block moved past the sibling below
 // or above it, a shut one, a record by its 0 line, the rows, the right frame's Moved line and Changes read,
 // Undo and Redo once each, a refusal's notice, and the keys doing nothing with Edit off.
+// The problem report's additions of 2026-10-12 are walked in the third round's report step (the visit's
+// acts by their undo labels, an error thrown and a promise left rejected, each with its place and never
+// its stack, the timings and the window's size) and in the tags part (each check with its tag, its
+// parent's tag and its line, and a malformed tag never written out).
+// The hover boxes (the owner's choice of 2026-10-13, option A) are walked in the bars part, before a file is open and after: nothing
+// shows before a hover; each of the five parts (the name, the counts bar, the left bar, the lines' frame, the right frame) shows its
+// box once the pointer has rested, with the words index.html gives it, in its place (under the name, under the bar, inside the frame
+// near its top), taking no pointer, named as the part's description, which the browser's accessibility tree reads out; Esc, a click, a
+// file dragged over the page and the pointer leaving put it away, a click going through to what was under it; the keyboard's focus on
+// the name shows its box; the boxes stay inside a window 480 px wide and at the larger text; the fade is there, and gone with less
+// motion; the system's own colors are drawn when the computer forces them; with a file open the four frames show none and stop
+// describing themselves, and the name's box still shows.
 // --shots DIR saves pictures of the fictional files, and of nothing else.
 // --only PART walks one part alone, or several named with commas: read-only, rest, editing, edges,
 // third, scroll, drags, save, copy, look, bars, drawers, tags, titles. Exit 0 when every step passes.
@@ -1236,16 +1248,35 @@ async function thirdRound(page, dir, shots) {
 
   // P8 — Report a problem: the report reads as counts and codes and holds no line of the file; cut
   // a line and it no longer reads as built; Copy puts the box as it reads, then What happened, on
-  // the clipboard, and nothing else
+  // the clipboard, and nothing else. 2026-10-12: it lists the visit's acts by their undo labels, the
+  // errors the page hit (the walk throws one and leaves a promise rejected, and takes the console's
+  // two lines for them out after), how long the open and the last act took, and the window's size.
+  const thrownBefore = page.log.errors.length;
+  await page.ev("setTimeout(() => { throw new TypeError('the walk threw this'); }, 0); Promise.reject(new RangeError('the walk rejected this')); true");
+  await sleep(200);
+  const thrown = page.log.errors.splice(thrownBefore);
   await setting(page, 'report');
   await page.waitFor("document.getElementById('report-text') !== null");
-  const p8Report = await page.ev("({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.getElementById('report-text').value, state: document.getElementById('report-state').textContent })");
+  const p8Report = await page.ev("({ title: document.querySelector('#dialog .dialog-title').textContent, text: document.getElementById('report-text').value, state: document.getElementById('report-state').textContent, w: innerWidth, h: innerHeight, r: devicePixelRatio })");
   await shot('report');
   const p8Leaked = [];
   for (let i = 0; i < m.n; i += 1) { const t = m.texts[i].trim(); if (t.length >= 3 && p8Report.text.includes(t)) p8Leaked.push(i + 1); }
   check(p8Report.title === 'Report a problem' && p8Report.text.startsWith('GEDCOM Viewer ') && /\nRecords: INDI \d/.test(p8Report.text) && /\nchecksum: [0-9a-f]{8}$/.test(p8Report.text)
     && !/Fixture/.test(p8Report.text) && p8Leaked.length === 0 && /^As built/.test(p8Report.state),
     `Report a problem: ${p8Report.text.split('\n').length} lines of counts and codes, no line of the file, and it reads as built: "${p8Report.state}"`);
+  const p8Lines = p8Report.text.split('\n');
+  const p8Acts = p8Lines.slice(p8Lines.findIndex((l) => l.startsWith('Acts: ')) + 1).filter((l, k, all) => all.slice(0, k + 1).every((x) => x.startsWith('  ')));
+  const p8Errors = p8Lines.filter((l) => /^ {2}(TypeError|RangeError): the walk/.test(l));
+  check(p8Acts.length >= 3 && /^ {2}1\. Open by the file box: [\d,]+ lines, with no handle$/.test(p8Acts[0]) && p8Acts.some((l) => /^ {2}\d+\. Edit line [\d,]+$/.test(l))
+    && p8Acts.some((l) => /^ {2}\d+\. Undo: Edit line [\d,]+$/.test(l)) && p8Acts.some((l) => /^ {2}\d+\. Redo: Edit line [\d,]+$/.test(l)),
+    `the report lists the visit's acts, oldest first, by their undo labels: ${p8Acts.map((l) => `"${l.trim()}"`).slice(0, 4).join(', ')}…`);
+  check(p8Lines.includes('Errors: 2 this visit, oldest first') && p8Errors.length === 2 && p8Errors.every((l) => /, at [^ ,]+:\d+:\d+, after act \d+$/.test(l))
+    && thrown.length === 2 && !/\n {4}at /.test(p8Report.text),
+    `the page's errors, each with its place and the act it came after, never the stack: ${p8Errors.map((l) => `"${l.trim()}"`).join(', ')}`);
+  check(p8Lines.includes(`Window: ${fmt(p8Report.w)} × ${fmt(p8Report.h)} · pixel ratio ${p8Report.r}`)
+    && p8Lines.some((l) => /^Timing of the last open, in ms: [\d,.]+ in all · from disk [\d,.]+ · read [\d,.]+ \(lines [\d,.]+ · checks [\d,.]+ · gather [\d,.]+ · labels [\d,.]+\) · drawn [\d,.]+$/.test(l))
+    && p8Lines.some((l) => /^Timing of act \d+, the last timed, in ms: [\d,.]+ in all · the act [\d,.]+, its re-check [\d,.]+ \(checks [\d,.]+ · gather [\d,.]+ · labels [\d,.]+\) · drawn [\d,.]+$/.test(l)),
+    `and the window's size and the timings: "${p8Lines.find((l) => l.startsWith('Window: '))}", "${p8Lines.find((l) => l.startsWith('Timing of act'))}"`);
   await page.ev("(() => { const b = document.getElementById('report-text'); b.value = b.value.split('\\n').filter((l) => !l.startsWith('Where:')).join('\\n'); b.dispatchEvent(new Event('input', { bubbles: true })); })()");
   await page.waitFor("/^Changed/.test(document.getElementById('report-state').textContent)");
   await page.ev("document.getElementById('report-what').value = 'The walk cut the Where line.'; true");
@@ -2114,6 +2145,270 @@ const LINES_LOOK = `(() => { const probe = document.createElement('div'); probe.
     numbers: getComputedStyle(plain.querySelector('.fx')).backgroundColor, frames: getComputedStyle(document.getElementById('strip')).backgroundColor, editing }; })()`;
 const FRAME_TITLE = "document.getElementById('frame-title').textContent";
 
+// ---------------------------------------------------------------------------------------------
+// The hover boxes (the owner's choice of 2026-10-13, option A): what the page is, and what each frame will hold, in a box that
+// shows while the pointer rests on its part. Walked inside the bars part: before a file is open, then after.
+// ---------------------------------------------------------------------------------------------
+
+// The five parts, each by a selector, with the box it names as its description. `always`: the name's box shows with a file open too.
+const TIP_PARTS = [
+  { name: 'the name', part: '.app-name', id: 'tip-name', always: true },
+  { name: 'the counts bar', part: '#counts', id: 'tip-counts' },
+  { name: 'the left bar', part: '#side', id: 'tip-side', head: '.side-head' },
+  { name: 'the lines\' frame', part: '#middle', id: 'tip-middle', head: '#strip' },
+  { name: 'the right frame', part: '#right', id: 'tip-right', head: '.frame-head' },
+];
+// The words index.html gives each box, as the file has them: the walk keeps none of its own, so the owner's final copy needs no change here.
+const TIP_WORDS = Object.fromEntries([...fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').matchAll(/<div class="tip" id="(tip-[a-z]+)" role="tooltip" hidden>([^]*?)<\/div>/g)]
+  .map((m) => [m[1], m[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()]));
+const TIP_UP = "[...document.querySelectorAll('.tip')].filter((t) => !t.hidden).map((t) => t.id).join()";
+// A place on a part where the pointer can rest: in the part's visible middle, away from the controls where it can (the name: a little in from its left).
+const TIP_POINT = (sel) => `(() => { const b = document.querySelector('${sel}').getBoundingClientRect(); const l = Math.max(b.left, 0); const r = Math.min(b.right, innerWidth);
+  return { x: ${sel === '.app-name'} ? b.left + 20 : (l + r) / 2, y: ${sel === '.app-name' || sel === '#counts'} ? (b.top + b.bottom) / 2 : b.top + b.height * 0.65, wide: r - l }; })()`;
+// Where the box is, against its part and the window: all in pixels, for a box that is up.
+const TIP_PLACE = (sel, id, head) => `(() => { const t = document.getElementById('${id}').getBoundingClientRect(); const p = document.querySelector('${sel}').getBoundingClientRect();
+  const headBottom = ${head ? `document.querySelector('${sel}').querySelector('${head}').getBoundingClientRect().bottom` : 'null'};
+  const cx = (t.left + t.right) / 2; const cy = (t.top + t.bottom) / 2; const under = document.elementFromPoint(cx, cy);
+  return { left: t.left, top: t.top, right: t.right, bottom: t.bottom, width: t.width, height: t.height, partLeft: p.left, partRight: p.right, partTop: p.top, partBottom: p.bottom, headBottom,
+    inWindow: t.left >= 0 && t.top >= 0 && t.right <= innerWidth && t.bottom <= innerHeight, takesPointer: !!under && document.getElementById('${id}').contains(under),
+    font: getComputedStyle(document.getElementById('${id}')).fontSize }; })()`;
+
+async function hoverBoxesBefore(page, shot) {
+  console.log('\n   -- the hover boxes (the owner\'s choice of 2026-10-13, option A), before a file is open');
+  await page.send('Accessibility.enable');
+  const neutral = await page.ev('({ x: innerWidth / 2, y: 20 })');   // the top bar's empty middle: no part
+  const leave = async () => { await page.mouse('mouseMoved', neutral.x, neutral.y); await page.waitFor(`${TIP_UP} === ''`, 2000); };
+  const describedBy = async (sel) => {
+    const { result } = await page.send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(sel)})` });
+    const { nodes } = await page.send('Accessibility.getPartialAXTree', { objectId: result.objectId, fetchRelatives: false });
+    return nodes[0] && nodes[0].description ? nodes[0].description.value : '';
+  };
+
+  // nothing shows before a hover: the five boxes are in the page, hidden, and nothing covers the frames
+  const rest = await page.ev(`({ up: ${TIP_UP}, boxes: [...document.querySelectorAll('.tip')].map((t) => t.id + ':' + (t.hidden ? 'hidden' : 'shown') + ':' + getComputedStyle(t).display).join() })`);
+  check(rest.up === '' && rest.boxes === TIP_PARTS.map((t) => `${t.id}:hidden:none`).join() && Object.keys(TIP_WORDS).join() === TIP_PARTS.map((t) => t.id).join(),
+    `nothing shows before a hover: the five boxes (${TIP_PARTS.map((t) => t.id).join(', ')}) are in the page, hidden, display none`);
+
+  // each part: the box shows once the pointer has rested ~300 ms, with the part's words, in its place, taking no pointer; the part
+  // names it as its description, and the browser's own accessibility tree gives the same words; it goes the moment the pointer leaves
+  for (const t of TIP_PARTS) {
+    const at = await page.ev(TIP_POINT(t.part));
+    const t0 = Date.now();
+    await page.mouse('mouseMoved', at.x, at.y);
+    await sleep(120);
+    const early = await page.ev(TIP_UP);
+    await page.waitFor(`${TIP_UP} === '${t.id}'`, 3000);
+    const took = Date.now() - t0;
+    const g = await page.ev(TIP_PLACE(t.part, t.id, t.head));
+    const words = await page.ev(`document.getElementById('${t.id}').innerText.replace(/\\s+/g, ' ').trim()`);
+    const via = await page.ev(`document.querySelector('${t.part}').getAttribute('aria-describedby')`);
+    const place = t.part === '.app-name' ? Math.abs(g.left - g.partLeft) < 1 && g.top >= g.partBottom && g.top <= g.partBottom + 16
+      : t.part === '#counts' ? g.top >= g.partBottom && g.left >= g.partLeft
+        : g.left >= g.partLeft && g.right <= g.partRight + 0.5 && g.top >= g.headBottom && g.top <= g.headBottom + 20;
+    if (t.id === 'tip-name' || t.id === 'tip-right') await shot(`hover-${t.id.slice(4)}`);
+    check(early === '' && took >= 250 && took < 1500 && words === TIP_WORDS[t.id] && words.length > 20,
+      `${t.name}: no box 120 ms in; the box shows once the pointer has rested, ${took} ms in, with its words (${words.length} characters, as index.html has them)`);
+    check(place && g.inWindow && !g.takesPointer, `${t.name}: its box is ${t.part === '.app-name' ? 'under the name, level with its left edge' : t.part === '#counts' ? 'under the bar' : 'inside the frame, under its head'} (${Math.round(g.left)}, ${Math.round(g.top)}; ${Math.round(g.width)} by ${Math.round(g.height)} px), inside the window, and takes no pointer`);
+    check(via === t.id && (await describedBy(t.part)) === TIP_WORDS[t.id], `${t.name}: it names ${t.id} as its description, and the browser's accessibility tree reads out the same words`);
+    await leave();
+  }
+
+  // Esc puts the box away and it stays away until the pointer has left and come back; so does a click
+  const right = TIP_PARTS[4];
+  const at = await page.ev(TIP_POINT(right.part));
+  const show = async (to) => { await page.mouse('mouseMoved', to.x, to.y); await page.waitFor(`${TIP_UP} === '${right.id}'`, 3000); };
+  await show(at);
+  await page.key('Escape', 'Escape', 27);
+  await page.waitFor(`${TIP_UP} === ''`, 1000);
+  await sleep(500);
+  await page.mouse('mouseMoved', at.x + 12, at.y + 12);
+  await sleep(500);
+  const afterEsc = await page.ev(TIP_UP);
+  await leave();
+  await show(at);
+  check(afterEsc === '', 'Esc puts a box away at once; it does not come back while the pointer stays on its part, though it moves, and does once it has left and come back');
+  await page.clickAt(at.x, at.y);
+  await page.waitFor(`${TIP_UP} === ''`, 1000);
+  await sleep(500);
+  await page.mouse('mouseMoved', at.x + 12, at.y);
+  await sleep(500);
+  const afterClick = await page.ev(TIP_UP);
+  check(afterClick === '', 'a click puts a box away, and it stays away in the same way');
+  await leave();
+  // a click on the name itself: its box goes, and the focus the click gives it brings back neither the box nor the ring, which are the keyboard's
+  const nm = TIP_PARTS[0];
+  const nmAt = await page.ev(TIP_POINT(nm.part));
+  await page.mouse('mouseMoved', nmAt.x, nmAt.y);
+  await page.waitFor(`${TIP_UP} === '${nm.id}'`, 3000);
+  await page.clickAt(nmAt.x, nmAt.y);
+  await page.waitFor(`${TIP_UP} === ''`, 1000);
+  await sleep(500);
+  const clicked = await page.ev(`({ up: ${TIP_UP}, focused: document.activeElement.classList.contains('app-name'), ring: getComputedStyle(document.querySelector('.app-name')).outlineStyle })`);
+  await leave();
+  check(clicked.up === '' && clicked.focused && clicked.ring === 'none', 'a click on the name puts its box away; the focus the click gives it brings back neither the box nor the ring, which are the keyboard\'s');
+  await show(at);
+  await leave();
+  await page.mouse('mouseMoved', at.x, at.y);
+  await sleep(120);
+  await page.mouse('mouseMoved', neutral.x, neutral.y);                // before the rest is over: no box at all
+  await sleep(450);
+  check((await page.ev(TIP_UP)) === '', 'a pointer that leaves before the rest is over shows no box, 450 ms later');
+
+  // a click goes through a box to what is under it: the left bar's box lies over its filter box (Records' Filter records), and a click there
+  // still puts the cursor in the filter, and puts the box away
+  const side = TIP_PARTS[2];
+  const sideAt = await page.ev(TIP_POINT(side.part));
+  await page.mouse('mouseMoved', sideAt.x, sideAt.y);
+  await page.waitFor(`${TIP_UP} === '${side.id}'`, 3000);
+  const filterAt = await page.ev("(() => { const b = document.getElementById('records-filter').getBoundingClientRect(); return { x: b.left + b.width / 2, y: (b.top + b.bottom) / 2 }; })()");
+  const covered = await page.ev(`(() => { const t = document.getElementById('${side.id}').getBoundingClientRect(); return ${filterAt.x} >= t.left && ${filterAt.x} <= t.right && ${filterAt.y} >= t.top && ${filterAt.y} <= t.bottom; })()`);
+  await page.mouse('mouseMoved', filterAt.x, filterAt.y);              // along the box, still on the frame: the box stays
+  await sleep(100);
+  const stays = await page.ev(TIP_UP);
+  await page.clickAt(filterAt.x, filterAt.y);
+  await page.waitFor("document.activeElement.id === 'records-filter'", 2000);
+  const goneAfter = await page.ev(TIP_UP);
+  await page.key('Escape', 'Escape', 27);                              // out of the filter box, to the lines
+  await leave();
+  check(covered && stays === side.id && goneAfter === '', 'a click goes through to what is under a box: the left bar\'s box lay over its filter box, stayed up while the pointer moved on the frame, and the click put the cursor in the filter and put the box away');
+
+  // while a file is dragged over the page: the box goes, and none shows until the drag is over
+  await show(at);
+  const dragging = (type) => page.ev(`(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'x.ged')); document.dispatchEvent(new DragEvent('${type}', { dataTransfer: dt, bubbles: true })); return true; })()`);
+  await dragging('dragenter');
+  const overlay = await page.ev("({ up: " + TIP_UP + ", drop: !document.getElementById('drop').hidden })");
+  const middle = await page.ev(TIP_POINT('#middle'));
+  await page.mouse('mouseMoved', middle.x, middle.y);
+  await sleep(700);
+  const whileDragging = await page.ev(TIP_UP);
+  await dragging('dragleave');
+  const dropGone = await page.ev("document.getElementById('drop').hidden");
+  await page.mouse('mouseMoved', middle.x + 10, middle.y + 10);
+  await page.waitFor(`${TIP_UP} === 'tip-middle'`, 3000);
+  check(overlay.up === '' && overlay.drop && whileDragging === '' && dropGone,
+    'while a file is dragged over the page the box goes, and none shows for a pointer resting on a frame; once the drag has left, a pointer that rests shows its box again');
+  await leave();
+
+  // the keyboard: from Settings, ⇧Tab to the name shows its box, Tab on to Settings puts it away, ⇧Tab back shows it again, Esc puts it away with the
+  // focus still there, and focus coming to it again shows it. (Earlier clicks left the focus in the left bar, so the walk starts from Settings.)
+  await page.ev("document.getElementById('settings').focus(); true");
+  await page.key('Tab', 'Tab', 9, 8);
+  await page.waitFor(`${TIP_UP} === 'tip-name'`, 2000);
+  const onName = await page.ev("document.activeElement.classList.contains('app-name')");
+  const ring = await page.ev("getComputedStyle(document.querySelector('.app-name')).outlineStyle");
+  await shot('hover-name-focus');
+  await page.key('Tab', 'Tab', 9);
+  await page.waitFor(`${TIP_UP} === ''`, 2000);
+  const onSettings = await page.ev('document.activeElement.id');
+  await page.key('Tab', 'Tab', 9, 8);
+  await page.waitFor(`${TIP_UP} === 'tip-name'`, 2000);
+  await page.key('Escape', 'Escape', 27);
+  await page.waitFor(`${TIP_UP} === ''`, 1000);
+  const keptFocus = await page.ev("document.activeElement.classList.contains('app-name')");
+  await sleep(300);
+  const stayedAway = await page.ev(TIP_UP);
+  await page.key('Tab', 'Tab', 9);
+  await page.key('Tab', 'Tab', 9, 8);
+  await page.waitFor(`${TIP_UP} === 'tip-name'`, 2000);
+  await page.key('Tab', 'Tab', 9);
+  await page.waitFor(`${TIP_UP} === ''`, 2000);
+  check(onName && ring === 'solid' && onSettings === 'settings' && keptFocus && stayedAway === '',
+    'the name takes the keyboard: ⇧Tab to it shows its box (and its ring), Tab on puts it away, ⇧Tab shows it again, Esc puts it away with the focus still on the name, and focus coming to it again shows it');
+
+  // a window too narrow for the page: each box stays inside the window
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 480, height: 700, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  const narrow = [];
+  for (const t of TIP_PARTS) {
+    const p = await page.ev(TIP_POINT(t.part));
+    if (p.wide < 8) continue;                                        // the lines' frame has no width left at this size
+    await page.mouse('mouseMoved', p.x, p.y);
+    await page.waitFor(`${TIP_UP} === '${t.id}'`, 3000);
+    narrow.push([t.name, (await page.ev(TIP_PLACE(t.part, t.id))).inWindow]);
+    await page.mouse('mouseMoved', 5, 300);
+    await page.mouse('mouseMoved', neutral.x / 4, 20);
+    await page.waitFor(`${TIP_UP} === ''`, 2000);
+  }
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+  check(narrow.length >= 3 && narrow.every((n) => n[1]), `in a window 480 px wide every box that can show (${narrow.map((n) => n[0]).join(', ')}) is inside the window`);
+
+  // the larger text: the right frame's box is inside its frame, and set in the larger small type
+  await setting(page, 'text-larger');
+  await sleep(150);
+  const bigAt = await page.ev(TIP_POINT('#right'));
+  await page.mouse('mouseMoved', bigAt.x, bigAt.y);
+  await page.waitFor(`${TIP_UP} === 'tip-right'`, 3000);
+  const big = await page.ev(TIP_PLACE('#right', 'tip-right'));
+  await leave();
+  const nameAt = await page.ev(TIP_POINT('.app-name'));
+  await page.mouse('mouseMoved', nameAt.x, nameAt.y);
+  await page.waitFor(`${TIP_UP} === 'tip-name'`, 3000);
+  const bigName = await page.ev(TIP_PLACE('.app-name', 'tip-name'));
+  await leave();
+  await setting(page, 'text-normal');
+  await sleep(150);
+  check(big.font === '18px' && big.left >= big.partLeft && big.right <= big.partRight + 0.5 && big.inWindow && bigName.inWindow && bigName.font === '18px',
+    `at the larger text the boxes are set in 18 px, the right frame's inside its frame (${Math.round(big.width)} px of its ${Math.round(big.partRight - big.partLeft)}), the name's inside the window`);
+
+  // less motion takes the fade away; the computer's own colours replace the palette's when it forces them
+  await show(at);
+  const media = (features) => page.send('Emulation.setEmulatedMedia', { features });
+  const fade = await page.ev("(() => { const c = getComputedStyle(document.getElementById('tip-right')); return c.animationName + ' ' + c.animationDuration; })()");
+  await media([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  const still = await page.ev("getComputedStyle(document.getElementById('tip-right')).animationName");
+  await media([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+  await media([{ name: 'forced-colors', value: 'active' }]);
+  const forced = await page.ev(`(() => { const probe = document.createElement('div'); document.body.appendChild(probe);
+    probe.style.background = 'Canvas'; probe.style.color = 'CanvasText'; const p = getComputedStyle(probe); const canvas = p.backgroundColor; const text = p.color;
+    const c = getComputedStyle(document.getElementById('tip-right')); const out = { bg: c.backgroundColor === canvas, text: c.color === text, edge: c.borderTopColor === text, shadow: c.boxShadow, style: c.borderTopStyle }; probe.remove(); return out; })()`);
+  await shot('hover-forced');
+  await media([{ name: 'forced-colors', value: 'none' }]);
+  await leave();
+  check(fade === 'tip-in 0.12s' && still === 'none', `the box fades in over 0.12 s (${fade}), and with less motion it does not (${still})`);
+  check(forced.bg && forced.text && forced.edge && forced.shadow === 'none' && forced.style === 'solid', `forced colors: the box is drawn in the system's own colors: its page (Canvas), its words (CanvasText) and its edge, with no shadow`);
+
+  // the box that is up when a file opens: the pointer rests on the lines' frame, and the file opens under it
+  await page.mouse('mouseMoved', middle.x, middle.y);
+  await page.waitFor(`${TIP_UP} === 'tip-middle'`, 3000);
+}
+
+async function hoverBoxesAfter(page, shot) {
+  console.log('\n   -- the hover boxes, with a file open');
+  const neutral = await page.ev('({ x: innerWidth / 2, y: 20 })');
+  const after = await page.ev(TIP_UP);
+  await sleep(600);
+  check(after === '' && (await page.ev(TIP_UP)) === '', 'a file opened while the pointer rested on the lines\' frame puts the frame\'s box away, and it does not come back');
+  const described = await page.ev(`({ ${TIP_PARTS.map((t) => `'${t.id}': document.querySelector('${t.part}').getAttribute('aria-describedby')`).join(', ')} })`);
+  check(TIP_PARTS.every((t) => described[t.id] === (t.always ? t.id : null)),
+    `with a file open the four frames' words stop describing them (the counts bar, the left bar, the lines' frame and the right frame have no description), and the name keeps its own`);
+  // the frames show none, though the pointer rests on each as long as before
+  const quiet = [];
+  for (const t of TIP_PARTS.filter((x) => !x.always)) {
+    const at = await page.ev(TIP_POINT(t.part));
+    await page.mouse('mouseMoved', at.x, at.y);
+    await sleep(700);
+    quiet.push(`${t.name}: ${(await page.ev(TIP_UP)) || 'none'}`);
+    await page.mouse('mouseMoved', neutral.x, neutral.y);
+  }
+  check(quiet.every((q) => q.endsWith('none')), `with a file open the frames show no box, however long the pointer rests (${quiet.join('; ')})`);
+  // the name's box still works: the same words, in the same place
+  const name = TIP_PARTS[0];
+  const at = await page.ev(TIP_POINT(name.part));
+  await page.mouse('mouseMoved', at.x, at.y);
+  await page.waitFor(`${TIP_UP} === '${name.id}'`, 3000);
+  const g = await page.ev(TIP_PLACE(name.part, name.id));
+  const words = await page.ev(`document.getElementById('${name.id}').innerText.replace(/\\s+/g, ' ').trim()`);
+  await shot('hover-name-open');
+  check(words === TIP_WORDS[name.id] && Math.abs(g.left - g.partLeft) < 1 && g.top >= g.partBottom && g.inWindow && !g.takesPointer && (await page.ev(`document.querySelector('${name.part}').getAttribute('aria-describedby')`)) === name.id,
+    'with a file open the name\'s box still shows, with its words, under the name');
+  await page.key('Escape', 'Escape', 27);
+  await page.waitFor(`${TIP_UP} === ''`, 1000);
+  const stillOpen = await page.ev("!!document.querySelector('#grid .row.is-sel')");
+  await page.mouse('mouseMoved', neutral.x, neutral.y);
+  check(stillOpen, 'Esc puts the name\'s box away and leaves the file as it was');
+}
+
 async function theBars(page, dir, shots) {
   const file = path.join(dir, 'bars.ged');
   fs.writeFileSync(file, barsFiction());
@@ -2143,9 +2438,11 @@ async function theBars(page, dir, shots) {
   `the empty page, as 0.6.0 had it: the left bar, the main frame and the right frame show with their icons, the counts bar and the strip too, all empty; in the main frame the Open GEDCOM button, and under it "The file does not leave your computer." with its one link, Privacy Policy, to privacy.html, and nothing else`);
   check(before.foot === `Version ${VERSION}` && /^\d+\.\d+\.\d+$/.test(VERSION) && before.centred === 'center',
     `the version is out of the top bar and at the foot of Settings, in three parts, centred: "${before.foot}"`);
+  await hoverBoxesBefore(page, shot);                                 // the owner's choice of 2026-10-13: hover boxes, with no file open
 
   // a file opens with Edit on, and the lines in their editing look; Edit off gives them the frames' colour back
   await page.openFile(file);
+  await hoverBoxesAfter(page, shot);                                  // the pointer is still resting on the lines' frame, where the last box was up
   const on = await page.ev(LINES_LOOK);
   await page.click("document.getElementById('edit')");
   const off = await page.ev(LINES_LOOK);
@@ -2705,8 +3002,9 @@ async function theTags(page, dir, shots) {
   await page.waitFor("document.getElementById('report-text') !== null");
   const report = await page.ev("document.getElementById('report-text').value");
   await page.ev("document.getElementById('dialog').close(); true");
-  check(report.startsWith(`GEDCOM Viewer ${VERSION} `) && report.includes('\nChecks: E10 1 (line 29) · N8 1\n') && !/is not a GEDCOM tag|does not belong/.test(report),
-    'the problem report counts them by code ("Checks: E10 1 (line 29) · N8 1") and holds none of their words');
+  check(report.startsWith(`GEDCOM Viewer ${VERSION} `) && report.includes('\nChecks: E10 1 · N8 1\n  E10 1: a malformed tag at level 0 (line 29)\n  N8 1: BIRT under FAM (line 27)\n')
+    && !/is not a GEDCOM tag|does not belong|FAM9/.test(report),
+    'the problem report counts them by code, each with its tag, its parent\'s tag and its line ("E10 1: a malformed tag at level 0 (line 29)", "N8 1: BIRT under FAM (line 27)"), and holds none of their words, nor FAM9 as written');
 }
 
 // ---------------------------------------------------------------------------------------------

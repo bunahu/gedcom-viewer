@@ -34,11 +34,13 @@ keep traces of that.
 
 | The frames | What is in them |
 |---|---|
-| the top bar | the name; with a file open, the file's name (a click shows its facts under it) and Save; Settings |
-| the counts bar | People 2,345, Families, and so on; a click lists that type in Records |
-| the left bar | Records, Checks, Changes, Search and Tags, and at their right end the icon that hides the bar |
-| the main frame | a strip (at its left **↑ Top**, **← Back to …** while there is somewhere to go back to, **Collapse all** or **Expand all**; at its right, once a file is open, **Go to Line…**, **Edit**, **Undo**, **Redo**) and the lines under it |
-| the right frame | a header naming the line it shows (Line 66, or Lines 23-31 for a shut block or a Go to Line range), with the icon that hides the frame; under it, the selected line: what can be done to it (with Edit on: **Add line under**, **Add line after**, **Delete line**), its value, where it sits (its record and each line between, each a link to its line, and the first line under it), what points at it, its findings; a `_META` drawn as it reads; what a check means |
+| the top bar | the name, with a hover box that says what the page is and what it does, with a file open too; with a file open, the file's name (a click shows its facts under it) and Save; Settings |
+| the counts bar | People 2,345, Families, and so on; a click lists that type in Records; with no file open, a hover box says what it will hold |
+| the left bar | Records, Checks, Changes, Search and Tags, and at their right end the icon that hides the bar; with no file open, a hover box says what each tab is for |
+| the main frame | a strip (at its left **↑ Top**, **← Back to …** while there is somewhere to go back to, **Collapse all** or **Expand all**; at its right, once a file is open, **Go to Line…**, **Edit**, **Undo**, **Redo**) and the lines under it; with no file open, **Open GEDCOM**, and a hover box that says what the lines will be and how a file comes in |
+| the right frame | a header naming the line it shows (Line 66, or Lines 23-31 for a shut block or a Go to Line range), with the icon that hides the frame; under it, the selected line: what can be done to it (with Edit on: **Add line under**, **Add line after**, **Delete line**), its value, where it sits (its record and each line between, each a link to its line, and the first line under it), what points at it, its findings; a `_META` drawn as it reads; what a check means; with no file open, a hover box says what it will show |
+
+A **hover box** is a small box in the page's own look, in the Settings menu's colours, that says what a part is. It shows once the pointer has rested on its part for about 0.3 second (a pointer that moves starts the rest again), and, for the name, when the keyboard focuses it (Tab). It goes when the pointer leaves, on Esc, on a click, and while a file is dragged over the page, and after Esc or a click it stays away until the pointer has left and come back. The name's shows with a file open or not; the other four only while no file is open. A box takes no pointer, so a click goes to what is under it, and nothing shows before a hover. Each part names its box in `aria-describedby`, so a screen reader reads the same words, and with a file open the four frames' words stop describing them. The five texts are in `index.html`, together, under one comment; the page's code only shows, places and hides a box. Nothing is stored and nothing is sent.
 
 ## Open it
 
@@ -200,10 +202,35 @@ for byte. `shasum -a 256 <file>` in Terminal gives the same one, for the origina
 
 ## Report a problem
 
-**Settings → Report a problem…** writes a report of counts and codes (the file's size, lines,
-encoding, the header's program, record counts, check findings by code and line number, the
-browser, Edit and the unsaved changes, and the first twelve characters of the file's sha256) and
-never a line of the file, its name or its folder. It shows in a box to read, change or cut; **What
+**Settings → Report a problem…** writes a report of counts and codes, made so that a problem can be
+found again without the file:
+
+- the file: its size, lines, encoding, line endings, the header's program, record counts, and the
+  first twelve characters of its sha256;
+- the checks: each code with its count, then where its findings stand, the most common place first,
+  each with its first three lines, notes as well as errors: `N8 35: FORM under OBJE (lines 12, 40
+  and 77, of 35)`. A tag is written out only when a standard defines it or it is written as a custom
+  tag (an underscore, then capitals, digits or underscores); any other is "a malformed tag", since a
+  line typed that way can hold anything;
+- this visit: the last ten acts, oldest first, by the names Undo gives them (`Edit line 8`, `Add line
+  12`, `Delete lines 5–6`, `Move lines 5–6 to 8, by ⌥↑`, `Restore a line`, `Delete record INDI`, never
+  the record's id), with each Undo and Redo, each save (Save or Download a copy, with or without the
+  change stamps and the date in the header, and how it ended; never its note), each file opened, and
+  each act refused (`Edit line 9: refused`, never the reason, which can quote what was typed); the last
+  three errors the page hit, in the browser's words, with their place as `ui.js:1196:31` and the act
+  each came after, never the stack (a whole line, value or name of the file is cut from those words,
+  should one be there); how long the last open and the last act took, in milliseconds, the read's and
+  the re-check's own parts among them; the window's size and pixel ratio, and the browser;
+- Edit, the unsaved changes and the settings.
+
+The errors come in full where the page is served, as at gedcom-viewer.net. Opened from disk, Chrome
+treats the page's own scripts as from another origin and keeps their errors from it: one in a
+step the page takes at once is counted as `Script error.`, with no place, and one in a step that
+waits, such as a save, is not seen at all. An open that fails while the file is read is noted in full
+either way, since the page catches that error itself.
+
+Never a line of the file, its name, its folder or a record's id. What the visit did is kept in the
+tab alone while it is open, and stored nowhere. The report shows in a box to read, change or cut; **What
 happened** takes your own words; **Copy** puts the report as it reads, then What happened, on
 the clipboard, to paste into a new issue at github.com/bunahu/gedcom-viewer/issues, or into an email to
 feedback@gedcom-viewer.net, which needs no GitHub account (an issue is public and an email is not, so
@@ -226,7 +253,7 @@ node --test tests/*.test.js
 | Tests | `node --test tests/*.test.js` | all pass; the only skips are the tests that need the public files, when they are absent |
 | The real files | `node tools/check-real.js local/<file>.ged` | every number equals section 3 of the brief, for a file it measured; the probe's numbers for any other; an edit and a record deleted on each, the whole file checked again within 0.3 s, and undone to its sha256 |
 | The second opinion | `node tools/compare.js fixtures local/<file>.ged` | no number differs between `core.js` and `tools/baseline_probe.py` |
-| The page | `node tools/walk.js local/<file>.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save through the page, with the computer's Open and Save dialogs stood in for (a dated copy written and read back, the page then on it, the copy and the original each refused and put back, the Changes text copied); Download a copy in a browser with no pickers, the page then on the download; the bars (each frame's icon in its frame, a frame shrunk to its icon, the right frame's title, the strip's two groups and what shows before a file is open: the three frames, the counts bar and the strip, empty, and in the main frame Open GEDCOM with its one line and its one link, Edit on as a file opens and its look, the strip at a narrow width); the drawers at 1,280, 1,000, 800 and 600 pixels. `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look, bars, drawers) |
+| The page | `node tools/walk.js local/<file>.ged` | every step passes: section 15's read-only walk on each file, and one edit in the page timed and undone; then the rest of the page and its editing on a fictional file; the third round on a fictional file of its own; the look (System and Dusk, the text size, less motion, forced colors, the policy with a `_META` that does not parse) on another; Save through the page, with the computer's Open and Save dialogs stood in for (a dated copy written and read back, the page then on it, the copy and the original each refused and put back, the Changes text copied); Download a copy in a browser with no pickers, the page then on the download; the bars (each frame's icon in its frame, a frame shrunk to its icon, the right frame's title, the strip's two groups and what shows before a file is open: the three frames, the counts bar and the strip, empty, and in the main frame Open GEDCOM with its one line and its one link, Edit on as a file opens and its look, the strip at a narrow width; the hover boxes: none before a hover, each part's box after the pointer has rested, in its place and with its words, put away by Esc, a click, a file dragged over and the pointer leaving, the name's shown by the keyboard, none for the frames once a file is open); the drawers at 1,280, 1,000, 800 and 600 pixels. `--only PART` walks one part alone (read-only, rest, editing, edges, third, scroll, drags, save, copy, look, bars, drawers) |
 
 The tools print counts, tags, ids, line numbers, lengths and hashes only, never a value, so
 they are safe to run over a file that holds living people. The walk drives Google Chrome,
@@ -350,6 +377,9 @@ Settings, Theme, offers System (Light or Dark, as the computer has it), Light, D
 | `--aside-shade` | the shade the number column casts while the lines are scrolled sideways |
 | `--frame-ease` | how long a side frame takes to hide or show |
 | `--menu-width` | the Settings menu |
+| `--tip-max-width`, `--tip-pad-x`, `--tip-pad-y` | a hover box: the width of its words at most (23em, in the small type, which is 348 px across at Normal with its room and its edge), and the room round them (the Settings menu's 10 and 12 px) |
+| `--tip-edge`, `--tip-gap`, `--tip-drop` | where a hover box goes: the least room between it and the window's edge, and how far in from a frame's edge it starts (6 px); how far under the name or the counts bar (4 px); how far under a frame's head, inside the frame (14 px): under the left bar's tabs, the strip above the lines, the right frame's header, so that a box never lies over what it names |
+| `--tip-fade` | how long a hover box takes to fade in (120 ms; none at all when the computer asks for less motion) |
 | `--copy-color`, `--copy-done` | the copy button at a box's top right, and its check mark |
 | `--surname-weight` | how bold a surname is, with Bold surnames on |
 | `--help-max-width` | what a check means, in the right frame |

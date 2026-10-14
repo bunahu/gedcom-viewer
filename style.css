@@ -186,6 +186,13 @@
   --aside-shade: color-mix(in srgb, var(--color-text) 28%, transparent);   /* the shade at the number column's edge while the lines are scrolled sideways */
   --frame-ease: 200ms;                /* how long a side frame takes to hide or show */
   --menu-width: 19em;                 /* the Settings menu */
+  --tip-max-width: 23em;              /* a hover box: the width of its words at most, in the small type (with its room and edge, 348px at Normal) */
+  --tip-pad-x: 12px;                  /* …the room round the words, as the Settings menu's (10px 12px) */
+  --tip-pad-y: 10px;
+  --tip-edge: 6px;                    /* …the least room between it and the window's edge, and how far in from a frame's edge it starts */
+  --tip-gap: 4px;                     /* …how far under the name, or the counts bar, it starts */
+  --tip-drop: 14px;                   /* …how far under a frame's head (the left bar's tabs, the strip, the right frame's header) it starts, inside the frame */
+  --tip-fade: 120ms;                  /* …how long it takes to fade in (not at all, when the computer asks for less motion) */
   --copy-color: var(--color-text-muted);   /* the copy button at a box's top right */
   --copy-done: var(--color-success);       /* …once it has copied */
   --off-opacity: 0.4;                 /* a control that is off: a button that cannot be pressed */
@@ -297,6 +304,7 @@ input[type="checkbox"] { accent-color: var(--color-accent); }
 }
 .bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--gap); min-width: 0; }   /* wraps when the window is too narrow for one line, as it is at the larger text */
 .app-name { white-space: nowrap; }
+.app-name:focus-visible { outline: var(--focus-ring); outline-offset: 1px; border-radius: var(--radius); }   /* the name takes the keyboard's focus, which shows its hover box */
 .app-title { font-family: var(--font-title); font-size: var(--font-size-title); letter-spacing: 0.01em; }
 .app-title-gedcom { color: var(--title-color); font-weight: 700; letter-spacing: 0.06em; }
 /* the open file's name: a chip; a click shows its facts under it */
@@ -1031,6 +1039,32 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
 .report:focus { outline: var(--focus-ring); outline-offset: -1px; }
 .dialog-note .input { flex: 1; }
 
+/* -- the hover boxes --------------------------------------------------------------------------- */
+
+/* A box that says what a part is, in the look of the Settings menu. It is in the page from the start, hidden;
+   ui.js shows one while the pointer rests on its part, and puts it at its place (left and top, through the CSSOM). It
+   takes no pointer, so a click goes to what is under it; it fades in over --tip-fade, and the computer's wish for less
+   motion, below, takes the fade away. Its words are in index.html. */
+.tip {
+  position: fixed;
+  z-index: 10;
+  max-width: min(var(--tip-max-width), calc(100vw - 2 * (var(--tip-edge) + var(--tip-pad-x) + 1px)));   /* the words' width: the room and the edge come outside it, as the Settings menu's do */
+  margin: 0;
+  padding: var(--tip-pad-y) var(--tip-pad-x);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+  font-family: var(--font-body);
+  font-size: var(--font-size-small);
+  pointer-events: none;
+  animation: tip-in var(--tip-fade) ease;
+}
+.tip[hidden] { display: none; }
+.tip p { margin: 0; }
+@keyframes tip-in { from { opacity: 0; } to { opacity: 1; } }
+
 /* -- dropping a file on the page --------------------------------------------------------------- */
 
 .drop {
@@ -1093,6 +1127,9 @@ mark { background: var(--match-bg); color: inherit; border-radius: 2px; }
   mark { background: Mark; color: MarkText; }
 
   .drop-line { background: Highlight; }
+
+  /* a hover box: the system's page and text, and its edge in the text's colour, the shadow being dropped */
+  .tip { background: Canvas; color: CanvasText; border-color: CanvasText; box-shadow: none; }
 
   .cg.is-changed::before, .cg.is-added::before, .cg.is-moved::before, .mk.is-error::before { background: CanvasText; }
   .mk.is-note::before { box-sizing: border-box; border: 2px solid CanvasText; background: transparent; }   /* an error is a full dot, a note a ring */

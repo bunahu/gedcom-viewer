@@ -16,7 +16,7 @@
 
 <main class="prose">
 <h1>How GEDCOM Viewer treats your file</h1>
-<p class="prose-date">10 October 2026</p>
+<p class="prose-date">12 October 2026</p>
 
 <p><strong>The short version.</strong> GEDCOM Viewer is one web page that runs entirely in your
 browser. Your GEDCOM file is read by your browser, on your computer, and is never sent anywhere.
@@ -89,11 +89,26 @@ page's files can also be downloaded and opened from your own disk, with no web a
 
 <h2>Reporting a problem</h2>
 <p>The page sends no error reports. <strong>Report a problem</strong>, in Settings, writes a report of
-counts and codes: the file's size, lines, encoding, record counts and check findings by code and
-line number, the program that exported it, the browser, and the first characters of the file's
-hash. Never a line of the file, its name or its folder. You read it, change or cut anything, add
-what happened in your own words, and Copy puts it on your clipboard, to paste into a new issue in
-the repository, or into an email to
+counts and codes, made so that a problem can be found again without your file:</p>
+<ul>
+<li><strong>The file.</strong> Its size, lines, encoding, line endings and record counts, the
+program that exported it, and the first characters of the file's hash.</li>
+<li><strong>The checks.</strong> Each finding by its code, with the tag of its line, the tag of the
+line it stands under (FORM under OBJE) and its first line numbers. A tag that no standard defines
+and that is not written as a custom tag is called a malformed tag, never written out, since such a
+line can hold anything typed.</li>
+<li><strong>This visit.</strong> The last ten things done, by the names Undo gives them, which hold
+only line numbers and counts (Edit line 8, Delete lines 5–6, Delete record INDI), with each Undo,
+Redo, save and file opened; never what was typed, nor a save's note. The last three errors the page
+hit, in your browser's own words, with their place in the page's code. Those words name the page's
+code, and could quote what it was working on, so a whole line, value or name of your file is cut
+from them, and the rest you read before you copy. How long the last open and the last act took,
+the window's size, and the browser.</li>
+</ul>
+<p>Never a line of the file, its name, its folder or a record's id. The page keeps what this visit
+did in the tab alone, while it is open, and stores none of it. You read the report, change or cut
+anything, add what happened in your own words, and Copy puts it on your clipboard, to paste into a
+new issue in the repository, or into an email to
 <a href="mailto:feedback@gedcom-viewer.net">feedback@gedcom-viewer.net</a>. A question can go to that
 address too, and it needs no GitHub account. An issue is public and an email is not. Nothing leaves
 the page on its own, and the original is kept nowhere. The report's last line is a checksum of the

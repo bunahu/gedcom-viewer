@@ -2547,9 +2547,13 @@
   //
   // `report` writes the text the Report a problem dialog shows, from `m`, the file as read (null
   // when none is open), and `info`, what only the page knows: the version, where the page is, the
-  // browser, the size on disk, the sha256, Edit, the unsaved changes, the settings. Nothing in it
-  // is a value from the file — sizes, counts, codes, line numbers, the header's program, and the
-  // first twelve characters of the sha256. `withChecksum` ends it with a checksum line, and
+  // browser, the window, the size on disk, the sha256, Edit, the unsaved changes, the settings, and
+  // the visit's trail (2026-10-12): its acts, the errors the page hit, and how long the last open
+  // and the last act took. Nothing in it is a value from the file — sizes, counts, codes, line
+  // numbers, tags as tagNamed names them, acts in the forms of their undo labels (reportLabel), the
+  // header's program, and the first twelve characters of the sha256. An error is in the browser's
+  // words, with the file's lines, values and names cut from them (errorWords); the reporter reads
+  // them before Copy, as the rest. `withChecksum` ends it with a checksum line, and
   // `reportChecksumParts` reads one back: the checksum is the first eight hex characters of the
   // sha256 of every line above it, each followed by a line feed — the one rule tools/report-check.js
   // applies, and the page, to say whether a report still reads as built. The lines after the
@@ -2557,6 +2561,9 @@
 
   const REPORT_CHECKS = ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9'];
   const CHECKSUM = 'checksum: ';
+  const REPORT_PLACES = 3;                                           // a check's places, the most common first
+  const REPORT_LINES = 3;                                            // a place's lines, the first in the file
+  const ERROR_WORDS = 200;                                           // an error's words, at most
 
   // "line 5" · "lines 5 and 9" · "lines 5, 9 and 12, of 40"
   function linesOf(findings, max) {
@@ -2566,10 +2573,258 @@
     return `lines ${nums.slice(0, -1).join(', ')} and ${nums[nums.length - 1]}${more}`;
   }
 
+  const whole = (x) => num(Math.max(0, Math.round(Number(x) || 0)));
+
+  // A tag as the report names it: as written when a standard defines it, in any version (SNOTE in
+  // a 5.5.1 file too), or when it has the form a custom tag takes, an underscore and then capitals,
+  // digits or underscores. Any other tag was typed where a tag goes, and a line typed that way can
+  // hold anything, a name included, so it is named for what it is, never as written: a custom tag
+  // where the file's version lets anyone add one of its form (_Smith in 5.5.1), else a malformed one.
+  const CUSTOM_FORM = /^_[A-Z0-9_]+$/;
+  const tagShown = (t) => typeof t === 'string' && (tags.meaning(t) !== null || CUSTOM_FORM.test(t));
+  function tagNamed(m, t) {
+    if (tagShown(t)) return t;
+    const version = (m && m.tagVersion) || tags.versionFor(null);
+    return tags.tagKind(t, version, m ? m.schema : null) === 'custom' ? 'a custom tag' : 'a malformed tag';
+  }
+
+  // The line each line stands under, as parentOf has it, for every line in one pass: a parsed line
+  // under the nearest line above it at a lower level, a line that did not parse under the nearest
+  // parsed line above it; -1 for none.
+  function parentsOf(m) {
+    const parent = new Int32Array(m.n).fill(-1);
+    const open = [];
+    for (let i = 0; i < m.n; i += 1) {
+      const lv = m.level[i];
+      if (lv >= 0) while (open.length && m.level[open[open.length - 1]] >= lv) open.pop();
+      if (open.length) parent[i] = open[open.length - 1];
+      if (lv >= 0) open.push(i);
+    }
+    return parent;
+  }
+
+  // Where a finding stands: its line's tag and the tag of the line it stands under ("FORM under
+  // OBJE"), a record's own line at level 0, a line with no tag by what it is, and a finding about the
+  // whole file as that. Tags as tagNamed names them.
+  function findingPlace(m, parent, named, line) {
+    if (line < 0) return 'the file';
+    const t = m.tag[line];
+    const what = t !== null ? named(t) : m.kind[line] === KIND.BLANK ? 'a blank line' : 'a line that did not parse';
+    if (t !== null && m.level[line] === 0) return `${what} at level 0`;
+    return `${what} under ${parent[line] < 0 ? 'no line' : named(m.tag[parent[line]])}`;
+  }
+
+  // A check that found anything, in one line: its code and count, then the places its findings
+  // stand in, the most common first, each with the first three of its lines: "N8 35: FORM under
+  // OBJE (lines 12, 40 and 77, of 35)". Three places at most; the rest are counted.
+  function checkLine(m, parent, named, code, list) {
+    const places = new Map();
+    for (const f of list) {
+      const key = findingPlace(m, parent, named, f.line);
+      if (!places.has(key)) places.set(key, []);
+      places.get(key).push(f);
+    }
+    const sorted = [...places.entries()];
+    for (const [, fs] of sorted) fs.sort((a, b) => a.line - b.line);
+    sorted.sort((a, b) => (b[1].length - a[1].length) || (a[1][0].line - b[1][0].line));
+    const said = sorted.slice(0, REPORT_PLACES).map(([key, fs]) => (fs[0].line < 0
+      ? `${key}${fs.length > 1 ? ` (${num(fs.length)})` : ''}`
+      : `${key} (${linesOf(fs, REPORT_LINES)})`));
+    const rest = sorted.slice(REPORT_PLACES);
+    if (rest.length) {
+      const more = rest.reduce((s, [, fs]) => s + fs.length, 0);
+      said.push(`${num(more)} more, in ${num(rest.length)} other ${rest.length === 1 ? 'place' : 'places'}`);
+    }
+    return `${code} ${num(list.length)}: ${said.join(' · ')}`;
+  }
+
+  // An act's label as the report gives it: the label Undo names it by (finish), in one of the forms
+  // the acts give their labels, which hold line numbers and counts and nothing else. Delete record's
+  // label names the record by its id, which the file chose and which can hold a name, so here the
+  // record is named by its tag alone, as tagNamed names it. A label in no form listed here is not
+  // given (tests/report.test.js holds every finish() in this file to these forms).
+  const ACT_FORMS = [
+    /^Edit line [\d,]+$/, /^Add line [\d,]+$/, /^Delete line [\d,]+$/, /^Delete lines [\d,]+–[\d,]+$/,
+    /^Restore a line$/, /^Restore [\d,]+ lines$/, /^Move line [\d,]+ to [\d,]+$/, /^Move lines [\d,]+–[\d,]+ to [\d,]+$/,
+    /^Change stamps$/, /^Change stamps and the date in the header$/, /^The date in the header$/,
+  ];
+  const RECORD_ACT = /^Delete record (?:@[^@ ]+@ )?([A-Za-z0-9_]+)$/;
+  function reportLabel(m, label) {
+    const s = typeof label === 'string' ? label : '';
+    const record = RECORD_ACT.exec(s);
+    if (record) return tagShown(record[1]) ? `Delete record ${record[1]}` : `Delete record with ${tagNamed(m, record[1])}`;
+    return ACT_FORMS.some((form) => form.test(s)) ? s : 'an act in no form the report knows';
+  }
+
+  // The visit's trail, entry by entry, as the page keeps it (ui.js, `trail`): numbers, and words
+  // from the fixed sets below; an act's label, which reportLabel gives only in its known forms. What
+  // else an entry holds is not read.
+  const OPEN_BY = { picker: 'by Open GEDCOM', input: 'by the file box', drop: 'by a drop' };
+  const MOVE_BY = { drag: 'by a drag', up: 'by ⌥↑', down: 'by ⌥↓' };
+  const SAVE_ENDS = { saved: 'saved', downloaded: 'downloaded', cancelled: 'cancelled in the Save dialog' };
+
+  // An act refused, in the words its label would have had: the lines it was asked of, on screen.
+  function refusedWords(e) {
+    const at = (k) => whole(e[k]);
+    const lines = (what) => (e.end > e.line ? `${what} lines ${at('line')}–${at('end')}` : `${what} line ${at('line')}`);
+    switch (e.act) {
+      case 'edit': return `Edit line ${at('line')}`;
+      case 'add': return `Add line ${at('line')}`;
+      case 'delete': return lines('Delete');
+      case 'record': return `Delete record at line ${at('line')}`;
+      case 'restore': return e.count > 1 ? `Restore ${at('count')} lines` : 'Restore a line';
+      case 'move': return `${lines('Move')}${MOVE_BY[e.by] ? `, ${MOVE_BY[e.by]}` : ''}`;
+      default: return 'An act';
+    }
+  }
+
+  // A save, by the way it went (Save, through the computer's Save dialog, or Download a copy), what
+  // it was asked to add (the change stamps, with a note typed or not, never the note; the date in
+  // the header), and how it ended: saved, downloaded, cancelled, or stopped at a step of 10.2.
+  function saveWords(e) {
+    const how = e.by === 'download' ? 'Download a copy' : 'Save';
+    if (e.outcome === 'nothing') return `${how}: nothing to save`;
+    if (e.outcome === 'dropped') return `${how}: cancelled in the page's dialog`;
+    const adds = [];
+    if (e.stamps) adds.push(e.note ? 'change stamps (a note typed)' : 'change stamps');
+    if (e.header) adds.push('the date in the header');
+    const asked = adds.length ? `with ${adds.join(' and ')}` : 'with no change stamps and no date in the header';
+    const ends = SAVE_ENDS[e.outcome] || `stopped at step ${whole(e.step)} of 10.2${e.step === 6 ? ', a file of this visit picked' : ''}`;
+    return `${how}, ${asked}: ${ends}`;
+  }
+
+  function trailWords(m, e) {
+    const at = (k) => whole(e[k]);
+    switch (e.what) {
+      case 'open': {
+        const by = OPEN_BY[e.by] || 'by another way';
+        if (e.outcome === 'long') return `Open ${by}: refused, ${at('lines')} lines, more than the page can show`;
+        if (e.outcome === 'failed') return `Open ${by}: failed, with an error`;
+        return `Open ${by}: ${at('lines')} lines, ${e.handle ? 'with a handle' : 'with no handle'}`;
+      }
+      case 'act': {
+        const said = [reportLabel(m, e.label)];
+        if (Number(e.line) > 0) said.push(`at line ${at('line')}`);
+        if (Number(e.pointers) > 0) said.push(`with ${at('pointers')} ${Number(e.pointers) === 1 ? 'line' : 'lines'} that pointed at it`);
+        if (MOVE_BY[e.by]) said.push(MOVE_BY[e.by]);
+        return said.join(', ');
+      }
+      case 'undo': return `Undo: ${reportLabel(m, e.label)}`;
+      case 'redo': return `Redo: ${reportLabel(m, e.label)}`;
+      case 'refused': return `${refusedWords(e)}: refused`;
+      case 'save': return saveWords(e);
+      default: return 'an entry the report does not know';
+    }
+  }
+
+  // The errors' words, as the report gives them: the browser's, each on one line, cut to 200
+  // characters, with every line of the file of 3 characters or more, every value of one, and the
+  // file's names cut from them first, should a fault have put one there; a long line or value quoted
+  // from its start is cut from there to the end. `models` are the file as read and as it now is, each
+  // read once for all the errors; `names`, the names of the visit's files. What is left the reporter
+  // reads before Copy.
+  function errorWords(texts, models, names) {
+    const said = texts.map((text) => ({ s: String(text).slice(0, 4000), hide: new Set(), cutAt: Infinity }));
+    const longest = Math.max(0, ...said.map((e) => e.s.length));
+    const look = (x) => {
+      if (x.length < 3) return;
+      for (const e of said) {
+        if (x.length <= e.s.length && e.s.includes(x)) e.hide.add(x);
+        else if (x.length > 40) {
+          const k = e.s.indexOf(x.slice(0, 40));
+          if (k >= 0 && k < e.cutAt) e.cutAt = k;
+        }
+      }
+    };
+    for (const name of names || []) {
+      if (typeof name !== 'string') continue;
+      look(name);
+      look(name.replace(/\.[^.]*$/, ''));
+    }
+    // A line or value is looked for only when its first three characters stand somewhere in the
+    // words, which few do: so a file of a million lines is read in a few tens of milliseconds.
+    const three = (t, k) => t.charCodeAt(k) * 4294967296 + t.charCodeAt(k + 1) * 65536 + t.charCodeAt(k + 2);
+    const threes = new Set();
+    for (const e of said) for (let k = 0; k + 3 <= e.s.length; k += 1) threes.add(three(e.s, k));
+    const spaced = (c) => c <= 32 || (c >= 0x80 && /\s/.test(String.fromCharCode(c)));
+    const maybe = (t, k) => k + 3 <= t.length && (spaced(t.charCodeAt(k)) || threes.has(three(t, k)));
+    const padded = (t) => spaced(t.charCodeAt(0)) || spaced(t.charCodeAt(t.length - 1));
+    for (const mm of models) {
+      for (let i = 0; i < mm.n; i += 1) {
+        const t = mm.texts[i];
+        if (t.length < 3) continue;
+        if ((t.length <= longest || t.length > 40 || padded(t)) && maybe(t, 0)) look(t.trim());
+        if (mm.valAt[i] >= 0 && maybe(t, mm.valAt[i])) look(t.slice(mm.valAt[i]).trim());
+      }
+    }
+    return said.map((e) => {
+      let s = e.cutAt < e.s.length ? `${e.s.slice(0, e.cutAt)}…` : e.s;
+      for (const x of [...e.hide].sort((a, b) => b.length - a.length)) s = s.split(x).join('…');
+      s = s.replace(/\s+/g, ' ').trim();
+      return s.length > ERROR_WORDS ? `${s.slice(0, ERROR_WORDS)}…` : s;
+    });
+  }
+
+  // A place in the page's code, as file:line:column, the file by its own name and never its folder.
+  function codePlace(place) {
+    const hit = /([^/\\\s()@]*):(\d+):(\d+)$/.exec(String(place || ''));
+    return hit && hit[1] ? `${hit[1].replace(/[?#].*$/, '')}:${hit[2]}:${hit[3]}` : 'a place not given';
+  }
+
+  // Milliseconds: whole above 10, else to a tenth, so that a small file's act does not read 0.
+  const ms = (x) => {
+    const v = Math.max(0, Number(x) || 0);
+    return v >= 9.95 ? num(Math.round(v)) : String(Math.round(v * 10) / 10);
+  };
+  function openTiming(t) {
+    const r = t.read || {};
+    return `Timing of the last open, in ms: ${ms(t.all)} in all · from disk ${ms(t.disk)} · read ${ms(r.total)} (lines ${ms(r.lines)} · ` +
+      `checks ${ms(r.checks)} · gather ${ms(r.gather)} · labels ${ms(r.labels)}) · drawn ${ms(t.drawn)}`;
+  }
+  function actTiming(t) {
+    const c = t.recheck || {};
+    const recheck = (Number(c.checks) || 0) + (Number(c.gather) || 0) + (Number(c.labels) || 0);
+    return `Timing of act ${whole(t.n)}, the last timed, in ms: ${ms(t.all)} in all · the act ${ms(t.act)}, its re-check ${ms(recheck)} ` +
+      `(checks ${ms(c.checks)} · gather ${ms(c.gather)} · labels ${ms(c.labels)}) · drawn ${ms(t.drawn)}`;
+  }
+
+  // The visit's trail, as the report's lines: the last ten acts, oldest first, each with its number
+  // in the visit; the last three errors; how long the last open and the last act took.
+  function trailLines(m, info) {
+    const out = [];
+    const trail = info.trail;
+    const acts = trail.acts || [];
+    const lastOf = (count, shown) => (count > shown ? `${whole(count)} this visit; the last ${num(shown)}, oldest first` : `${whole(count)} this visit, oldest first`);
+    if (!acts.length) out.push('Acts: none this visit');
+    else {
+      out.push(`Acts: ${lastOf(trail.count, acts.length)}`);
+      for (const e of acts) out.push(`  ${whole(e.n)}. ${trailWords(m, e)}`);
+    }
+    const errors = trail.errors || [];
+    if (!errors.length) out.push('Errors: none this visit');
+    else {
+      out.push(`Errors: ${lastOf(trail.errorCount, errors.length)}`);
+      const models = [m, info.opened].filter((x, k, all) => x && x.texts && all.indexOf(x) === k);
+      const words = errorWords(errors.map((e) => e.words), models, info.names);
+      errors.forEach((e, k) => {
+        const times = e.count > 1 ? `, ${whole(e.count)} times` : '';
+        const after = e.after > 0 ? `after act ${whole(e.after)}` : 'before any act';
+        out.push(`  ${words[k]}, at ${codePlace(e.place)}${times}, ${after}`);
+      });
+    }
+    if (trail.open) out.push(openTiming(trail.open));
+    if (trail.last) out.push(actTiming(trail.last));
+    return out;
+  }
+
   function report(m, info) {
     const out = [];
     out.push(`GEDCOM Viewer ${info.version} — a problem report. Counts and codes only; no line of the file.`);
     out.push(`Where: ${[info.where, info.browser].filter((x) => x).join(' · ')}`);
+    if (info.window) {
+      const ratio = Math.round((Number(info.window.ratio) || 1) * 100) / 100;
+      out.push(`Window: ${whole(info.window.width)} × ${whole(info.window.height)} · pixel ratio ${ratio}`);
+    }
     if (!m) {
       out.push('File: none open');
     } else {
@@ -2588,18 +2843,22 @@
         .filter(([, c]) => c > 0).map(([k, c]) => `${k} ${num(c)}`);
       const tag = (t) => num(m.tagCounts.get(t) || 0);
       out.push(`Lines: ${ends.join(' · ')} · longest ${num(m.longest)} characters · CONC ${tag('CONC')} · CONT ${tag('CONT')} · CHAN ${tag('CHAN')}`);
-      const records = [...m.topCounts.entries()].sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t} ${num(c)}`);
-      out.push(`Records: ${records.join(' · ') || 'none'}`);
+      const seen = new Map();
+      const named = (t) => {
+        if (!seen.has(t)) seen.set(t, tagNamed(m, t));
+        return seen.get(t);
+      };
+      const records = new Map();
+      for (const [t, c] of m.topCounts) records.set(named(t), (records.get(named(t)) || 0) + c);
+      out.push(`Records: ${[...records.entries()].sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t} ${num(c)}`).join(' · ') || 'none'}`);
       out.push(`Tags: ${num(m.tagCounts.size)} distinct · ids defined ${num(m.definedAt.size)}`);
-      const checks = [];
-      for (const code of REPORT_CHECKS) {
-        const list = m.findings.byCode[code] || [];
-        if (!list.length) continue;
-        checks.push(code[0] === 'E' ? `${code} ${num(list.length)} (${linesOf(list, 3)})` : `${code} ${num(list.length)}`);
-      }
-      out.push(`Checks: ${checks.join(' · ') || 'none'}`);
+      const codes = REPORT_CHECKS.filter((code) => (m.findings.byCode[code] || []).length);
+      out.push(`Checks: ${codes.map((code) => `${code} ${num(m.findings.byCode[code].length)}`).join(' · ') || 'none'}`);
+      const parent = codes.length ? parentsOf(m) : null;
+      for (const code of codes) out.push(`  ${checkLine(m, parent, named, code, m.findings.byCode[code])}`);
     }
     out.push(`Edit: ${info.editing ? 'on' : 'off'} · unsaved changes: ${num(info.unsaved || 0)}`);
+    if (info.trail) out.push(...trailLines(m, info));
     if (info.settings) out.push(`Settings: ${info.settings}`);
     return out.join('\n');
   }
@@ -2632,6 +2891,6 @@
     moveOntoCopy, takeBack, isChanged, asOpened, unsaved, netChange, changeRuns, lineMarks, restoreLines,
     stampTime, stampNote, recordChanges, recordNote, stampTargets, stampPlan, applyStamps, headerPlan, saveActs,
     nameParts, nameShown, linkAt, clip, deleteQuestion, linePath, tagMeaning, stripStyles, metaRebuild, metaParts, lineShape,
-    report, withChecksum, reportChecksumParts,
+    report, withChecksum, reportChecksumParts, reportLabel,
   };
 });
